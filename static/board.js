@@ -1,3 +1,5 @@
+        // 本文件是 static/board.js 的源分片之一。static/board.js 由 static/board/*.js 按文件名顺序拼接生成：
+        // 改前端脚本请改 static/board/ 下的分片，再运行 .venv/bin/python scripts/build_board_js.py（tests/test_board_js_parts.py 校验同步）。
         // #419：状态/通道/流程标签不再前端写死，由后端 GET /api/meta 注入
         // （唯一源 = board.STATUS_LABEL_CN 与 flows.json）；拉取失败时按原文显示（fail-safe 降级，不白屏）
         let STATUS_LABEL = {}, MODE_LABEL = {}, FLOW_LABEL = {}, FLOW_COLOR = {};
@@ -69,6 +71,14 @@
         // 状态筛选（later/open/doing，null = 不筛选）：随视图状态持久化，与项目选择正交
         let selectedStatus = savedViewState && STATUS_PTS.includes(savedViewState.status)
             ? savedViewState.status : null;
+        // 存储解析（fail-safe）：JSON.parse 的结果非普通对象（null/数组/标量/非法 JSON）一律回 {}；
+        // reqBoardLayout 与 reqBoardCardExpand 两键共用（node harness 断言）。
+        function parseStoredObject(raw) {
+            try {
+                const v = JSON.parse(raw || 'null');
+                return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+            } catch (e) { return {}; }
+        }
         let navCollapsed = localStorage.getItem('navCollapsed') === '1';  // 左侧菜单栏折叠状态（localStorage 记住，刷新保持）
         // #7 P7 两处持久化态（fail-safe 解析，非法/缺省值回默认）：宽度偏好 {navW, listW}；
         // 卡片手动态 {"<reqId>": true=手动展开|false=手动收起}（无键 = done 默认收缩、其余状态默认展开）
@@ -785,14 +795,6 @@ void main() {
 
 
         // ==================== #7 P7：布局宽度（拖拽分界）纯函数与应用单点 ====================
-        // 存储解析（fail-safe）：JSON.parse 的结果非普通对象（null/数组/标量/非法 JSON）一律回 {}；
-        // reqBoardLayout 与 reqBoardCardExpand 两键共用（node harness 断言）。
-        function parseStoredObject(raw) {
-            try {
-                const v = JSON.parse(raw || 'null');
-                return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-            } catch (e) { return {}; }
-        }
         // 宽度钳制（纯函数）：非数值（NaN/Infinity）→ 下限；容器太窄（hi < lo）取下限；否则夹在 [lo, hi]
         function clampColWidth(v, lo, hi) {
             const n = Number(v);

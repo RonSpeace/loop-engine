@@ -35,6 +35,12 @@ scripts/test_instance.sh stop 8931
 - [ ] Schema changes are migrations (`ALTER TABLE`), never drop-and-recreate
 - [ ] No personal data, real project names, credentials or absolute machine paths in code, tests or docs
 
+## Frontend source layout
+
+The board's script is split into `static/board/*.js` (loaded as one file). Edit the parts, then run
+`.venv/bin/python scripts/build_board_js.py` to regenerate `static/board.js`; a test fails if they drift.
+UI strings: add an English entry to `scripts/i18n_en_source.py` and run it to regenerate `static/i18n.en.js`.
+
 ## Adding a role or flow
 
 1. Add the role to `flows.json` (`roles`) and reference it from a flow's `nodes`.
