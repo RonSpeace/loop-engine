@@ -133,8 +133,15 @@
         btn.addEventListener('click', function () { window.setLoopLang(lang === 'en' ? 'zh' : 'en'); });
     }
 
+    // 页头「操作指南」链接带上界面语言：/guide 按 ?lang= 选中文版或英文版
+    function setupGuideLink() {
+        var links = document.querySelectorAll('a.guide-link');
+        for (var i = 0; i < links.length; i++) links[i].setAttribute('href', '/guide?lang=' + lang);
+    }
+
     function start() {
         setupToggle();
+        setupGuideLink();
         if (lang !== 'en') return;
         document.documentElement.lang = 'en';
         walk(document.body);

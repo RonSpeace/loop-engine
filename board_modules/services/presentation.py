@@ -28,7 +28,7 @@ def _chat_system_prompt_template():
     return resolve("_chat_system_prompt")("{project}").replace(str(Path.home()), "{workdir}")
 
 # ==================== 操作指南：内置 agent 定义（#269） ====================
-# guide 页「九、内置 agent 定义」版块注入锚点（docs/guide.html 中「八、会话详情」之后）
+# guide 页「内置 agent 定义」版块注入锚点（docs/guide.html 与 docs/guide.en.html 的指南页签末尾）
 AGENTS_SECTION_ANCHOR = "<!-- builtin-agents-section -->"
 
 # 总览元数据：角色键 -> (权限档位, 产物展示名兜底)。提示词本体动态取 dispatcher.ROLE_PROMPTS
@@ -257,7 +257,7 @@ def _builtin_agents_section():
         common_tail = dispatcher.COMMON_TAIL
     except Exception as e:  # noqa: BLE001 - 展示层降级：取不到提示词时页面其它内容不受影响
         return (
-            '<h2 id="agents">九、内置 agent 定义</h2>\n'
+            '<h2 id="agents">内置 agent 定义</h2>\n'
             '<div class="warn">内置 agent 提示词读取失败（import dispatcher 异常：'
             f'{esc(str(e))}）。请直接查看 dispatcher.py 的 ROLE_PROMPTS / COMMON_TAIL'
             ' 与 board.py 的 _chat_system_prompt。</div>\n'
@@ -298,7 +298,7 @@ def _builtin_agents_section():
     details_html = "\n".join(details)
 
     return f'''<!-- 九、内置 agent 定义（#269 动态生成；#419 流程与角色按 flows.json 配置渲染） -->
-<h2 id="agents">九、内置 agent 定义</h2>
+<h2 id="agents">内置 agent 定义</h2>
 <p>研发流程与角色均为<b>配置数据</b>（仓库根 <code>flows.json</code> + <code>prompts/*.md</code>）：
 本节流程表与角色表按当前配置渲染，改配置后需重启看板，刷新本页即见新内容（无热加载）；进行中的卡按卡上流程快照推进，不受配置变更影响。
 流程可置 <code>"enabled": false</code> 软禁用：定义保留（改回 true 即恢复），但不再进入前置环节的推荐目录与可选流程列表，模型也不会推荐它。</p>

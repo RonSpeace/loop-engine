@@ -91,7 +91,7 @@ cp projects.example.json projects.json      # point it at a git repo you want ag
 Open <http://127.0.0.1:8899>, create a card with status **open**, and watch it move through the flow.
 
 The full walkthrough — model / API key setup, MCP tools, a toy project for your first end-to-end loop,
-and troubleshooting — is in [docs/quickstart.md](docs/quickstart.md) (Chinese).
+and troubleshooting — is in [docs/quickstart.en.md](docs/quickstart.en.md) ([简体中文](docs/quickstart.md)).
 
 ### Agent runtimes
 

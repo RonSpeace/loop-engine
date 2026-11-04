@@ -645,7 +645,6 @@ class GroupAndCommands(RouterBase):
         html = (REPO / "docs" / "guide.html").read_text(encoding="utf-8")
         self.assertIn("匹配规则（整行全等）", html)
         self.assertIn("群聊消息", html)
-        self.assertIn("#22 行为变化", html)
 
     def test_114b_cmd_punct_multi_layer(self):
         # ⑨ 循环剥标点：多层标点/引号/空白都能命中

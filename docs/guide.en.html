@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Loop Engine Guide</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
+    <script>try{if(localStorage.getItem('reqBoardSkin')==='light')document.documentElement.dataset.skin='light';}catch(e){}</script>
+    <style>
+        /* 皮肤令牌：与看板一致——深色为默认，浅色由 localStorage.reqBoardSkin=light 切换（同一偏好键）。
+           组件规则只经 var() 消费这里的令牌。 */
+        :root {
+            color-scheme: dark;
+            --bg: #050d18;
+            --surface: #041228;
+            --border: rgba(141, 203, 255, 0.16);
+            --border-strong: rgba(141, 203, 255, 0.3);
+            --text: #edf8ff;
+            --text-2: #b7cce0;
+            --text-3: #718da7;
+            --accent: #60a5fa;
+            --accent-hover: #93c5fd;
+            --on-accent: #ffffff;
+            --code-bg: rgba(141, 203, 255, 0.08);
+            --th-bg: rgba(141, 203, 255, 0.06);
+            --note-bg: rgba(59, 130, 246, 0.12);
+            --note-border: rgba(96, 165, 250, 0.35);
+            --note-fg: #bfdbfe;
+            --warn-bg: rgba(245, 158, 11, 0.12);
+            --warn-border: rgba(245, 158, 11, 0.38);
+            --warn-fg: #fcd34d;
+        }
+        :root[data-skin="light"] {
+            color-scheme: light;
+            --bg: #fafafa;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --text: #111827;
+            --text-2: #4b5563;
+            --text-3: #9ca3af;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --code-bg: #f3f4f6;
+            --th-bg: #f3f4f6;
+            --note-bg: #eff6ff;
+            --note-border: #bfdbfe;
+            --note-fg: #1e40af;
+            --warn-bg: #fffbeb;
+            --warn-border: #fde68a;
+            --warn-fg: #92400e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 15px;
+            line-height: 1.75;
+            margin: 0;
+            padding: 32px 16px 64px;
+        }
+        .page {
+            max-width: 1040px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px 40px 40px;
+        }
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; font-size: 13px; }
+        .topbar-right { display: flex; align-items: center; gap: 14px; }
+        .skin-btn {
+            font: inherit; font-size: 13px; color: var(--text-2); background: none; cursor: pointer;
+            border: 1px solid var(--border-strong); border-radius: 6px; padding: 2px 10px;
+        }
+        .skin-btn:hover { color: var(--text); }
+        h1 { font-size: 24px; margin: 0 0 6px; }
+        .subtitle { color: var(--text-2); font-size: 14px; margin: 0 0 24px; }
+        h2 {
+            font-size: 18px;
+            margin: 40px 0 12px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .tab-pane > h2:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+        h3 { font-size: 15px; margin: 24px 0 8px; }
+        p { margin: 8px 0; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0 8px; font-size: 14px; }
+        th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+        th { background: var(--th-bg); font-weight: 600; white-space: nowrap; }
+        /* 流程表（服务端注入，table.flows）「状态」列不折行 */
+        .flows th:nth-child(4), .flows td:nth-child(4) { width: 76px; white-space: nowrap; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            background: var(--code-bg);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 13px;
+            overflow-wrap: break-word;
+        }
+        pre {
+            background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 14px; overflow-x: auto; line-height: 1.6; font-size: 13px; white-space: pre-wrap;
+        }
+        pre code { padding: 0; background: none; overflow-wrap: normal; }
+        details { margin: 10px 0; }
+        summary { cursor: pointer; font-weight: 600; }
+        ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+        li { margin: 4px 0; }
+        .note, .warn { border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 14px; border: 1px solid; }
+        .note { background: var(--note-bg); border-color: var(--note-border); color: var(--note-fg); }
+        .warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-fg); }
+        .toc { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 8px; font-size: 14px; }
+        .lifecycle { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+        /* 页内 tab：指南 / 架构图 / 项目配置 */
+        .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 24px; overflow-x: auto; }
+        .tab-btn {
+            font: inherit; font-size: 15px; color: var(--text-2);
+            background: none; border: none; border-bottom: 2px solid transparent;
+            padding: 8px 16px; margin-bottom: -1px; cursor: pointer; flex-shrink: 0;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+        .tab-btn:focus-visible, .sub-btn:focus-visible, .skin-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .tab-pane[hidden] { display: none; }
+        .sub-tabs { display: flex; gap: 8px; margin: 0 0 12px; }
+        .sub-btn {
+            font: inherit; font-size: 13px; color: var(--text-2); background: var(--code-bg);
+            border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer;
+        }
+        .sub-btn[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+        .diagram-frame {
+            width: 100%; height: calc(100vh - 230px); min-height: 560px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+        }
+        .table-scroll { overflow-x: auto; }
+        .prompt-guide table { min-width: 640px; }
+        @media (max-width: 720px) {
+            body { padding: 16px 0 32px; }
+            .page { padding: 20px 16px 32px; border-radius: 0; border-left: none; border-right: none; }
+            th, td { padding: 6px 8px; }
+            .tabs { flex-wrap: wrap; }
+            table { display: block; overflow-x: auto; }
+        }
+        /* 英文版：服务端注入的中文版块标题降为副标题，正文标题用上方英文 h2 */
+        #agents { font-size: 13px; font-weight: 500; color: var(--text-3); border-top: none; margin: 0 0 12px; padding-top: 0; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <a href="/">← Back to the board</a>
+            <div class="topbar-right">
+                <button class="skin-btn" id="skinBtn" type="button" data-light="Light" data-dark="Dark" aria-label="Toggle light / dark">Light</button>
+                <a id="langLink" href="/guide?lang=zh" hreflang="zh-CN" lang="zh-CN">中文</a>
+            </div>
+        </div>
+        <h1>Loop Engine Guide</h1>
+        <p class="subtitle">How cards move, what each agent does, and when you need to step in.</p>
+
+        <div class="tabs" role="tablist" aria-label="Guide contents">
+            <button class="tab-btn" id="tab-guide" role="tab" aria-selected="true" aria-controls="pane-guide" type="button">Guide</button>
+            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">Architecture diagrams</button>
+            <button class="tab-btn" id="tab-prompts" role="tab" aria-selected="false" aria-controls="pane-prompts" type="button">Project setup</button>
+        </div>
+
+        <div class="tab-pane" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide">
+        <nav class="toc" aria-label="Contents">
+            <a href="#intro">Overview</a><a href="#status">Card statuses</a><a href="#flows-roles">Flows &amp; roles</a>
+            <a href="#review">Review &amp; rejection</a><a href="#confirm">Answering agents</a><a href="#flow">Feishu replies</a>
+            <a href="#create">Creating cards</a><a href="#merge">Worktrees &amp; merge</a><a href="#view">Artifacts &amp; sessions</a>
+            <a href="#config">Settings &amp; models</a><a href="#runtimes">Agent runtimes</a><a href="#troubleshooting">Troubleshooting</a>
+            <a href="#agents-live">Built-in agents</a>
+        </nav>
+
+        <h2 id="intro">What Loop Engine is</h2>
+        <p>Loop Engine is a requirements board backed by a team of role-specialised AI agents. You write a requirement as a card; the dispatcher then runs the card's <b>flow</b>, starting one <b>role</b> after another: analysis, tech design, design review, development, code review, acceptance, and finally an automatic merge.</p>
+        <ul>
+            <li><b>Reviewers are read-only and can reject.</b> Rejected work goes back to the previous step for a redo; after repeated rejections it comes to you.</li>
+            <li><b>Every card gets its own git worktree and branch</b>, merged into the main branch only after every gate has passed.</li>
+            <li><b>When something is wrong, it stops</b> (fail-closed): invalid config, a missing review verdict or a failed exit check means no progress and no merge — it leaves a record and waits for a human.</li>
+            <li><b>When a decision is needed</b>, the agent asks a question (<code>need_confirm</code>). Answer it on the board (or in Feishu) and the work continues.</li>
+        </ul>
+        <p>The board is a local tool: it listens on <code>127.0.0.1:8899</code> only and has no login.</p>
+
+        <h2 id="status">Card lifecycle and statuses</h2>
+        <pre class="lifecycle">Deferred later ──(set to open)──▶ Open open ──(picked up)──▶ In progress doing ──▶ Done done
+Not doing it: any unfinished card ──▶ Dropped dropped</pre>
+        <table>
+            <tr><th>Status</th><th>Label</th><th>Meaning</th></tr>
+            <tr><td><code>later</code></td><td>Deferred</td><td>Recorded but not worked on. Cards created by chatting on the board start here. Set it to open to start automatic development.</td></tr>
+            <tr><td><code>open</code></td><td>Open</td><td>The only status the dispatcher picks up. A card is started once it has been left unedited for about a minute.</td></tr>
+            <tr><td><code>doing</code></td><td>In progress</td><td>An agent is working on it. Cards also stay here while waiting for your answer or while being merged.</td></tr>
+            <tr><td><code>done</code></td><td>Done</td><td>The flow finished and the work was merged (or the branch was pushed).</td></tr>
+            <tr><td><code>dropped</code></td><td>Dropped</td><td>Abandoned. Only later / open / dropped cards can be deleted.</td></tr>
+        </table>
+        <div class="note">If an agent process fails (crash, timeout, no result written), it is retried once automatically. If it fails again the card moves to <b>Deferred</b> with the reason in its summary. Fix the cause and set the card back to open to rerun it.</div>
+
+        <h2 id="flows-roles">Flows and roles</h2>
+        <p>When a card is picked up, the <b>Analysis</b> role (<code>analysis</code>) reads the requirement and the code, recommends a flow and lists the repositories involved. The card then moves through that flow node by node:</p>
+        <table>
+            <tr><th>Flow</th><th>Steps</th><th>Use it for</th></tr>
+            <tr><td><code>quick</code> Quick</td><td>dev → finalize</td><td>Tiny changes such as wording or config values. Touching a high-risk path declared by the project upgrades the card to standard.</td></tr>
+            <tr><td><code>standard</code> Standard</td><td>dev → code review → acceptance → finalize</td><td>Routine changes whose approach is obvious.</td></tr>
+            <tr><td><code>heavy</code> Complex</td><td>tech design → design review → dev → code review → acceptance → finalize</td><td>Changes that need design trade-offs, span repositories, or carry high risk. Also the fallback when analysis gives no valid recommendation.</td></tr>
+        </table>
+        <table>
+            <tr><th>Role</th><th>What it does</th><th>Permissions</th></tr>
+            <tr><td><code>analysis</code> Analysis</td><td>Investigates the requirement and code, writes <code>analysis.md</code>, recommends a flow and repositories</td><td>Read-only</td></tr>
+            <tr><td><code>tech</code> Tech design</td><td>Writes the technical design <code>tech.md</code></td><td>Read-only</td></tr>
+            <tr><td><code>tech_review</code> Design review</td><td>Reviews the design and returns pass / reject</td><td>Read-only</td></tr>
+            <tr><td><code>dev</code> Development</td><td>Changes code in the worktree, tests it, commits, writes <code>self-test.md</code></td><td>Writes to this card's worktree, runs commands</td></tr>
+            <tr><td><code>code_review</code> Code review</td><td>Reviews the diff and returns pass / reject</td><td>Read-only</td></tr>
+            <tr><td><code>accept</code> Acceptance</td><td>Runs the real thing on an isolated test instance, writes <code>accept.md</code></td><td>Runs tests; cannot edit source or commit</td></tr>
+            <tr><td><code>merge_resolve</code> Conflict resolution</td><td>Started automatically on a merge conflict to try to resolve it</td><td>Restricted git commands</td></tr>
+        </table>
+        <p>Flows, role names and models come from <code>flows.json</code> and <code>prompts/*.md</code> at the repository root; the "Built-in agents" section at the end of this page shows the live configuration. Restart the board and the dispatcher after changing either.</p>
+        <div class="note">There is no separate product-spec step, so the card's notes are the only place the scope is defined. Writing down the background, the scope and the <b>acceptance criteria</b> is the most effective way to avoid rejections.</div>
+
+        <h2 id="review">Review, rejection and escalation</h2>
+        <ul>
+            <li>A reviewer (design review or code review) that returns <code>pass</code> moves the card on; <code>reject</code> sends it back to the previous producing step together with the review comments.</li>
+            <li>For the same review step, <b>rejections 1–3 are redone automatically</b>. On the 3rd one, if the project sets <code>escalation_model</code>, the author role is switched to that stronger model first.</li>
+            <li><b>A 4th rejection</b> becomes a <code>need_confirm</code> question for you, listing the points raised in each round: reply y to let it through, n to send it back for one more round.</li>
+            <li>A missing or malformed verdict counts as a rejection — it is never merged by default.</li>
+        </ul>
+
+        <h2 id="confirm">Answering agent questions (need_confirm)</h2>
+        <p>When a human decision is needed, the card stays in doing and shows the pending question. The usual cases: an agent asks something (usually with a suggested answer); a review step was rejected a 4th time; you need to confirm the flow that analysis recommended.</p>
+        <ul>
+            <li><b>On the board</b>: open the card and type your answer in the chat box on the right, or click one of the buttons on the card. Your answer is passed to the agent, which resumes the same session; it is also recorded in the card summary so later sessions see it and do not ask again.</li>
+            <li><b>In Feishu</b> (optional): reply <code>y &lt;id&gt; [note]</code> to agree or <code>n &lt;id&gt; &lt;reason&gt;</code> to reject. Board buttons and Feishu y/n go through the same logic and have the same effect.</li>
+        </ul>
+        <h3 id="format">Reply format</h3>
+        <table>
+            <tr><th>Intent</th><th>Format</th><th>Notes</th></tr>
+            <tr><td>Agree / continue</td><td><code>y 116 [note]</code> (or <code>同意 116 [note]</code>)</td><td>The id may be prefixed with <code>#</code>; the note is passed to the agent</td></tr>
+            <tr><td>Reject / send back</td><td><code>n 116 reason</code> (or <code>拒绝 116 reason</code>)</td><td>The reason is written to the card summary and timeline — please include one</td></tr>
+        </table>
+        <ul>
+            <li>Only replies starting with <code>y / yes / 同意</code> or <code>n / no / 拒绝</code> are recognised; anything else does not change the card.</li>
+            <li>Use the id of the <b>card the question belongs to</b>. If the id and the question do not match, the reply is refused and nothing changes — resend with the id given in the notice.</li>
+        </ul>
+
+        <h3 id="flow">Feishu replies and status changes</h3>
+        <table>
+            <tr><th>Pending item</th><th>When it appears</th><th>Reply y (or an "agree" button)</th><th>Reply n (or a "send back" button)</th></tr>
+            <tr>
+                <td>Needs confirmation<br><code>need_confirm</code></td>
+                <td>An agent asks; a review step failed a 4th time; the recommended flow needs confirming</td>
+                <td>Card stays doing and the agent resumes with your answer; review limit = let it through to the next step; flow confirmation = adopt the recommended flow</td>
+                <td>Card goes back to open and reruns the current step about a minute later (the reason is passed on); review limit = send back for one more round; flow confirmation = defer for manual handling</td>
+            </tr>
+            <tr>
+                <td>Merge conflict<br><code>merge_conflict</code></td>
+                <td>Merging at finalize hit a conflict the conflict-resolution role could not fix</td>
+                <td>"Retry merge": success → done; still conflicting → keeps waiting</td>
+                <td>"Take over manually": card is deferred; branch and worktree are kept</td>
+            </tr>
+            <tr>
+                <td>Review rejection<br><code>verdict: "reject"</code></td>
+                <td>Design review or code review did not pass</td>
+                <td colspan="2">The first 3 rejections are redone automatically with no reply needed; the 4th becomes a "Needs confirmation" item above</td>
+            </tr>
+            <tr>
+                <td>Exit-check waiver<br><code>need_confirm</code></td>
+                <td>An agent reported done but the exit check failed (for example, no code change) and the agent asked for a waiver (<code>waive_gate</code>)</td>
+                <td>"Waive and finish": recorded, then done</td>
+                <td>"Back to open": card reruns; a reason starting with <code>later</code> defers it instead</td>
+            </tr>
+        </table>
+        <div class="note">Only three replies move a card to <b>Deferred</b>: n on a merge conflict, <code>n &lt;id&gt; later …</code> on a waiver, and rejecting a recommended flow. Every other n simply sends the card back to open to rerun. The board also offers a "Stop asking and defer" button for when an agent keeps asking.</div>
+
+        <h3 id="feishu-chat">Feishu card creation and the board assistant (optional)</h3>
+        <p>With a Feishu bot connected, plain messages sent to the bot are answered by the cross-project <b>board assistant</b>: it can look up projects, cards and service status, or create a card once you have confirmed the project. Ids and statuses in its answers come from the server's data; if it cannot find something it says so. Four extra abilities are switched on one by one under Settings → Feishu bot → assistant abilities, and <b>all four are off by default</b>:</p>
+        <ol>
+            <li>Read-only code analysis: reads and searches files across projects, citing files and line numbers;</li>
+            <li>Status change: only from Deferred to Open;</li>
+            <li>Card list: sends a project's cards as an interactive card, paginated when long;</li>
+            <li>Pull and commit: you name the project; it pulls the latest code of the current branch and pauses with options on a conflict; commits are previewed first and only made <b>in the next turn</b> after you confirm. It never pushes or switches branches.</li>
+        </ol>
+        <table>
+            <tr><th>Command / message</th><th>Effect</th></tr>
+            <tr><td><code>确认建卡</code> (confirm card)</td><td>Creates the card from the current draft via <code>/api/chat/&lt;id&gt;/confirm</code> (status Deferred by default). Without a draft it only replies that there is no draft yet.</td></tr>
+            <tr><td><code>结束建卡</code> (end)</td><td>Ends the current card-creation session.</td></tr>
+            <tr><td><code>新建建卡</code> (new)</td><td>Closes the current session; the next message starts over by choosing a project.</td></tr>
+            <tr><td>Group messages</td><td>Only text and rich-text messages that @mention the bot are handled, by the board assistant, with the reply sent to that group. Groups never take part in y/n or card creation.</td></tr>
+            <tr><td>Images / document links</td><td>Passed to the assistant or the card-creation session as attachments (≤ 20 MB each, at most 5 per turn).</td></tr>
+        </table>
+        <p><b>Matching rule (whole line)</b>: the three commands only work when the whole message, after trimming spaces and punctuation, is exactly the command, and only while a card-creation session is active — mentioning the phrase inside a sentence does nothing. y/n replies take priority over these commands.</p>
+
+        <h2 id="create">Creating cards</h2>
+        <ol>
+            <li>Click <code>+</code> next to a project name in the left sidebar to open its chat-to-create panel.</li>
+            <li>Describe the requirement in the chat; the agent drafts a title and notes, you preview and confirm. You can attach a local HTML prototype for reference (paste, drag in, or use the reference-file button).</li>
+            <li>New cards start as <b>Deferred</b>. Change the status to <b>Open</b> to start development.</li>
+        </ol>
+        <p>Writing notes: describe only <b>what to build</b> — goal, scope, acceptance criteria, references — not the discussion that led there; write exclusions as "Not provided: X, Y". Notes and the summary go into every role's prompt. For multi-repo projects, <code>repos: repo-a, repo-b</code> pins the repositories; <code>timeout: 120</code> changes the per-run time limit (minutes, 15–480).</p>
+        <h3 id="assistant">Card assistant</h3>
+        <p>Every card has an "Assistant" entry at the top of its session list, available in any status. It is a separate conversation about that card: ask about progress, have artifacts explained, edit the notes, or move the card from Deferred to Open. It is read-only by default and only writes when you explicitly ask it to.</p>
+
+        <h2 id="merge">Worktrees, branches and merging</h2>
+        <ul>
+            <li>The first time a card starts, the dispatcher creates a worktree from the main branch for each of the project's repositories (under <code>~/.req-board/worktrees/</code>), on branch <code>f-YYYYMMDD-&lt;id&gt;</code>. Every role for that card works there; your main working copy is untouched.</li>
+            <li>At <b>finalize</b>, the dispatcher checks that there is a real code change (or the expected artifact), merges with <code>--no-ff</code> into the main branch, and removes the worktree and branch.</li>
+            <li>For PR / CI-based repositories, set <code>branch_only: true</code> in <code>projects.json</code>: the branch is pushed to the remote and nothing is merged locally. <code>git_sync</code> configures remote sync (fetch/pull before a card, push after done); without it the remote is never touched.</li>
+            <li>On a merge conflict the conflict-resolution role runs first; if it cannot fix it, the card comes to you (see "Merge conflict" above).</li>
+            <li>Services with a <code>restart</code> recipe in <code>projects.json</code> are restarted and health-checked by the dispatcher when the card is done.</li>
+        </ul>
+
+        <h2 id="view">Artifacts, sessions and the timeline</h2>
+        <ul>
+            <li><b>Artifact directory</b>: <code>~/.req-board/artifacts/&lt;project&gt;/req-&lt;id&gt;/</code>, holding <code>analysis.md</code>, <code>tech.md</code>, <code>tech_review.md</code>, <code>self-test.md</code>, <code>code_review.md</code>, <code>accept.md</code> and so on. It lives outside every repository, so cleaning up branches never loses it. Open any artifact from the card's artifact row.</li>
+            <li><b>Result file</b>: before finishing, each role writes <code>result.json</code> (<code>status</code> done / blocked / need_confirm, plus a summary and any question); the dispatcher moves the card on from it. Agents can list follow-ups that need a human (<code>todos</code>); they appear in the done notice and the card summary.</li>
+            <li><b>Sessions</b>: the bottom of the card lists every agent session for it (model, context usage, branch). Open one to see its live timeline on the right: messages, thoughts, tool calls, diffs.</li>
+            <li><b>Continuing a session</b>: send a message in the chat box under the session; the dispatcher resumes that session and hands your message to the agent. Always continue sessions this way.</li>
+            <li><b>Status line</b>: the line above the chat box shows whether the session is alive. Green means working; amber means responses are slow; red means it looks stuck, and a "restart dispatcher" action appears.</li>
+        </ul>
+
+        <h2 id="config">Settings and models</h2>
+        <h3>Projects (left sidebar)</h3>
+        <p>The <code>+</code> at the top of the sidebar adds a project: name, repository paths (one or more), main branch and a one-line goal (given to the analysis role). Hover a project to edit it or disconnect it; disconnecting only hides it, and its cards are kept. A project with cards in progress cannot be disconnected.</p>
+        <h3>Settings drawer (gear at the bottom left)</h3>
+        <ul>
+            <li><b>Overview</b>: read-only view of flows, roles, runtime environment and tools.</li>
+            <li><b>Models</b>: edits the <code>config.toml</code> read by the kimi runtime (in the harness home, <code>~/.kimi-code-deepseek</code> by default): providers, API keys, model aliases and the default model. Changes are validated before saving; nothing is written if validation fails.</li>
+            <li><b>Feishu bot</b>: App ID / App Secret, a connectivity test, and the assistant ability switches. Restart the dispatcher after changing credentials.</li>
+        </ul>
+        <h3>Per-project model tuning (right end of the project bar)</h3>
+        <p>Pick a model per project and role. Saved changes apply from the next card on, with no restart. A role's model is the first value found in this order:</p>
+        <ol>
+            <li>Project level (<code>models</code> in <code>projects.json</code> — this panel);</li>
+            <li>Role level (<code>roles.&lt;role&gt;.model</code> in <code>flows.json</code>);</li>
+            <li>Environment variable <code>KIMI_MODEL_&lt;ROLE&gt;</code>;</li>
+            <li>Global <code>KIMI_MODEL</code> (default <code>deepseek/v4.1-flash</code>).</li>
+        </ol>
+        <h3>Project conventions: <code>.loop/project.json</code></h3>
+        <p>Each connected repository can carry a <code>.loop/project.json</code> declaring its test commands, test-instance start/stop commands, guide files and skills per role, and high-risk paths. These go into the "project conventions" layer of the prompts and take effect the next time a prompt is built. See the "Project setup" tab for how to write them.</p>
+        <h3>Budgets</h3>
+        <p>A single run is limited to 240 minutes by default. Tool-call step limits default to dev 1000, accept and code_review 500, merge_resolve 200, and 400 for the rest. A run that hits a limit is stopped and given one final turn to wrap up. Adjust per role with <code>budgets</code> in <code>projects.json</code>, e.g. <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>.</p>
+
+        <h2 id="runtimes">Agent runtimes</h2>
+        <p>Each role drives an agent runtime over ACP (Agent Client Protocol):</p>
+        <table>
+            <tr><th>Runtime</th><th>Roles</th><th>Notes</th></tr>
+            <tr><td><code>kimi</code> (default)</td><td>all</td><td>kimi-code CLI (<code>kimi acp</code>); models are configured in the harness home's <code>config.toml</code></td></tr>
+            <tr><td><code>claude-code</code></td><td>dev only</td><td>Via <code>@zed-industries/claude-code-acp</code>, using your logged-in <code>claude</code> CLI</td></tr>
+            <tr><td><code>codex</code></td><td>dev only</td><td>Via <code>@zed-industries/codex-acp</code>, using your logged-in <code>codex</code> CLI</td></tr>
+        </table>
+        <p>Selection order: <code>projects.json</code> <code>&lt;project&gt;.runtimes.&lt;role&gt;</code> → <code>&lt;project&gt;.runtime</code> → <code>flows.json</code> <code>roles.&lt;role&gt;.runtime</code> → environment variable <code>LOOP_AGENT_RUNTIME</code> → <code>kimi</code>. Unknown runtimes are refused before anything starts.</p>
+        <pre><code>{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}</code></pre>
+        <div class="warn">Claude Code and Codex are limited to the dev role for now: it cannot yet be proven that the read-only limits hold on those runtimes, so analysis, review, acceptance, conflict resolution and assistant sessions refuse to start on them. Keep those roles on <code>kimi</code>.</div>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <table>
+            <tr><th>Symptom</th><th>What to do</th></tr>
+            <tr><td>A card is never picked up</td><td>Check that it is open, has not been edited for at least a minute, and that its project name matches a key in <code>projects.json</code> exactly. The health badge in the header should not be red.</td></tr>
+            <tr><td>Sessions do not start / model errors / 401</td><td>Check the API key and model names in the harness home's <code>config.toml</code> and align <code>KIMI_MODEL</code> with them; set <code>KIMI_BIN</code> if kimi is not found.</td></tr>
+            <tr><td>Agent says the directory is not trusted</td><td>Run kimi interactively once in that directory with the same harness home and accept: <code>KIMI_CODE_HOME=~/.kimi-code-deepseek kimi</code>.</td></tr>
+            <tr><td>Worktree creation fails</td><td>The project path must be a git repository with at least one commit on its main branch; set <code>base_branch</code> if needed.</td></tr>
+            <tr><td>Browser verification reports no tools</td><td>Add an MCP server named exactly <code>playwright</code> to <code>mcp.json</code> in the harness home.</td></tr>
+            <tr><td>Changes to <code>flows.json</code> / <code>prompts/</code> have no effect</td><td>There is no hot reload: restart the board and the dispatcher (in foreground mode, Ctrl-C and rerun <code>scripts/run_local.sh</code>).</td></tr>
+            <tr><td>Card moved to Deferred with a failure reason</td><td>Fix the cause and set the card back to open, or give instructions in the session chat box to continue.</td></tr>
+        </table>
+        <h3 id="dispatcher-state">Dispatcher health</h3>
+        <p>The badge at the top right of the board shows the dispatcher's state. Every poll (about every 15 seconds) the dispatcher updates the heartbeat file <code>data/dispatcher_heartbeat.json</code>; if it has not been updated for 180 seconds the badge shows "Heartbeat stale", which usually means the dispatcher is hung or not running. Its pending work (open questions, retry counts, worktree bases and so on) is kept in <code>data/dispatcher_state.json</code>.</p>
+        <ul>
+            <li>Environment self-check: <code>.venv/bin/python scripts/doctor.py</code> (passes when it exits 0 and reports 0 hard failures — 「硬失败 0 项」).</li>
+            <li>Restart the dispatcher: <code>scripts/dispatcher-restart.sh &lt;pid&gt;</code>; make sure no agent is running first.</li>
+            <li>More detail: <code>docs/quickstart.en.md</code> and <code>docs/dispatcher.md</code> in the repository.</li>
+        </ul>
+
+        <h2 id="agents-live">Built-in agents (live configuration)</h2>
+        <p>The section below is rendered from the current <code>flows.json</code> and <code>prompts/</code>: flow table, roles with their effective models, runtime environment and the full prompt text. It is shown in Chinese because the prompt templates are written in Chinese.</p>
+        <!-- builtin-agents-section -->
+        </div>
+
+        <div class="tab-pane" id="pane-diagrams" role="tabpanel" aria-labelledby="tab-diagrams" hidden>
+            <div class="sub-tabs">
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-architecture.html" aria-pressed="true">Architecture</button>
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">Dispatch flow</button>
+            </div>
+            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine architecture and dispatch diagrams"></iframe>
+            <p class="subtitle" style="margin-top:10px;">Zoom, search and switch themes inside the diagram. Labels are in Chinese; sources are in <code>docs/diagrams/src/*.json</code>.</p>
+        </div>
+
+        <div class="tab-pane prompt-guide" id="pane-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
+            <h2 id="prompts">Project setup: make agents follow your project's rules</h2>
+            <p>When you connect a project, write down in its own repository what already exists, how to extend it, the business boundaries and how to verify work. Each card then only says what to do this time and how to accept it. You do not need to change Loop Engine's global role templates. The examples below use a <b>hypothetical ERP platform gaining a new module</b>; replace paths, module names and scripts with your project's real ones.</p>
+            <nav class="toc" aria-label="Project setup sections">
+                <a href="#prompt-layers">What goes where</a><a href="#prompt-starter">Onboarding order</a>
+                <a href="#prompt-manifest">Manifest</a><a href="#prompt-guides">Guides</a>
+                <a href="#prompt-skills">Skills</a><a href="#prompt-task">Card example</a>
+                <a href="#prompt-roles">What each role reads</a><a href="#prompt-resume">Resuming after rule changes</a>
+                <a href="#prompt-checklist">Pre-flight checklist</a>
+            </nav>
+
+            <h2 id="prompt-layers">1. What goes where</h2>
+            <p><b>Long-lived facts and constraints go in guides, reusable procedures go in skills, this card's goal and acceptance go on the card.</b></p>
+            <div class="table-scroll"><table>
+                <tr><th>Layer</th><th>Where</th><th>Contents</th></tr>
+                <tr><td>Common protocol</td><td>Built into the engine (common tail, role capabilities)</td><td>Result contract, tool permissions, write boundaries, process safety. Leave it alone when onboarding a project.</td></tr>
+                <tr><td>Role duties</td><td><code>prompts/&lt;role&gt;.md</code>, <code>flows.json</code></td><td>Inputs, outputs and duties of each role; shared across projects, no project specifics.</td></tr>
+                <tr><td>Project conventions</td><td>The repo's <code>AGENTS.md</code>, <code>.loop/project.json</code>, <code>.loop/guides/*.md</code></td><td>Project purpose, framework and module map, business terms, data red lines, how to test and deploy.</td></tr>
+                <tr><td>Scenario skills</td><td><code>.loop/skills/&lt;name&gt;.md</code>, attached via <code>skills.&lt;role&gt;</code> in the manifest</td><td>Repeatable checklists and evidence formats.</td></tr>
+                <tr><td>This requirement</td><td>Card <code>title</code> and <code>notes</code></td><td>Behaviour, scope, acceptance scenarios, reference paths.</td></tr>
+            </table></div>
+            <ul>
+                <li>Putting a file in <code>.loop/guides/</code> does not load it; it must be registered in the manifest.</li>
+                <li>Guides are filtered by <code>roles</code> (omit it for all roles); skills are attached per role.</li>
+                <li>Each guide or skill is capped at <b>4000 characters</b> in the prompt; the rest is cut. Put key rules first and link to longer docs in the repo.</li>
+                <li><code>AGENTS.md</code> is not inlined — the prompt only tells the agent to read it first — so keep it short.</li>
+            </ul>
+
+            <h2 id="prompt-starter">2. Onboarding order</h2>
+            <ol>
+                <li><b>Check the baseline</b>: repository path, remote and main branch are right; set <code>base_branch</code> in project management.</li>
+                <li><b>Map the framework</b>: pick a similar module already in production and note the real entry points for layers, routes, menus, permissions and migrations.</li>
+                <li><b>Write stable rules</b>: business and extension boundaries for everyone go into guides; short red lines and pointers go into <code>AGENTS.md</code>; register commands and guides in the manifest.</li>
+                <li><b>Prove the environment</b>: install, start, health check and tests all work against an isolated test database.</li>
+                <li><b>Write the first card</b>: use the format below and start with one well-scoped card to exercise the whole pipeline.</li>
+            </ol>
+            <pre><code>erp-platform/
+  AGENTS.md                         # short rules and pointers
+  .loop/project.json                # commands, guide roles, skill roles
+  .loop/guides/business.md           # business terms and lasting constraints
+  .loop/guides/framework.md          # existing capabilities, extension points, reference module
+  .loop/guides/validation.md         # acceptance and regression standard
+  .loop/guides/instance.md           # isolated instance, test DB, how changes take effect
+  .loop/skills/erp-module.md         # reusable steps for adding a module
+  docs/platform/module-map.md        # details: linked from guides, read on demand</code></pre>
+
+            <h2 id="prompt-manifest">3. Project manifest</h2>
+            <p>Register the following in the repository's <code>.loop/project.json</code>. The <code>scripts/test*.sh</code> in the example must exist in your project; <code>&lt;port&gt;</code> is just a placeholder for the agent.</p>
+            <details open><summary><code>.loop/project.json</code> example</summary>
+            <pre><code id="prompt-manifest-example">{
+  "version": 1,
+  "commands": {
+    "test": "bash scripts/test.sh",
+    "test_affected": "bash scripts/test-module.sh &lt;module&gt;"
+  },
+  "instance": {
+    "start": "bash scripts/test-instance.sh start &lt;port&gt;",
+    "stop": "bash scripts/test-instance.sh stop &lt;port&gt;",
+    "status": "bash scripts/test-instance.sh status &lt;port&gt;",
+    "healthcheck": "curl --fail http://127.0.0.1:&lt;port&gt;/health",
+    "port_range": [9100, 9199]
+  },
+  "guides": {
+    "business": {"file": ".loop/guides/business.md"},
+    "framework": {"file": ".loop/guides/framework.md"},
+    "validation": {
+      "file": ".loop/guides/validation.md",
+      "roles": ["analysis", "tech", "tech_review", "dev", "code_review", "accept"]
+    },
+    "instance": {
+      "file": ".loop/guides/instance.md",
+      "roles": ["dev", "accept"]
+    }
+  },
+  "skills": {
+    "tech": ["erp-module"],
+    "dev": ["erp-module"],
+    "code_review": ["erp-module"],
+    "accept": ["erp-module"]
+  },
+  "high_risk_paths": ["src/auth/", "src/tenancy/", "src/workflow/", "src/migrations/"],
+  "agents_md": {"max_lines": 150, "max_chars": 12000}
+}</code></pre></details>
+            <p><code>roles</code> uses the real role ids from <code>flows.json</code>. A quick-flow card that touches a <code>high_risk_paths</code> prefix is upgraded to the standard flow. <code>projects.json</code> stays on the machine running Loop Engine (paths, models, budgets, restart recipes); <code>.loop/</code> is committed with the project. All fields: <code>docs/project-manifest.md</code> in the repository.</p>
+
+            <h2 id="prompt-guides">4. Guides: facts, boundaries and where the evidence is</h2>
+            <p>Start each guide with what it covers and the baseline it was checked against. Make rules concrete — what to reuse, where to find it, when to stop — rather than "follow best practices", which nobody can verify.</p>
+            <details><summary><code>AGENTS.md</code> short rules example</summary><pre><code># ERP platform
+New modules are added inside the existing platform; framework capabilities and extension points: .loop/guides/framework.md.
+Business terms: .loop/guides/business.md; acceptance standard: .loop/guides/validation.md.
+New modules reuse the existing layering, components, permission and tenant mechanisms; the verified purchase-order module is the reference.
+Do not edit the framework core, third-party dependencies or generated directories; if unavoidable, report the impact and ask first.
+Never connect to or modify production data. Schema changes use incremental migrations; never drop and recreate tables.
+Work only inside this card's worktree; do not push, merge to main or change card status.
+On conflicting permission, tenant, amount or workflow semantics, report need_confirm and cite the sources.</code></pre></details>
+            <details><summary><code>.loop/guides/business.md</code> business boundaries example</summary><pre><code id="prompt-business-example"># Business boundaries (all erp-platform modules)
+Baseline: fill in the branch and commit you checked; recheck these facts when maintaining.
+A tenant is the data-isolation unit; an organisation is a business unit inside a tenant. Never mix them up.
+Modules reuse the platform's users, organisations, permissions, numbering, attachments, workflow and audit services.
+Purchase request states and approval actions: docs/domain/purchase-request.md.
+Amount precision, currency and rounding reuse the platform's current implementation; cite the real files.
+Not provided: cross-tenant queries, taking effect without approval, automatic edits to historical documents.
+Cancel, withdraw and duplicate-submit semantics not defined in the requirement: ask before developing.
+Verify these semantics against the real ERP; example terms are not business facts.</code></pre></details>
+            <details><summary><code>.loop/guides/framework.md</code> framework extension example</summary><pre><code id="prompt-framework-example"># Platform extension conventions (erp-platform)
+Baseline and framework version: fill in the branch, commit, framework name and verified version.
+Reference module: purchase orders; paths and call chain in docs/platform/reference-module.md.
+Module map: docs/platform/module-map.md; each entry gives the real file, class or registration point.
+New modules keep the existing page → API layer → application service → data access boundaries.
+Menus, permission points, tenant filters, dictionaries, attachments, numbering, approval and audit use the platform's shared capabilities.
+Do not build another login, permission or approval engine or a parallel UI component set; do not patch third-party dependencies.
+New entities use the existing base classes and isolation rules; new endpoints use the existing response, error and transaction conventions.
+Use the platform's migration mechanism; state defaults, compatibility with existing data and how to recover from failure.
+Before developing, locate an existing end-to-end implementation and confirm extension points from code, not from docs alone.
+If the shared capabilities cannot cover this card, write down the gap, impact and options, and ask before implementing.</code></pre></details>
+            <details><summary><code>.loop/guides/validation.md</code> shared acceptance standard example</summary><pre><code id="prompt-validation-example"># Module acceptance and regression (erp-platform)
+Acceptance baseline: this card's notes + the confirmed requirement doc + current project conventions.
+Test the happy path, invalid input, unauthorised access and cross-tenant access of the new module.
+Test duplicate submits, concurrent approvals and state conflicts; check failed transactions leave no partial writes.
+Check amount precision, numbering, audit records and compatibility with existing data.
+Regress purchase orders and any shared permission or workflow endpoints touched; record cases and results.
+For UI changes, use a real browser on an isolated instance: menu → list → create → submit → approve/reject.
+SQL, API and UI results must agree; each role only runs checks its tools allow.
+Record the code baseline, commands, instance URL, samples, expected vs actual results and anything not covered.
+Dev records evidence in self-test.md, acceptance re-checks independently in accept.md; never mark unrun checks as passed.
+Reviewers name the violated constraint or acceptance criterion, with location and how to reproduce.</code></pre></details>
+            <details><summary><code>.loop/guides/instance.md</code> test environment example</summary><pre><code id="prompt-instance-example"># Isolated testing and how changes take effect (erp-platform)
+Start this worktree's instance with the manifest instance commands; check port and process ownership first.
+Use a dedicated test database and synthetic tenants; never production connection strings or real customer data.
+Connection details come from protected local config; prompts, cards and the repo only name the config, never secrets.
+The start script must isolate port, database and file directories; the stop script only cleans this instance.
+Fill in dependent services, how to get test accounts, seed data and the real healthcheck steps.
+Only restart your own test instance; shared or production processes are handled by the deployer with explicit approval.
+State when backend, frontend, migration and workflow-config changes take effect, who triggers them and how to verify.
+If the instance cannot start, record what is missing and list it as not covered; never claim a browser check was done.</code></pre></details>
+
+            <h2 id="prompt-skills">5. Skills: repeatable methods</h2>
+            <p>Guides answer "what is this project and what must be respected"; skills answer "for this kind of task, which steps to follow". A project skill replaces a global skill of the same name entirely. Missing skills are skipped with a log line, so check them when onboarding.</p>
+            <details><summary><code>.loop/skills/erp-module.md</code> example</summary><pre><code id="prompt-skill-example"># ERP module extension checklist
+1. Read AGENTS.md, the framework/business/validation guides and this card's notes.
+2. Using the reference module, locate the entity, API, service, page, route, menu and permission registration points.
+3. List "new in this card / reused / not involved", with file or endpoint evidence.
+4. Check tenant, organisation, data permissions, transactions, idempotency, workflow, audit and migration compatibility.
+5. Dev implements through the existing extension points and runs tests; read-only roles only verify and report.
+6. Map every acceptance criterion in the notes to its implementation and test evidence; mark anything not run.
+7. Write to the artifact path for your role; paths and the result JSON contract are as injected at runtime.
+On undefined business semantics, framework-core changes or permission conflicts, report need_confirm.</code></pre></details>
+
+            <h2 id="prompt-task">6. The card only says what to do this time</h2>
+            <details open><summary>Card example</summary><pre><code>title: Add a purchase request module to the ERP platform
+
+notes:
+Goal: employees within a tenant can create purchase requests and submit them through the existing workflow.
+Scope: list, detail, create, edit draft, submit, approve, reject and search.
+Reuse: existing users/organisations, permissions, numbering, attachments, workflow and audit.
+Rules: only the author can edit a draft; submitted requests are read-only; rejected ones can be edited and resubmitted.
+Permissions: use the platform's permission registration; requesters and approvers follow existing organisation rules.
+Not provided: cross-tenant sharing, stock deduction, payment, bulk import of historical documents.
+References: .loop/guides/framework.md; docs/domain/purchase-request.md.
+Acceptance:
+1. An authorised user opens the module from the existing menu, creates a request with two lines and saves a draft.
+2. Submitting starts the existing workflow; states and audit records after approve/reject match the requirement doc.
+3. Unauthorised roles cannot call the endpoints or use the buttons; another tenant cannot read or change the request.
+4. Purchase orders and the shared capabilities touched pass regression, with reproducible evidence.
+Takes effect: migration, backend deploy and frontend release follow the project's deploy guide, triggered by the deployer.</code></pre></details>
+            <div class="warn"><code>notes</code> and <code>summary</code> go into every role's prompt. Do not put review verdicts, discussion history or secrets there; review comments belong in review artifacts.</div>
+
+            <h2 id="prompt-roles">7. Give every role the same yardstick</h2>
+            <div class="table-scroll"><table>
+                <tr><th>Role</th><th>Needs</th><th>Should leave behind</th></tr>
+                <tr><td><code>analysis</code></td><td>Business, framework and validation guides; the card's goal</td><td>Existing capabilities, boundaries, risks and unknowns with code references; a recommended flow</td></tr>
+                <tr><td><code>tech / tech_review</code></td><td>The same, plus the analysis</td><td>Extension points, reuse/new list, data and permission design, regression scope</td></tr>
+                <tr><td><code>dev</code></td><td>Shared guides, module skill, instance guide, upstream artifacts</td><td>Code, self-test report, a test for each acceptance criterion, anything not covered</td></tr>
+                <tr><td><code>code_review</code></td><td>Shared guides, module skill, design and diff</td><td>Exact locations that break a constraint and what would fix them</td></tr>
+                <tr><td><code>accept</code></td><td>Acceptance standard, module skill, instance guide, self-test evidence</td><td>End-to-end evidence on an isolated instance and regression results</td></tr>
+            </table></div>
+
+            <h2 id="prompt-resume">8. Resuming after rule changes</h2>
+            <p>A new session gets the full prompt; a resumed session only gets a short continuation message and is <b>not guaranteed</b> to see guides, skills or card notes you just changed. When you continue after changing rules, say so explicitly in the board's chat box: which files changed, the confirmed goal, the remaining work — and ask the agent to re-read those rules first. When rules conflict, the agent should report <code>need_confirm</code>.</p>
+
+            <h2 id="prompt-checklist">9. Pre-flight checklist for the first card</h2>
+            <ul>
+                <li>Repository path, remote and <code>base_branch</code> are right; endpoints and directories named in the guides exist.</li>
+                <li>The manifest is valid JSON; every guide and skill file exists with the right name and roles, and key content fits in 4000 characters.</li>
+                <li>Test commands run inside a worktree; test instances isolate port, database and directories; no production credentials reach the prompt.</li>
+                <li>The card has scope, exclusions, reproducible acceptance criteria and how the change takes effect.</li>
+                <li>Run <code>.venv/bin/python scripts/doctor.py</code> to check the manifest format.</li>
+            </ul>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var tabGuide = document.getElementById('tab-guide');
+            var tabDiagrams = document.getElementById('tab-diagrams');
+            var tabPrompts = document.getElementById('tab-prompts');
+            var paneGuide = document.getElementById('pane-guide');
+            var paneDiagrams = document.getElementById('pane-diagrams');
+            var panePrompts = document.getElementById('pane-prompts');
+            var tabs = [tabGuide, tabDiagrams, tabPrompts];
+            var panes = [paneGuide, paneDiagrams, panePrompts];
+            var frame = document.getElementById('diagram-frame');
+            var subBtns = paneDiagrams.querySelectorAll('.sub-btn');
+            var base = location.pathname + location.search;   // 保留 ?lang=，切 tab 不丢语言
+
+            function loadDiagram(btn) {
+                subBtns.forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+                var src = btn.getAttribute('data-src');
+                if (frame.getAttribute('src') !== src) frame.setAttribute('src', src);
+            }
+            function show(which) {
+                tabs.forEach(function (tab, index) {
+                    var selected = tab.id === 'tab-' + which;
+                    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+                    panes[index].hidden = !selected;
+                });
+                if (which === 'diagrams' && !frame.getAttribute('src')) loadDiagram(subBtns[0]);
+            }
+            function fromHash(scroll) {
+                var id;
+                try { id = decodeURIComponent((location.hash || '').slice(1)); }
+                catch (e) { return; }
+                if (!id) { show('guide'); return; }
+                if (id === 'diagrams') { show('diagrams'); return; }
+                // 先显示锚点所属页签，再滚动；深链接可能落在原本 hidden 的页签内
+                var target = document.getElementById(id);
+                if (!target) return;
+                panes.forEach(function (pane, index) {
+                    if (!pane.contains(target)) return;
+                    var wasHidden = pane.hidden;
+                    show(tabs[index].id.slice(4));
+                    if (scroll || wasHidden) target.scrollIntoView();
+                });
+            }
+            tabGuide.addEventListener('click', function () { show('guide'); history.replaceState(null, '', base); });
+            tabDiagrams.addEventListener('click', function () { show('diagrams'); history.replaceState(null, '', base + '#diagrams'); });
+            tabPrompts.addEventListener('click', function () { show('prompts'); history.replaceState(null, '', base + '#prompts'); });
+            subBtns.forEach(function (b) { b.addEventListener('click', function () { loadDiagram(b); }); });
+            window.addEventListener('hashchange', function () { fromHash(true); });
+            fromHash(false);
+
+            // 语言切换：带上当前锚点，切过去仍停在同一节
+            var langLink = document.getElementById('langLink');
+            langLink.addEventListener('click', function () {
+                langLink.setAttribute('href', langLink.getAttribute('href').split('#')[0] + location.hash);
+            });
+
+            // 明暗切换：与看板共用 reqBoardSkin 偏好
+            var skinBtn = document.getElementById('skinBtn');
+            var root = document.documentElement;
+            function paintSkinBtn() {
+                var light = root.dataset.skin === 'light';
+                skinBtn.textContent = light ? skinBtn.getAttribute('data-dark') : skinBtn.getAttribute('data-light');
+            }
+            skinBtn.addEventListener('click', function () {
+                var light = root.dataset.skin !== 'light';
+                if (light) root.dataset.skin = 'light'; else delete root.dataset.skin;
+                try { localStorage.setItem('reqBoardSkin', light ? 'light' : 'dark'); } catch (e) { /* 隐私模式：仅本页生效 */ }
+                paintSkinBtn();
+            });
+            paintSkinBtn();
+        })();
+    </script>
+</body>
+</html>

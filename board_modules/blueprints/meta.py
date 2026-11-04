@@ -329,13 +329,36 @@ def guide_diagram(name):
     return Response(path.read_bytes(), mimetype="text/html")
 
 
+def _guide_lang():
+    """指南语言：?lang=en|zh 优先（看板页头链接按界面语言带上）；否则按 Accept-Language 首选语言
+    （与 static/i18n.js 同口径：zh 开头 = 中文，其它 = 英文）；无该请求头时默认中文。"""
+    lang = (request.args.get("lang") or "").strip().lower()
+    if lang in ("en", "zh"):
+        return lang
+    header = (request.headers.get("Accept-Language") or "").strip()
+    if not header:
+        return "zh"
+    first = request.accept_languages.best or header.split(",", 1)[0]
+    return "zh" if first.lower().startswith("zh") else "en"
+
+
 @bp.route('/guide')
 def guide():
-    """操作指南：读 docs/guide.html 并在「九、内置 agent 定义」锚点处注入动态版块（#269）。
+    """操作指南：按 _guide_lang() 选 docs/guide.html 或同目录 guide.en.html（英文版缺失时回落中文），
+    并在「内置 agent 定义」锚点处注入动态版块（#269）。
     提示词动态读取（单一事实来源）：调度器角色提示词 import dispatcher 取 ROLE_PROMPTS/COMMON_TAIL，
     建卡对话提示词取本进程 _chat_system_prompt；import 失败时版块降级为错误提示，页面其它内容不受影响"""
-    if not resolve("GUIDE_HTML").exists():
+    path = Path(resolve("GUIDE_HTML"))
+    lang = _guide_lang()
+    if lang == "en" and path.with_name("guide.en.html").exists():
+        path = path.with_name("guide.en.html")
+    else:
+        lang = "zh"
+    if not path.exists():
         return "操作指南不存在", 404
-    page_html = resolve("GUIDE_HTML").read_text()
+    page_html = path.read_text(encoding="utf-8")
     page_html = page_html.replace(AGENTS_SECTION_ANCHOR, _builtin_agents_section())
-    return Response(page_html, mimetype="text/html")
+    resp = Response(page_html, mimetype="text/html")
+    resp.headers["Content-Language"] = "en" if lang == "en" else "zh-CN"
+    resp.vary.add("Accept-Language")
+    return resp

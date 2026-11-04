@@ -490,6 +490,7 @@ from board_modules.blueprints.meta import (  # noqa: F401 #32 Phase 6 兼容导�
     _asset_href,
     _feishu_health_payload,
     _freeze_time_script,
+    _guide_lang,
 )
 
 
@@ -913,4 +914,5 @@ __all__ = [
     "_asset_href",
     "_feishu_health_payload",
     "_freeze_time_script",
+    "_guide_lang",
 ]

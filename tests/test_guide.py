@@ -93,10 +93,6 @@ class GuideRouteTest(unittest.TestCase):
     def test_prompt_configuration_examples_load_with_actual_manifest_parser(self):
         """页面上的可复制 ERP 示例须能被真实加载器读取，且角色过滤/Skill 挂载符合指引。"""
         from html.parser import HTMLParser
-        import tempfile
-        from unittest import mock
-
-        import acp_shared as ac
 
         class Examples(HTMLParser):
             def __init__(self):
@@ -118,7 +114,17 @@ class GuideRouteTest(unittest.TestCase):
                 if tag == "code":
                     self.current = None
 
-        with b.app.test_client().get("/guide") as resp:
+        for url in ("/guide", "/guide?lang=en"):
+            with self.subTest(url=url):
+                self._check_prompt_examples(url, Examples)
+
+    def _check_prompt_examples(self, url, Examples):
+        import tempfile
+        from unittest import mock
+
+        import acp_shared as ac
+
+        with b.app.test_client().get(url) as resp:
             page = resp.get_data(as_text=True)
         self.assertIn('id="tab-prompts"', page)
         self.assertIn('aria-controls="pane-prompts"', page)
@@ -285,17 +291,80 @@ class GuideRouteTest(unittest.TestCase):
             resp.close()
 
     def test_guide_assistant_git_ops_capability(self):
-        """#54：设置分组能力文案为四项，含代码拉取与提交；旧「三项默认关闭」不残留。"""
+        """看板助手能力文案为四项，含代码拉取与提交；旧「三项默认关闭」不残留。"""
         page = b.app.test_client().get("/guide").get_data(as_text=True)
         self.assertIn("代码拉取与提交", page)
         self.assertIn("四项默认关闭", page)
         self.assertNotIn("三项默认关闭", page)
-        # 主线（看板助手能力清单 + 普通文本路由）也必须含 #54，不能只改设置分组段落
-        self.assertIn("<b>④代码拉取与提交（#54）</b>", page)
-        self.assertIn("#54 起</b>新增第四条「代码拉取与提交」", page)
-        self.assertIn("#54 起</b>支持按项目拉取最新代码", page)
-        self.assertIn("下一轮</b>才真正提交", page)
+        # 能力清单写明两步提交与边界（指南已去掉内部卡号，只锁行为描述）
+        self.assertIn("下一轮才真正提交", page)
         self.assertIn("不 push、不切换分支", page)
+
+    def test_guide_language_selection(self):
+        """/guide 语言：?lang= 优先；否则按 Accept-Language 首选语言；都没有时默认中文。
+        两版都注入动态版块，都带对向语言切换链接。"""
+        c = b.app.test_client()
+        cases = [
+            ("/guide", {}, "zh"),
+            ("/guide?lang=en", {}, "en"),
+            ("/guide?lang=zh", {"Accept-Language": "en-US,en;q=0.9"}, "zh"),
+            ("/guide", {"Accept-Language": "en-US,en;q=0.9"}, "en"),
+            ("/guide", {"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}, "zh"),
+            ("/guide?lang=bogus", {"Accept-Language": "fr-FR"}, "en"),
+        ]
+        for url, headers, want in cases:
+            with self.subTest(url=url, headers=headers):
+                resp = c.get(url, headers=headers)
+                self.assertEqual(resp.status_code, 200)
+                page = resp.get_data(as_text=True)
+                resp.close()
+                if want == "en":
+                    self.assertIn('<html lang="en">', page)
+                    self.assertIn('href="/guide?lang=zh"', page)
+                    self.assertEqual(resp.headers["Content-Language"], "en")
+                else:
+                    self.assertIn('<html lang="zh-CN">', page)
+                    self.assertIn('href="/guide?lang=en"', page)
+                    self.assertEqual(resp.headers["Content-Language"], "zh-CN")
+                self.assertIn('id="agents"', page)                 # 动态版块两版都注入
+                self.assertNotIn("<!-- builtin-agents-section -->", page)
+                self.assertIn("Accept-Language", resp.headers.get("Vary", ""))
+
+    def test_guide_en_falls_back_to_zh_when_missing(self):
+        """英文版文件缺失时 ?lang=en 回落中文版（不 404）"""
+        import tempfile
+        tmp = Path(tempfile.mkdtemp(prefix="guide-lang-"))
+        old = b.GUIDE_HTML
+        try:
+            (tmp / "guide.html").write_text('<html lang="zh-CN"><!-- builtin-agents-section --></html>',
+                                            encoding="utf-8")
+            b.GUIDE_HTML = tmp / "guide.html"
+            resp = b.app.test_client().get("/guide?lang=en")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('lang="zh-CN"', resp.get_data(as_text=True))
+            resp.close()
+        finally:
+            b.GUIDE_HTML = old
+            import shutil as _shutil
+            _shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_guide_en_has_same_sections(self):
+        """英文版与中文版锚点一致（同一份内容的两种语言），且不含内部卡号"""
+        import re
+        zh = (REPO / "docs" / "guide.html").read_text(encoding="utf-8")
+        en = (REPO / "docs" / "guide.en.html").read_text(encoding="utf-8")
+        ids = lambda s: set(re.findall(r'\bid="([^"]+)"', s))
+        self.assertEqual(ids(zh) - {"agents-live"}, ids(en) - {"agents-live"})
+        for page in (zh, en):
+            text = re.sub(r"<style>.*?</style>", "", page, flags=re.S)   # 色值不算卡号
+            self.assertIsNone(re.search(r"#\d{2,}", text), "指南不应出现内部卡号")
+            self.assertIn("<!-- builtin-agents-section -->", page)
+
+    def test_header_guide_link_carries_ui_language(self):
+        """页头指南链接由 i18n.js 按界面语言补 ?lang=（服务端渲染保持 /guide，见上一条测试）"""
+        js = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+        self.assertIn("a.guide-link", js)
+        self.assertIn("'/guide?lang=' + lang", js)
 
     def test_index_header_has_guide_link(self):
         resp = b.app.test_client().get("/")
