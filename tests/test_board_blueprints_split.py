@@ -19,7 +19,7 @@ import board as b  # noqa: E402
 BP_DIR = REPO / "board_modules" / "blueprints"
 REPO_MODS = ("requirements", "projects", "chats", "settings", "assistant", "sessions", "meta")
 # 设计 §3 的路线分组（口径以 board_routes_baseline.json 裁决，见 test_board_split_contract.py）
-ROUTE_COUNTS = {"requirements": 21, "projects": 16, "chats": 22, "settings": 7,
+ROUTE_COUNTS = {"requirements": 21, "projects": 16, "chats": 22, "settings": 10,
                 "assistant": 7, "sessions": 10, "meta": 9}
 PATCHED = set(json.loads((REPO / "tests/fixtures/board_patch_names.json").read_text(encoding="utf-8"))["names"])
 

@@ -56,6 +56,14 @@
             try { return JSON.parse(localStorage.getItem(VIEW_STATE_KEY) || 'null'); }
             catch (e) { return null; }
         })();
+        // 外部通知（Slack / Webhook）回链 /?req=<id>：优先于本地记住的视图，定位到该卡（所有项目、不筛选）
+        (() => {
+            let rid = NaN;
+            try { rid = Number(new URLSearchParams(location.search).get('req')); } catch (e) { rid = NaN; }
+            if (Number.isInteger(rid) && rid > 0) {
+                savedViewState = {view: 'requirement', requirementId: rid, project: ALL_PROJECTS};
+            }
+        })();
         let selectedProject = savedViewState && typeof savedViewState.project === 'string'
             ? savedViewState.project : ALL_PROJECTS;
         // 状态筛选（later/open/doing，null = 不筛选）：随视图状态持久化，与项目选择正交
@@ -3000,6 +3008,8 @@ void main() {
         // 轮询必须等满这个窗口，不能一见非 not_loaded 就停。
         const FEISHU_RESTART_WAIT_MS = 60000;
         let feishuSettingsLoading = false;
+        let notifierSettingsLoaded = false;   // 通知渠道（Webhook / Slack）本次打开内是否已加载
+        let notifierSettingsLoading = false;
         let fsBase = null;                  // #22 飞书设置服务端原始数据（重拉后重置）
         let msBase = null;   // 服务端原始数据（delta 基准；重拉后重置）
         let msForm = null;   // 本地编辑态（渲染 + DOM 收集；含 deleted/isNew 标记）
@@ -3009,7 +3019,8 @@ void main() {
             panel.inert = false;   // 展开才可聚焦/可被读屏发现（关闭态 off-screen 但不该可 Tab 到）
             panel.classList.add('show');
             modelSettingsLoaded = false;   // 每次打开后首次切模型 tab 重拉
-            feishuSettingsLoaded = false;  // 每次打开后首次切飞书 tab 重拉
+            feishuSettingsLoaded = false;  // 每次打开后首次切通知渠道 tab 重拉（飞书 + Webhook/Slack）
+            notifierSettingsLoaded = false;
             switchSettingsTab('global');
             loadSettingsDrawer(false);
         }
@@ -3032,10 +3043,11 @@ void main() {
             document.getElementById('settingsFeishuBody').hidden = settingsTab !== 'feishu';
             if (settingsTab === 'model' && !modelSettingsLoaded) loadModelSettings(false);
             if (settingsTab === 'feishu' && !feishuSettingsLoaded) loadFeishuSettings(false);
+            if (settingsTab === 'feishu' && !notifierSettingsLoaded) loadNotifierSettings(false);
         }
         function reloadSettingsDrawer() {
             if (settingsTab === 'model') loadModelSettings(true);
-            else if (settingsTab === 'feishu') loadFeishuSettings(true);
+            else if (settingsTab === 'feishu') { loadFeishuSettings(true); loadNotifierSettings(true); }
             else loadSettingsDrawer(true);
         }
         async function loadSettingsDrawer(force) {
@@ -3630,7 +3642,8 @@ void main() {
             if (el) el.innerHTML = html;
         }
         async function loadFeishuSettings(force) {
-            const body = document.getElementById('settingsFeishuBody');
+            // 「通知渠道」tab 内的飞书小节容器（表单本身与 #22 一致，只是挂到小节里）
+            const body = document.getElementById('settingsFeishuForm');
             if (feishuSettingsLoaded && !force) return;
             if (feishuSettingsLoading) return;
             feishuSettingsLoading = true;
@@ -3779,6 +3792,198 @@ void main() {
                 fsResult('<span class="sd-warn">测试失败：' + escapeHtml(String((e && e.message) || e)) + '</span>');
             }
         }
+        // ---- 可插拔通知渠道（Webhook / Slack）：GET/POST /api/notifier-settings + POST /api/notifier-settings/test ----
+        // 地址与 secret 按密钥对待：服务端只回 *_configured + 脱敏 host，输入框留空 = 保留旧值。
+        const NTF_CHANNELS = [
+            {id: 'webhook', key: 'Webhook', name: 'Webhook', kind: '仅出站 · JSON POST',
+             note: '把事件以 JSON POST 到你的地址（字段：event / title / text / requirement / details）。'
+                 + '填写签名 secret 后附带 X-Loop-Timestamp 与 X-Loop-Signature（HMAC-SHA256）请求头，接收方可据此校验来源。',
+             urlPh: 'https://example.com/hooks/loop', secret: true},
+            {id: 'slack', key: 'Slack', name: 'Slack', kind: '仅出站 · Incoming Webhook',
+             note: '在 Slack 应用里开启 Incoming Webhooks，把频道的 webhook URL 填到这里；'
+                 + '消息带「在看板中打开」按钮，链接到对应需求卡。',
+             urlPh: 'https://hooks.slack.com/services/…', secret: false},
+        ];
+        function ntfChannelHtml(meta, c, events) {
+            const ch = c || {};
+            const k = meta.key;
+            const on = !!ch.enabled;
+            const err = ch.error ? String(ch.error) : '';
+            const stCls = err ? 'fs-off' : (on ? 'fs-ok' : 'fs-warn');
+            const stLabel = err ? '配置非法，已停用' : (on ? '已启用' : '未启用');
+            const st = '<div class="fs-status ' + stCls + '" id="ntf' + k + 'Status">'
+                + '<b>渠道状态：' + escapeHtml(stLabel) + '</b>'
+                + (err ? '<div>原因：' + escapeHtml(err) + '</div>' : '')
+                + '<div>地址：' + (ch.url_configured ? escapeHtml(String(ch.url_hint || '已配置')) : '未配置') + '</div>'
+                + '</div>';
+            const toolbar = '<div class="ms-top">'
+                + '<button type="button" class="btn btn-primary" data-ntf-save="' + meta.id + '">保存</button>'
+                + '<button type="button" class="btn" data-ntf-test="' + meta.id + '">发送测试</button>'
+                + '<div class="ms-error" id="ntf' + k + 'Error"></div></div>';
+            let fields = '<div class="ms-fields">'
+                + '<div class="ms-field ntf-wide"><label>Webhook URL</label>'
+                + '<input id="ntf' + k + 'Url" type="password" value="" autocomplete="off" spellcheck="false" placeholder="'
+                + escapeAttr(ch.url_configured ? '已配置（留空=保留）' : meta.urlPh) + '"></div>';
+            if (meta.secret) {
+                fields += '<div class="ms-field"><label>签名 secret（可选）</label>'
+                    + '<input id="ntf' + k + 'Secret" type="password" value="" autocomplete="off" placeholder="'
+                    + (ch.secret_configured ? '已配置（留空=保留）' : '未配置') + '"></div>';
+            }
+            fields += '<div class="ms-field"><label>超时（秒）</label>'
+                + '<input id="ntf' + k + 'Timeout" type="number" min="1" max="30" step="1" value="'
+                + escapeAttr(String(ch.timeout == null ? 5 : ch.timeout)) + '"></div>'
+                + '</div>';
+            let clears = '<div class="ntf-clears">'
+                + '<label class="ms-clear-wrap"><input type="checkbox" id="ntf' + k + 'ClearUrl"'
+                + (ch.url_configured ? '' : ' disabled') + '>清除已配置地址</label>';
+            if (meta.secret) {
+                clears += '<label class="ms-clear-wrap"><input type="checkbox" id="ntf' + k + 'ClearSecret"'
+                    + (ch.secret_configured ? '' : ' disabled') + '>清除已配置 secret</label>';
+            }
+            clears += '</div>';
+            const sub = Array.isArray(ch.events) ? ch.events : [];
+            const evs = '<div class="ntf-events-title">推送事件</div><div class="ntf-events">'
+                + (events || []).map(e => '<label class="ms-clear-wrap"><input type="checkbox" data-ntf-event="'
+                    + meta.id + '" value="' + escapeAttr(String(e.id)) + '"'
+                    + (sub.indexOf(e.id) >= 0 ? ' checked' : '') + '>' + escapeHtml(String(e.label)) + '</label>').join('')
+                + '</div>';
+            return '<section class="sd-group ntf-channel" id="ntf' + k + '">'
+                + '<div class="ntf-head"><h3>' + escapeHtml(meta.name) + '</h3>'
+                + '<span class="ntf-kind">' + escapeHtml(meta.kind) + '</span>'
+                + '<label class="ntf-enable"><span>启用</span><input type="checkbox" id="ntf' + k + 'Enabled"'
+                + (ch.configured_enabled ? ' checked' : '') + '></label></div>'
+                + '<div class="sd-note">' + escapeHtml(meta.note) + '</div>'
+                + st + toolbar + fields + clears + evs
+                + '<div class="sd-note ntf-result" id="ntf' + k + 'Result"></div>'
+                + '</section>';
+        }
+        function notifierSettingsHtml(d) {
+            const data = d || {};
+            const warns = (data.warnings && data.warnings.length)
+                ? '<div class="sd-warn">' + data.warnings.map(w => escapeHtml(String(w))).join('<br>') + '</div>' : '';
+            const chans = data.channels || {};
+            const general = '<section class="sd-group ntf-channel" id="ntfGeneral">'
+                + '<div class="ntf-head"><h3>看板地址</h3><span class="ntf-kind">通知里的卡片链接</span></div>'
+                + '<div class="sd-note">Webhook / Slack 渠道配置保存在 <code>' + escapeHtml(String(data.path || '')) + '</code>'
+                + '（0600，不进 git）；调度器检测到文件变化自动重载，<b>保存即生效</b>、无需重启。'
+                + '通知里的卡片链接以下面的看板地址为前缀，留空 = 默认 <code>'
+                + escapeHtml(String(data.board_url_default || '')) + '</code></div>'
+                + warns
+                + '<div class="ms-fields"><div class="ms-field ntf-wide"><label>看板地址</label>'
+                + '<input id="ntfBoardUrl" value="' + escapeAttr(String(data.board_url || '')) + '" placeholder="'
+                + escapeAttr(String(data.board_url_default || '')) + '" autocomplete="off" spellcheck="false"></div></div>'
+                + '<div class="ms-top"><button type="button" class="btn" data-ntf-save="general">保存看板地址</button>'
+                + '<div class="ms-error" id="ntfGeneralError"></div></div>'
+                + '</section>';
+            return NTF_CHANNELS.map(m => ntfChannelHtml(m, chans[m.id], data.events)).join('') + general;
+        }
+        async function loadNotifierSettings(force) {
+            const body = document.getElementById('settingsNotifierBody');
+            if (!body) return;
+            if (notifierSettingsLoaded && !force) return;
+            if (notifierSettingsLoading) return;
+            notifierSettingsLoading = true;
+            body.innerHTML = '<div class="sd-note">通知渠道加载中…</div>';
+            try {
+                const res = await fetch('/api/notifier-settings', {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                notifierSettingsLoaded = true;
+                body.innerHTML = notifierSettingsHtml(d);
+            } catch (e) {
+                notifierSettingsLoaded = false;
+                body.innerHTML = '<div class="sd-warn">通知渠道加载失败：' + escapeHtml(String((e && e.message) || e)) + '</div>'
+                    + '<button type="button" class="btn" id="ntfRetryBtn">重试</button>';
+            } finally {
+                notifierSettingsLoading = false;
+            }
+        }
+        function ntfMeta(id) { return NTF_CHANNELS.find(m => m.id === id) || null; }
+        function ntfVal(id) {
+            const el = document.getElementById(id);
+            return el ? String(el.value == null ? '' : el.value).trim() : '';
+        }
+        function ntfChecked(id) {
+            const el = document.getElementById(id);
+            return !!(el && el.checked);
+        }
+        function ntfSetText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text || '';
+        }
+        async function saveNotifierChannel(id, btn) {
+            let bodyReq;
+            let errId;
+            if (id === 'general') {
+                errId = 'ntfGeneralError';
+                bodyReq = {channel: 'general', board_url: ntfVal('ntfBoardUrl')};
+            } else {
+                const m = ntfMeta(id);
+                if (!m) return;
+                const k = m.key;
+                errId = 'ntf' + k + 'Error';
+                bodyReq = {channel: id, enabled: ntfChecked('ntf' + k + 'Enabled')};
+                const url = ntfVal('ntf' + k + 'Url');
+                if (url) bodyReq.url = url;
+                if (ntfChecked('ntf' + k + 'ClearUrl')) bodyReq.clear_url = true;
+                if (m.secret) {
+                    const sec = ntfVal('ntf' + k + 'Secret');
+                    if (sec) bodyReq.secret = sec;
+                    if (ntfChecked('ntf' + k + 'ClearSecret')) bodyReq.clear_secret = true;
+                }
+                const tmo = Number(ntfVal('ntf' + k + 'Timeout'));
+                if (tmo) bodyReq.timeout = tmo;
+                bodyReq.events = Array.from(document.querySelectorAll('input[data-ntf-event="' + id + '"]'))
+                    .filter(x => x.checked).map(x => x.value);
+            }
+            ntfSetText(errId, '');
+            const label = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+            try {
+                const res = await fetch('/api/notifier-settings', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(bodyReq),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) { ntfSetText(errId, d.error || ('保存失败（HTTP ' + res.status + '）')); return; }
+                showToast(d.changed ? '已保存（调度器自动重载，无需重启）' : '没有改动');
+                await loadNotifierSettings(true);
+            } catch (e) {
+                ntfSetText(errId, '保存失败：' + ((e && e.message) || e));
+            } finally {
+                if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = label; }
+            }
+        }
+        async function testNotifierChannel(id) {
+            const m = ntfMeta(id);
+            if (!m) return;
+            const k = m.key;
+            const out = document.getElementById('ntf' + k + 'Result');
+            ntfSetText('ntf' + k + 'Error', '');
+            if (out) out.textContent = '测试中…';
+            const bodyReq = {channel: id};
+            const url = ntfVal('ntf' + k + 'Url');
+            if (url) bodyReq.url = url;
+            if (m.secret) {
+                const sec = ntfVal('ntf' + k + 'Secret');
+                if (sec) bodyReq.secret = sec;
+            }
+            try {
+                const res = await fetch('/api/notifier-settings/test', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(bodyReq),
+                });
+                const d = await res.json().catch(() => ({}));
+                const ok = !!(res.ok && d.ok);
+                const msg = String(d.msg || d.error || ('HTTP ' + res.status));
+                if (out) {
+                    out.innerHTML = '<span class="' + (ok ? 'sd-note' : 'sd-warn') + '">'
+                        + escapeHtml(ok ? '测试消息已发送' : '测试失败') + '：' + escapeHtml(msg) + '</span>';
+                }
+            } catch (e) {
+                if (out) out.innerHTML = '<span class="sd-warn">测试失败：' + escapeHtml(String((e && e.message) || e)) + '</span>';
+            }
+        }
         document.getElementById('settingsFeishuBody').addEventListener('click', (e) => {
             const t = e.target && e.target.closest ? e.target.closest('button') : null;
             if (!t) return;
@@ -3786,6 +3991,9 @@ void main() {
             if (t.id === 'fsTestBtn') { testFeishuSettings(); return; }
             if (t.id === 'fsRestartBtn') { restartFeishuDispatcher(); return; }
             if (t.id === 'fsRetryBtn') { loadFeishuSettings(true); return; }
+            if (t.id === 'ntfRetryBtn') { loadNotifierSettings(true); return; }
+            if (t.dataset && t.dataset.ntfSave) { saveNotifierChannel(t.dataset.ntfSave, t); return; }
+            if (t.dataset && t.dataset.ntfTest) { testNotifierChannel(t.dataset.ntfTest); return; }
         });
         document.getElementById('settingsGearBtn').addEventListener('click', openSettingsDrawer);
         document.getElementById('sdTabGlobal').addEventListener('click', () => switchSettingsTab('global'));

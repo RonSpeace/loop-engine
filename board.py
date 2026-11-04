@@ -29,6 +29,7 @@ import time
 import urllib.parse
 import urllib.request
 from storage_time import parse_storage_time
+import notifiers as _notifiers
 from pathlib import Path
 
 from flask import Flask, render_template, request
@@ -176,12 +177,16 @@ _SESSION_DIR_MISS_TTL = 60.0        # 未命中负缓存：目录被清理/新�
 # 可用 REQ_BOARD_MATERIALS 覆盖，测试实例隔离用）。原文件保留、不自动清理（方案 D3）。
 MATERIALS_ROOT = Path(os.environ.get('REQ_BOARD_MATERIALS') or Path.home() / ".req-board" / "materials")
 # #22 飞书凭据单一源 = 仓库根 feishu.json（0600，gitignore）；REQ_BOARD_FEISHU_JSON 供测试隔离
-# （board/dispatcher 同名）。设置抽屉「飞书机器人」tab 读写该文件；密钥永不回显、不进日志。
+# （board/dispatcher 同名）。设置抽屉「通知渠道」tab 的「飞书机器人」小节读写该文件；密钥永不回显、不进日志。
 # 覆盖值同样 expanduser()，与 dispatcher 口径一致（dispatcher.py 用 Path(os.environ[...]).expanduser()）——
 # 否则 `~/x/feishu.json` 看板写相对路径、调度器读家目录，保存成功但长连接仍用旧文件。
 _ENV_FEISHU_JSON = os.environ.get('REQ_BOARD_FEISHU_JSON')
 FEISHU_JSON_PATH = (Path(_ENV_FEISHU_JSON).expanduser() if _ENV_FEISHU_JSON
                     else (BASE_DIR / "feishu.json"))
+# 可插拔通知渠道配置（Webhook / Slack）：notifiers.json（0600，gitignore），路径口径与 dispatcher 同源
+# （notifiers.config_path：REQ_BOARD_NOTIFIERS_JSON 覆盖 → 跟随 feishu.json 所在目录 → 仓库根）。
+# 设置抽屉「通知渠道」tab 读写；Webhook secret 与 Slack webhook URL 永不回显。
+NOTIFIERS_JSON_PATH = _notifiers.config_path(BASE_DIR)
 # #22 飞书建卡会话素材（与 web 口径互不干扰，独立常量）：图片/文档白名单，单文件 20MB。
 # JSON+base64 传输 → body 上限按 4/3 膨胀 + 1MB 余量（authoritative 判定仍是逐文件解码后字节数）。
 FEISHU_MATERIAL_MAX_FILES = 5

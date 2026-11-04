@@ -53,9 +53,10 @@ class FeishuSettingsUiTest(unittest.TestCase):
 
     def test_14_third_tab_after_model(self):
         self.assertIn('id="sdTabFeishu"', self.src)
-        self.assertIn(">飞书机器人</button>", self.src)
+        self.assertIn(">通知渠道</button>", self.src)   # tab 更名：飞书机器人 → 通知渠道（飞书成为其中一个小节）
+        self.assertIn("<h3>飞书机器人</h3>", self.src)
         self.assertLess(self.src.index('id="sdTabModel"'), self.src.index('id="sdTabFeishu"'))
-        self.assertIn("全局设置（全局信息 / 模型设置 / 飞书机器人）", self.src)
+        self.assertIn("全局设置（全局信息 / 模型设置 / 通知渠道）", self.src)
 
     def test_15_three_branch_panes(self):
         self.assertIn('id="settingsFeishuBody" hidden', self.src)

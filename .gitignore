@@ -19,6 +19,9 @@ feishu.json.bak
 feishu.json.tmp
 # 飞书凭据的所有本地备份/迁移变体（如 feishu.json.bak-vision-*、*.pre-cc-connect-*.bak）
 feishu.json.*
+# 可插拔通知渠道配置（Webhook secret / Slack webhook URL，0600）及其备份
+notifiers.json
+notifiers.json.*
 # 本地备份/迁移残留
 *.bak
 .playwright-mcp/

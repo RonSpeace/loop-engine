@@ -779,7 +779,7 @@ class CapabilityTest(AssistantBase):
                 self.server.call(name, args)
             msg = str(cm.exception)
             self.assertIn("能力未开启", msg)
-            self.assertIn("设置 → 飞书", msg)
+            self.assertIn("设置 → 通知渠道", msg)
             # #31 回绝语给出可照着走到的具体位置：哪个页面 / 哪个 tab / 哪个分组
             self.assertIn("飞书机器人", msg)
             self.assertIn("看板助手能力", msg)
@@ -1143,7 +1143,7 @@ class ReqCardsTest(AssistantBase):
             self.server.call("send_requirement_cards", {"project": "req-board"})
         msg = str(cm.exception)
         self.assertIn("能力未开启", msg)
-        self.assertIn("设置 → 飞书", msg)
+        self.assertIn("设置 → 通知渠道", msg)
         self.assertIn("飞书机器人", msg)          # #31 具体位置：tab 名
         self.assertIn("看板助手能力", msg)         # #31 具体位置：分组名
         self.assertNotIn(b.ASSISTANT_CAP_REQ_CARDS, msg)
@@ -1565,7 +1565,7 @@ class PromptCapTest(unittest.TestCase):
 
     def test_prompt_has_new_caps_without_field_names(self):
         text = b.ASSISTANT_PROMPT_FILE.read_text(encoding="utf-8")
-        for must in ("代码只读分析", "状态变更", "需求卡清单", "设置 → 飞书", "飞书机器人",
+        for must in ("代码只读分析", "状态变更", "需求卡清单", "设置 → 通知渠道", "飞书机器人",
                      "看板助手能力", "暂缓 → 待开发", "行号",
                      # #54
                      "代码拉取与提交", "project_git_status", "project_git_pull",

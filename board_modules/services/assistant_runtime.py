@@ -35,8 +35,8 @@ ASSISTANT_CAP_REQ_CARDS = "assistant_req_cards"        # 能力三：需求卡�
 ASSISTANT_CAP_GIT_OPS = "assistant_git_ops"            # 能力四：代码拉取与提交（默认关）
 ASSISTANT_VISION_KEY = "assistant_vision"              # #52 图片通道档位（默认开，显式 false 才关）
 # #31 能力开关位置的统一描述：回绝语文案与工具 description 共用，保证「照着走」的路径一致
-# （页面 = 网页左下角齿轮按钮，tab = 飞书机器人，分组 = 看板助手能力）
-ASSISTANT_CAP_LOCATION = "网页左下角齿轮「设置 → 飞书机器人」标签页的「看板助手能力」分组"
+# （页面 = 网页左下角齿轮按钮，tab = 通知渠道，小节 = 飞书机器人，分组 = 看板助手能力）
+ASSISTANT_CAP_LOCATION = "网页左下角齿轮「设置 → 通知渠道」标签页「飞书机器人」小节的「看板助手能力」分组"
 ASSISTANT_FIND_DEFAULT_LIMIT = 200             # file_find 默认条数（上限 = DIR_MAX_ENTRIES）
 ASSISTANT_STATUS_WRITE_TARGETS = ("open",)     # 状态写首期唯一目标：待开发
 ASSISTANT_STATUS_WRITE_SOURCES = ("later",)    # 状态写首期唯一来源：暂缓

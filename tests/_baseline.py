@@ -53,9 +53,18 @@ def pin():
     if not repo_pj.exists() and not repo_pj.is_symlink():
         repo_pj.write_text(json.dumps({"req-board": str(REPO)}), encoding="utf-8")
 
+    # 1b) 通知渠道隔离：notifiers.json 钉到进程私有临时目录（不存在 = 无 Webhook/Slack 渠道），
+    #     防止本机真实配置让测试里的 notify / notify_req_card 往外发消息。须在 import 前设置。
+    import os
+    ntf_dir = Path(tempfile.mkdtemp(prefix="req-board-tests-ntf-"))
+    os.environ.setdefault("REQ_BOARD_NOTIFIERS_JSON", str(ntf_dir / "notifiers.json"))
+
     # 2) import 之后一律改钉进程私有 fixture：不读也不改本机 projects.json。
     import dispatcher as d
     import acp_shared as ac
+
+    d.NOTIFIERS.config_file = Path(os.environ["REQ_BOARD_NOTIFIERS_JSON"])
+    d.NOTIFIERS.reload(force=True)
 
     fixture = Path(tempfile.mkdtemp(prefix="req-board-tests-")) / "projects.json"
     fixture.write_text(json.dumps({"req-board": str(REPO)}), encoding="utf-8")

@@ -16,6 +16,7 @@
     "HEARTBEAT_FILE",
     "KIMI_CODE_MCP_JSON",
     "MATERIALS_ROOT",
+    "NOTIFIERS_JSON_PATH",
     "PROJECTS_FILE",
     "PROJECT_MYSQL",
     "PROJECT_PATHS",
@@ -56,5 +57,5 @@
     "session_homes",
     "subprocess"
   ],
-  "count": 55
+  "count": 56
 }

@@ -894,6 +894,24 @@
         .cap-state.on { color: var(--success); border-color: var(--cs-green-bd); background: var(--cs-green-bg); }
         .cap-state.off { color: var(--text-3); }
         .cap-desc { margin: 4px 0 0 40px; }
+        /* 通知渠道 tab：每渠道一张 .sd-group 卡片；标题行 = 名称 + 类型标注 + 右侧启用开关 */
+        .ntf-intro { margin: 12px 0 0; }
+        .ntf-head { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+        .ntf-head h3 { margin: 0; }
+        .ntf-kind { font-size: 11px; color: var(--text-3); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--glass-border); white-space: nowrap; }
+        .ntf-enable { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+        .ms-fields .ntf-wide { grid-column: 1 / -1; }
+        .ntf-clears { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+        .ntf-events-title { font-size: 11.5px; color: var(--text-2); margin: 14px 0 2px; }
+        .ntf-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 14px; }
+        .ntf-events .ms-clear-wrap { margin-top: 8px; color: var(--text-2); }
+        .ntf-result:empty { display: none; }
+        .ntf-result { margin: 10px 0 0; }
+        /* 飞书小节内沿用 #31 的「看板助手能力」分组：卡中卡降为分隔线小节，不再叠一层卡片 */
+        .ntf-channel .sd-group {
+            margin-top: 16px; padding: 14px 0 0; border: none; border-top: 1px solid var(--border);
+            border-radius: 0; background: none; box-shadow: none;
+        }
         .ms-alias-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; margin: 14px 0 6px; }
         .ms-alias-table th, .ms-alias-table td {
             border-bottom: 1px solid var(--border); padding: 7px 8px; text-align: left; overflow-wrap: anywhere; vertical-align: middle;

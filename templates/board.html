@@ -42,7 +42,7 @@
                 </div>
                 <div class="nav-items" id="navList"></div>
                 <div class="nav-foot">
-                    <button type="button" class="nav-gear" id="settingsGearBtn" title="全局设置（全局信息 / 模型设置 / 飞书机器人）" aria-label="全局设置">
+                    <button type="button" class="nav-gear" id="settingsGearBtn" title="全局设置（全局信息 / 模型设置 / 通知渠道）" aria-label="全局设置">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                         <span class="nav-gear-text">设置</span>
                     </button>
@@ -190,7 +190,7 @@
 
     <div class="toast" id="toast"></div>
 
-    <!-- #3 全局设置抽屉（只读四分组 + #6/#22 三 tab「全局信息 / 模型设置 / 飞书机器人」；内容懒加载） -->
+    <!-- #3 全局设置抽屉（只读四分组 + #6/#22 三 tab「全局信息 / 模型设置 / 通知渠道」；内容懒加载） -->
     <div class="drawer-mask" id="settingsMask"></div>
     <div class="settings-drawer" id="settingsDrawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" inert>
         <div class="sd-head">
@@ -203,11 +203,19 @@
         <div class="sd-tabs" role="tablist">
             <button type="button" class="sd-tab on" id="sdTabGlobal" role="tab" aria-selected="true">全局信息</button>
             <button type="button" class="sd-tab" id="sdTabModel" role="tab" aria-selected="false">模型设置</button>
-            <button type="button" class="sd-tab" id="sdTabFeishu" role="tab" aria-selected="false">飞书机器人</button>
+            <button type="button" class="sd-tab" id="sdTabFeishu" role="tab" aria-selected="false">通知渠道</button>
         </div>
         <div class="sd-body" id="settingsBody"></div>
         <div class="sd-body" id="settingsModelBody" hidden></div>
-        <div class="sd-body" id="settingsFeishuBody" hidden></div>
+        <!-- 通知渠道 tab：飞书（feishu.json，双向，表单沿用 #22）+ Webhook / Slack（notifiers.json，仅出站） -->
+        <div class="sd-body" id="settingsFeishuBody" hidden>
+            <p class="sd-note ntf-intro">调度器把关键事件（需要确认、开发完成、失败、阻塞、合并冲突等）推送到下列已启用渠道。飞书额外支持 y/n 回复裁决；Webhook 与 Slack 只发不收，答复请回到看板。</p>
+            <section class="sd-group ntf-channel" id="ntfFeishu">
+                <div class="ntf-head"><h3>飞书机器人</h3><span class="ntf-kind">双向 · feishu.json</span></div>
+                <div id="settingsFeishuForm"></div>
+            </section>
+            <div id="settingsNotifierBody"></div>
+        </div>
     </div>
 
     <!-- #4 模型调参抽屉（右侧滑出：角色×模型主表 + 角色×模型统计；打开时懒加载 GET models / model-stats） -->

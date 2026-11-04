@@ -1,4 +1,4 @@
-"""settings 蓝图：设置抽屉、模型设置与飞书设置。
+"""settings 蓝图：设置抽屉、模型设置、飞书设置与可插拔通知渠道（Webhook / Slack）。
 
 #32 Phase 6（卡 #39）由 board.py 原样迁入：@app.route 改为本蓝图 bp.route，留驻 board.py 的名字经 board_modules.runtime.resolve 晚绑定。
 """
@@ -13,6 +13,9 @@ import os
 import re
 import threading
 import urllib.parse
+
+
+import notifiers
 
 
 from flask import Blueprint, jsonify, request
@@ -440,7 +443,7 @@ def api_feishu_settings_test():
     app_secret = app_secret.strip() if isinstance(app_secret, str) and app_secret.strip() else stored_secret
     if not app_id or not app_secret:
         return jsonify({"ok": False, "code": None,
-                        "msg": "未配置 app_id 或 app_secret（请先在「飞书机器人」tab 保存凭据）"})
+                        "msg": "未配置 app_id 或 app_secret（请先在「通知渠道」tab 的「飞书机器人」小节保存凭据）"})
     payload = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode("utf-8")
     req = urllib.request.Request(resolve("FEISHU_TENANT_TOKEN_URL"), data=payload, method="POST",
                                  headers={"Content-Type": "application/json"})
@@ -459,3 +462,232 @@ def api_feishu_settings_test():
     if code == 0:
         return jsonify({"ok": True, "code": 0, "msg": "ok", "expire": d.get("expire")})
     return jsonify({"ok": False, "code": code, "msg": str(d.get("msg") or "")})
+
+
+# ==================== 可插拔通知渠道（notifiers.json：Webhook / Slack） ====================
+# 飞书仍走上方 /api/feishu-settings（feishu.json，向后兼容）；本组端点只管配置驱动的出站渠道。
+# 密钥口径：Webhook secret 与 Slack webhook URL（URL 即凭据）永不回显，只回 *_configured + 脱敏 host；
+# Webhook URL 同样只回脱敏 host（查询串/路径里常带令牌）。调度器按文件 mtime 自动重载，保存即生效。
+NOTIFIER_TEST_TIMEOUT = 10.0
+_NOTIFIER_URL_KEY = {"webhook": "url", "slack": "webhook_url"}
+_NOTIFIER_LOCK = threading.Lock()
+
+
+def _notifier_board_url_default():
+    return f"http://127.0.0.1:{os.environ.get('REQ_BOARD_PORT') or '8899'}"
+
+
+def _notifier_json_load():
+    """→ (raw_dict|None, error|None)。缺失 = ({}, None)；损坏 = (None, 固定文案)（不回显异常原文）。"""
+    raw, err = notifiers.read_config(resolve("NOTIFIERS_JSON_PATH"))
+    if err:
+        return None, err
+    if raw is None:
+        return {}, None
+    if not isinstance(raw, dict):
+        return None, "notifiers.json 结构不符（顶层非对象），请检查文件格式"
+    return raw, None
+
+
+def _notifier_channel_view(ctype, craw, error):
+    """单渠道 GET 视图（不含任何密钥原文/完整 URL）。"""
+    craw = craw if isinstance(craw, dict) else {}
+    url = craw.get(_NOTIFIER_URL_KEY[ctype])
+    url = url if isinstance(url, str) else ""
+    events = craw.get("events")
+    events = ([e for e in events if isinstance(e, str)] if isinstance(events, list)
+              else list(notifiers.EVENT_KINDS))
+    timeout = craw.get("timeout")
+    view = {"enabled": craw.get("enabled") is True and not error,
+            "configured_enabled": craw.get("enabled") is True,
+            "url_configured": bool(url), "url_hint": notifiers.mask_url(url),
+            "timeout": (timeout if isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
+                        else notifiers.DEFAULT_TIMEOUT),
+            "events": events, "error": error}
+    if ctype == "webhook":
+        sec = craw.get("secret")
+        view["secret_configured"] = bool(isinstance(sec, str) and sec)
+    return view
+
+
+@bp.route('/api/notifier-settings', methods=['GET'])
+def api_notifier_settings_get():
+    """通知渠道读取：200 {path, board_url, board_url_default, warnings, events, channels:{webhook, slack}}。
+    文件缺失 = 空态；文件损坏 = 200 + warnings（渠道全部按停用展示），**永不回密钥原文与完整 URL**。"""
+    raw, err = resolve("_notifier_json_load")()
+    warnings = [err] if err else []
+    parsed = notifiers.parse_config(raw) if raw is not None else {"errors": {}, "board_url": None}
+    errors = parsed["errors"]
+    for k in ("_", "board_url"):
+        if k in errors:
+            warnings.append(errors[k])
+    raw = raw or {}
+    chans = raw.get("channels") if isinstance(raw.get("channels"), dict) else {}
+    top_err = err or errors.get("_")
+    channels = {c: _notifier_channel_view(c, chans.get(c), top_err or errors.get(c))
+                for c in notifiers.CHANNEL_TYPES}
+    bu = raw.get("board_url")
+    return jsonify({"path": str(resolve("NOTIFIERS_JSON_PATH")),
+                    "board_url": bu if isinstance(bu, str) else "",
+                    "board_url_default": _notifier_board_url_default(),
+                    "warnings": warnings,
+                    "events": [{"id": e, "label": notifiers.EVENT_LABELS[e]}
+                               for e in notifiers.UI_EVENT_KINDS],
+                    "channels": channels})
+
+
+def _notifier_str(body, key, limit=2048):
+    """可选字符串字段：缺省 → (None, None)；非字符串/控制字符/超长 → (None, 原因)；否则 strip 后返回。"""
+    v = body.get(key)
+    if v is None:
+        return None, None
+    if not isinstance(v, str):
+        return None, f"{key} 必须为字符串"
+    v = v.strip()
+    if any(ord(ch) < 32 for ch in v):
+        return None, f"{key} 含非法控制字符"
+    if len(v) > limit:
+        return None, f"{key} 超长"
+    return v, None
+
+
+def _notifier_merge_channel(ctype, cur, body):
+    """把请求体合并进单渠道旧配置（就地改 cur）→ 错误文案|None。缺省/空串 = 保留旧值。"""
+    url_key = _NOTIFIER_URL_KEY[ctype]
+    for flag in ("enabled", "clear_url", "clear_secret"):
+        if flag in body and not isinstance(body[flag], bool):
+            return f"{flag} 必须为布尔值"
+    url_in, why = _notifier_str(body, "url")
+    if why:
+        return why
+    if url_in and body.get("clear_url"):
+        return "不能同时填写新地址与勾选清除地址"
+    if url_in:
+        if not notifiers.valid_http_url(url_in, https_only=(ctype == "slack")):
+            return ("Slack webhook URL 必须为 https 地址" if ctype == "slack"
+                    else "Webhook URL 必须为 http(s) 地址")
+        cur[url_key] = url_in
+    elif body.get("clear_url"):
+        cur.pop(url_key, None)
+    if ctype == "webhook":
+        sec_in, why = _notifier_str(body, "secret", limit=512)
+        if why:
+            return why
+        if sec_in and body.get("clear_secret"):
+            return "不能同时填写新 secret 与勾选清除 secret"
+        if sec_in:
+            cur["secret"] = sec_in
+        elif body.get("clear_secret"):
+            cur.pop("secret", None)
+    for k in ("enabled", "timeout", "events"):
+        if k in body:
+            cur[k] = body[k]
+    return None
+
+
+@bp.route('/api/notifier-settings', methods=['POST'])
+def api_notifier_settings_post():
+    """通知渠道保存（按渠道逐个保存）：body {channel: "webhook"|"slack", enabled?, url?, clear_url?,
+    secret?, clear_secret?（仅 webhook）, timeout?, events?} 或 {channel: "general", board_url}。
+    先全校验后落盘（零写入）：未知字段/形态非法/启用但缺地址/文件损坏一律 400、文件字节不变；
+    url/secret 缺省或空串 = 保留旧值。原子写 tmp→.bak→os.replace + chmod 0600；保留未知字段。
+    成功 200 {ok, changed, path}；调度器按文件变化自动重载，**保存即生效、无需重启**。"""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "请求体需为 JSON 对象"}), 400
+    ctype = body.get("channel")
+    if ctype not in notifiers.CHANNEL_TYPES and ctype != "general":
+        return jsonify({"error": "channel 必须为 webhook / slack / general"}), 400
+    if ctype == "general":
+        allowed = {"channel", "board_url"}
+    else:
+        allowed = {"channel", "enabled", "url", "clear_url", "timeout", "events"}
+        if ctype == "webhook":
+            allowed |= {"secret", "clear_secret"}
+    unknown = set(body) - allowed
+    if unknown:
+        return jsonify({"error": f"未知字段: {', '.join(sorted(unknown))}"}), 400
+    with _NOTIFIER_LOCK:
+        raw, err = resolve("_notifier_json_load")()
+        if err:
+            return jsonify({"error": f"{err}；请先手工修复或删除该文件后再保存"}), 400
+        out = dict(raw)
+        if ctype == "general":
+            bu, why = _notifier_str(body, "board_url")
+            if why:
+                return jsonify({"error": why}), 400
+            if bu:
+                if not notifiers.valid_http_url(bu):
+                    return jsonify({"error": "board_url 必须为 http(s) 地址"}), 400
+                out["board_url"] = bu.rstrip("/")
+            else:
+                out.pop("board_url", None)
+        else:
+            chans = out.get("channels", {})
+            if not isinstance(chans, dict):
+                return jsonify({"error": "notifiers.json 的 channels 不是对象，请先手工修复"}), 400
+            cur = dict(chans[ctype]) if isinstance(chans.get(ctype), dict) else {}
+            why = _notifier_merge_channel(ctype, cur, body)
+            if not why:
+                _spec, why = notifiers.parse_channel(ctype, cur)
+            if why:
+                return jsonify({"error": why}), 400
+            chans = dict(chans)
+            chans[ctype] = cur
+            out["channels"] = chans
+        path = resolve("NOTIFIERS_JSON_PATH")
+        new_text = json.dumps(out, ensure_ascii=False, indent=2) + "\n"
+        try:
+            orig = path.read_bytes()
+        except OSError:
+            orig = None
+        if orig is not None and orig == new_text.encode("utf-8"):
+            return jsonify({"ok": True, "changed": False, "path": str(path)})
+        werr = _harness_cfg_write_atomic(path, orig or b"", new_text, 0o600)
+        if werr:
+            return jsonify({"error": werr}), 500
+        return jsonify({"ok": True, "changed": True, "path": str(path)})
+
+
+def _notifier_test_send(ctype, spec, event):
+    """测试发送执行体（可测性钩子：测试可 monkeypatch 本函数或 notifiers.webhook.post_json）。"""
+    spec = dict(spec, enabled=True)
+    n = notifiers.build_channels({"channels": {ctype: spec}}, "")[ctype]
+    n.timeout = min(float(n.timeout or notifiers.DEFAULT_TIMEOUT), NOTIFIER_TEST_TIMEOUT)
+    return n.deliver(event)
+
+
+@bp.route('/api/notifier-settings/test', methods=['POST'])
+def api_notifier_settings_test():
+    """通知渠道发送测试：body {channel, url?, secret?}（缺省用已存值；不要求已启用）→ 同步发一条测试消息
+    （超时上限 10s）→ 200 {ok, msg}；网络/HTTP 失败 ok=false 不 500；msg **不含 URL 与密钥**。"""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        body = {}
+    ctype = body.get("channel")
+    if ctype not in notifiers.CHANNEL_TYPES:
+        return jsonify({"error": "channel 必须为 webhook / slack"}), 400
+    raw, err = resolve("_notifier_json_load")()
+    if err:
+        return jsonify({"ok": False, "msg": err})
+    chans = raw.get("channels") if isinstance(raw.get("channels"), dict) else {}
+    cur = dict(chans[ctype]) if isinstance(chans.get(ctype), dict) else {}
+    url_key = _NOTIFIER_URL_KEY[ctype]
+    probe = {k: body[k] for k in ("url", "secret") if k in body and (ctype == "webhook" or k == "url")}
+    why = _notifier_merge_channel(ctype, cur, probe)
+    if why:
+        return jsonify({"ok": False, "msg": why})
+    if not cur.get(url_key):
+        return jsonify({"ok": False, "msg": "未配置地址（请先填写地址）"})
+    spec, why = notifiers.parse_channel(ctype, dict(cur, enabled=True))
+    if why:
+        return jsonify({"ok": False, "msg": why})
+    label = {"webhook": "Webhook", "slack": "Slack"}[ctype]
+    text = f"这是一条来自需求看板的测试通知（渠道：{label}）。收到即表示配置可用。"
+    event = notifiers.NotifyEvent(kind="test", title="Loop Engine 测试通知", text=text,
+                                  raw={"text": text})
+    try:
+        ok, info = resolve("_notifier_test_send")(ctype, spec, event)
+    except Exception as e:  # noqa: BLE001 - 测试失败不 500，异常只报类型（不泄 URL/密钥）
+        return jsonify({"ok": False, "msg": f"发送异常：{type(e).__name__}"})
+    return jsonify({"ok": bool(ok), "msg": str(info or "")})

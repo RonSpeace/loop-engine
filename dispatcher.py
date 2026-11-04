@@ -38,6 +38,8 @@ import threading
 import time
 import urllib.request
 from storage_time import parse_storage_time, format_storage_time
+import notifiers
+from notifiers.feishu import FeishuNotifier
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -3588,15 +3590,30 @@ CARD_BODY_LIMIT = 500    # 卡片正文动态内容（问题/摘要/失败原因
 ASSISTANT_CARD_MAX_ITEMS = 20    # 单页最多渲染的需求卡区块数
 
 # 七类关键状态通知事件映射：template 颜色 + 事件标题（#115/#385）
+# 事件标题单一源 = notifiers.EVENT_LABELS（飞书卡片、Webhook/Slack、设置页订阅项同源）
 CARD_EVENTS = {
-    "route": {"template": "blue", "title": "通道待确认"},
-    "review": {"template": "orange", "title": "阶段待评审"},
-    "need_confirm": {"template": "orange", "title": "需要确认"},
-    "done": {"template": "green", "title": "开发完成"},
-    "failed": {"template": "red", "title": "自动开发失败"},
-    "blocked": {"template": "orange", "title": "需求阻塞"},
-    "merge_conflict": {"template": "red", "title": "自动合并冲突"},
+    "route": {"template": "blue", "title": notifiers.EVENT_LABELS["route"]},
+    "review": {"template": "orange", "title": notifiers.EVENT_LABELS["review"]},
+    "need_confirm": {"template": "orange", "title": notifiers.EVENT_LABELS["need_confirm"]},
+    "done": {"template": "green", "title": notifiers.EVENT_LABELS["done"]},
+    "failed": {"template": "red", "title": notifiers.EVENT_LABELS["failed"]},
+    "blocked": {"template": "orange", "title": notifiers.EVENT_LABELS["blocked"]},
+    "merge_conflict": {"template": "red", "title": notifiers.EVENT_LABELS["merge_conflict"]},
 }
+
+# ==================== 可插拔通知渠道（notifiers/） ====================
+# 注册表单例：飞书为同步渠道（启动即注册，未启用时其发送函数自行只记日志）；Webhook/Slack 由
+# notifiers.json（与 feishu.json 同目录，REQ_BOARD_NOTIFIERS_JSON 可覆盖）驱动，文件变化自动重载、
+# 后台线程发送、配置非法只停用该渠道（fail-closed，不崩调度器）。
+NOTIFIERS_CONFIG_FILE = notifiers.config_path(REPO_DIR)
+NOTIFIERS = notifiers.NotifierRegistry(
+    config_file=NOTIFIERS_CONFIG_FILE,
+    board_url=BOARD_ROOT_API.rsplit("/api", 1)[0] if "/api" in BOARD_ROOT_API else BOARD_ROOT_API,
+    logger=log)
+NOTIFIERS.register(FeishuNotifier(
+    send_text=lambda text: _feishu_notify_text(text),
+    send_card=lambda event, req, **kw: _feishu_notify_req_card(event, req, **kw)))
+
 
 def _send_feishu(msg_type, content_obj, chat_id=None):
     """底层通用发送出口（text/interactive 共用）：chat_id 缺省仍取 state["chat_id"]（y/n 通道逐字不变）；
@@ -3624,12 +3641,19 @@ def _send_feishu(msg_type, content_obj, chat_id=None):
     return True
 
 def notify(text, chat_id=None):
-    """给用户发飞书文本消息（回执类）；chat_id 缺省取 state["chat_id"]（y/n 通道不变）。
-    未建立会话/未启用飞书时只记日志。内部收敛至 _send_feishu"""
+    """给用户发文本消息（回执类）；chat_id 缺省取 state["chat_id"]（y/n 通道不变）。
+    未建立会话/未启用飞书时只记日志。内部收敛至 _send_feishu。
+    显式 chat_id = 飞书会话内回复，只回飞书；缺省 = 经通知注册表扇出：飞书逐字照旧同步发送，
+    Webhook/Slack 等配置渠道进后台队列（飞书入站处理期间的回执只回飞书，见 on_message）。"""
     if chat_id:
         _send_feishu("text", {"text": text}, chat_id)
     else:
-        _send_feishu("text", {"text": text})
+        NOTIFIERS.send_text(text)
+
+
+def _feishu_notify_text(text):
+    """飞书渠道的文本出口（注册表回调）：与接入注册表前的 notify 缺省分支逐字一致。"""
+    _send_feishu("text", {"text": text})
 
 def _feishu_notify(chat_id, text):
     """飞书建卡按会话回发（显式 chat_id）；测试可 mock notify 统一捕获。"""
@@ -3972,7 +3996,22 @@ def fallback_text(event, req, **kw):
             f"请解决后回复 y {rid} 重试，或 n {rid} 人工接管。")
 
 def notify_req_card(event, req, **kw):
-    """语义化需求卡片通知（七类关键状态）：构造卡片 → _send_feishu("interactive")；
+    """语义化需求卡片通知（七类关键状态）：经通知注册表扇出——飞书走 _feishu_notify_req_card
+    （逐字照旧），Webhook/Slack 等配置渠道收到同一事件的结构化版本（后台发送，不阻塞）。"""
+    NOTIFIERS.send_event(event, req, title=CARD_EVENTS[event]["title"],
+                         details=_notifier_details(kw), raw={"req": req, "kw": kw})
+
+
+def _notifier_details(kw):
+    """配置渠道的事件细节：阶段 id → 显示名（flows.json 派生），其余原样（注册表再做 JSON 安全化）。"""
+    out = dict(kw)
+    if out.get("phase"):
+        out["phase"] = _phase_name(out["phase"])
+    return out
+
+
+def _feishu_notify_req_card(event, req, **kw):
+    """飞书需求卡片（注册表回调）：构造卡片 → _send_feishu("interactive")；
     成功不重复发送；已连接但发送失败 → 降级 notify(fallback_text)（底层已 log.error）；
     未连接仅记日志不降级（沿用现有行为）"""
     card = build_req_card(event, req, **kw)
@@ -3980,7 +4019,9 @@ def notify_req_card(event, req, **kw):
         return
     if not feishu or not state.get("chat_id"):
         return
-    notify(fallback_text(event, req, **kw))
+    # 降级文本只补发飞书：配置渠道已收到同一事件的结构化版本，不再重复扇出
+    with NOTIFIERS.inbound_scope():
+        notify(fallback_text(event, req, **kw))
 
 def _feishu_send_assistant_card(chat_id, content):
     """#30 发送一页需求卡清单：解析页 spec → 构造卡片 → **显式 chat_id** 直发；
@@ -4154,6 +4195,13 @@ def _feishu_text_and_handles(msg):
 
 
 def on_message(data: "P2ImMessageReceiveV1"):
+    """飞书入站消息入口：处理期间的缺省 notify 回执（y/n 结果、问候等）只回飞书，
+    不扇出到 Webhook/Slack（那是对飞书对话的应答，不是状态事件）。"""
+    with NOTIFIERS.inbound_scope():
+        return _on_message(data)
+
+
+def _on_message(data: "P2ImMessageReceiveV1"):
     msg = data.event.message
     mtype = getattr(msg, "message_type", "") or ""
     chat_type = getattr(msg, "chat_type", None)
