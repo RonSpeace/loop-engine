@@ -35,23 +35,33 @@ TESTS = REPO / "tests"
 FIXTURE = TESTS / "fixtures" / "board_patch_names.json"
 
 # board 模块在测试里的别名根：`import board as b` / `import board`；`self.b` / `cls.b` 亦识别。
+# scripts/dispatcher_patch_names.py 经 configure() 换成 dispatcher 的别名与 fixture，扫描逻辑共用。
 _ALIAS_ROOTS = ("b", "board")
 _SELF_ROOTS = ("self", "cls")
+_MODULE = "board"
+_PATTERNS: tuple = ()
 
-_ALIAS_RE = r"(?:(?:self|cls)\.)?(?:b|board)"
 
-_PATTERNS = (
-    re.compile(r"patch\.object\(\s*" + _ALIAS_RE + r"\s*,\s*['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]"),
-    re.compile(r"patch\(\s*['\"]board\.([A-Za-z_][A-Za-z_0-9]*)"),
-    re.compile(r"setattr\(\s*" + _ALIAS_RE + r"\s*,\s*['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]"),
-)
+def configure(module: str, aliases: tuple[str, ...], fixture: Path) -> None:
+    """设置被扫描的模块名、测试里的别名根和 fixture 路径（默认 board）。"""
+    global _MODULE, _ALIAS_ROOTS, _PATTERNS, FIXTURE
+    _MODULE, _ALIAS_ROOTS, FIXTURE = module, tuple(aliases), fixture
+    alias_re = r"(?:(?:self|cls)\.)?(?:" + "|".join(map(re.escape, _ALIAS_ROOTS)) + ")"
+    _PATTERNS = (
+        re.compile(r"patch\.object\(\s*" + alias_re + r"\s*,\s*['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]"),
+        re.compile(r"patch\(\s*['\"]" + re.escape(module) + r"\.([A-Za-z_][A-Za-z_0-9]*)"),
+        re.compile(r"setattr\(\s*" + alias_re + r"\s*,\s*['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]"),
+    )
+
+
+configure("board", ("b", "board"), FIXTURE)
 
 
 def _is_alias(node: ast.AST) -> bool:
     """节点本身是否是 board 模块的别名引用（`b`/`board` 或 `self.b`/`cls.b`）。"""
     if isinstance(node, ast.Name):
         return node.id in _ALIAS_ROOTS
-    if isinstance(node, ast.Attribute) and node.attr == "b":
+    if isinstance(node, ast.Attribute) and node.attr == _ALIAS_ROOTS[0]:
         return (isinstance(node.value, ast.Name) and node.value.id in _SELF_ROOTS)
     return False
 
@@ -154,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         existing = json.loads(FIXTURE.read_text(encoding="utf-8"))
         if existing.get("names") != names:
-            print("board_patch_names.json 与实测不一致", file=sys.stderr)
+            print(f"{FIXTURE.name} 与实测不一致", file=sys.stderr)
             return 1
         print(f"OK: {len(names)} 个名字与 fixture 一致")
         return 0
