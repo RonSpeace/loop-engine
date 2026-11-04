@@ -42,7 +42,7 @@ trap 'trap - INT TERM EXIT; kill 0 2>/dev/null; exit 0' INT TERM EXIT
 PIDS=()
 NAMES=()   # 与 PIDS 平行：退出时点名是哪个子进程死了
 if [ "$MODE" = "all" ] || [ "$MODE" = "board" ]; then
-    echo "[run_local] 启动看板 http://127.0.0.1:${REQ_BOARD_PORT:-8899} ..."
+    echo "[run_local] 启动看板 http://${REQ_BOARD_HOST:-127.0.0.1}:${REQ_BOARD_PORT:-8899} ..."
     "$PY" board.py &
     PIDS+=($!)
     NAMES+=("看板 board.py")

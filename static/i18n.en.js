@@ -414,6 +414,7 @@ window.LOOP_I18N_EN = {
   "当前已开启": "On",
   "当前已开启（默认开启）": "On (default on)",
   "当前状态不可添加参考文件（会话进行中或已建卡）": "Reference files can't be added now (session running or card created)",
+  "当前环境不支持系统文件夹选择，请直接输入仓库绝对路径": "Folder picker is not available here; type the repository's absolute path instead",
   "当前生效模型": "Effective model",
   "当前节点：": "Current node: ",
   "当前视图暂无": "Nothing in this view",

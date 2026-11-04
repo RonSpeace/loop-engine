@@ -1,0 +1,54 @@
+# Loop Engine：docker compose 运行看板 + 调度器
+#
+# 首次使用：
+#   mkdir -p config && cp projects.example.json config/projects.json
+#   # 编辑 config/projects.json：paths 写「容器内」路径，即下面 LOOP_REPOS 挂载后的路径（与宿主机同一路径）
+#   LOOP_REPOS=$HOME/code docker compose up --build
+#   打开 http://127.0.0.1:8899
+#
+# 安全（务必阅读）：看板**没有任何鉴权**，能访问端口的人就能读写需求、驱动 agent 在你的仓库里改代码。
+#   - 容器内必须监听 0.0.0.0 才能做端口映射，所以这里显式设置了 REQ_BOARD_HOST=0.0.0.0；
+#   - 端口只映射到宿主机回环地址 127.0.0.1——不要改成 "8899:8899" 或 0.0.0.0，那会把看板暴露到局域网/公网。
+
+services:
+  loop-engine:
+    build:
+      context: .
+      args:
+        # 与宿主机用户对齐，挂载目录才可写：LOOP_UID=$(id -u) LOOP_GID=$(id -g) docker compose build（bash 的 UID 只读，故换名）
+        UID: ${LOOP_UID:-1000}
+        GID: ${LOOP_GID:-1000}
+        WITH_FEISHU: ${WITH_FEISHU:-0}
+    image: loop-engine:local
+    init: true                      # tini 作 PID 1：转发信号、回收 agent 子进程
+    restart: unless-stopped
+    environment:
+      REQ_BOARD_HOST: 0.0.0.0       # 显式开启容器内全接口监听（仅配合下方回环端口映射使用）
+      REQ_BOARD_DATA: /app/data
+      # 可选：时区 / 模型 / 运行体等，见 .env.example
+      # REQ_BOARD_TZ: Asia/Shanghai
+      # LOOP_AGENT_RUNTIME: claude-code
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8899:8899"
+    volumes:
+      # 看板数据库（真实需求数据，勿删）
+      - loop-data:/app/data
+      # projects.json / feishu.json 所在目录（目录挂载：配置保存走原子替换，单文件挂载会失败）
+      - ./config:/config
+      # agent 产物与 worktree（~/.req-board）
+      - ${LOOP_STATE:-./state/req-board}:/home/loop/.req-board
+      # 你的代码仓库：宿主机与容器内同一路径，projects.json 的 paths 两边通用
+      - ${LOOP_REPOS:?设置 LOOP_REPOS 为存放代码仓库的宿主机目录}:${LOOP_REPOS}
+      # agent 运行体的登录态/配置（按实际使用的运行体取消注释）
+      # - ${HOME}/.kimi-code-deepseek:/home/loop/.kimi-code-deepseek
+      # - ${HOME}/.claude:/home/loop/.claude
+      # - ${HOME}/.codex:/home/loop/.codex
+      # git 推送凭据（只读）
+      # - ${HOME}/.gitconfig:/home/loop/.gitconfig:ro
+      # - ${HOME}/.ssh:/home/loop/.ssh:ro
+
+volumes:
+  loop-data:

@@ -7,6 +7,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+[![CI](https://github.com/RonSpeace/loop-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/RonSpeace/loop-engine/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)
@@ -107,6 +108,28 @@ Claude Code 和 Codex 目前只开放给**开发**角色：Loop Engine 会复核
 但还不能证明评审类角色的只读限制在这两个运行体上同样生效，所以宁可拒绝启动，也不在没有约束的情况下运行。
 详见 [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择)。
 
+### Linux
+
+在 Linux 上用 `scripts/run_local.sh` 即可完整运行（launchd 与 `start.sh` 仅限 macOS）。
+脚本写的日志默认落在 `$XDG_STATE_HOME/loop-engine/logs`（即 `~/.local/state/loop-engine/logs`），
+`REQ_BOARD_LOG_DIR` 可覆盖。项目弹窗里的「选择文件夹」在有桌面会话时调用 `zenity` 或 `kdialog`，
+否则按钮自动隐藏，直接输入仓库路径即可。需要常驻时可用 systemd 用户服务包一层 `scripts/run_local.sh`，或用 Docker。
+
+### Docker
+
+```bash
+mkdir -p config && cp projects.example.json config/projects.json   # paths 写 LOOP_REPOS 下的路径
+LOOP_UID=$(id -u) LOOP_GID=$(id -g) LOOP_REPOS=$HOME/code docker compose up --build
+```
+
+compose 在一个容器里同时跑看板和调度器：数据库放命名卷，挂载 `config/`（`projects.json`、`feishu.json`）、
+`~/.req-board` 产物目录和你的代码仓库（容器内外同一路径），看板只发布到 `127.0.0.1:8899`。
+按所用运行体取消注释对应的登录态挂载（`~/.kimi-code-deepseek`、`~/.claude`、`~/.codex`）。
+
+> **安全提示**：看板**没有任何鉴权**，能访问它的人就能改需求卡、让 agent 改你的代码。默认只监听 `127.0.0.1`，
+> 只有显式设置 `REQ_BOARD_HOST` 才会改监听地址；compose 设 `REQ_BOARD_HOST=0.0.0.0` 只是为了让 Docker 转发端口，
+> 并把端口绑在宿主机回环地址上。切勿发布到 `0.0.0.0` 或不可信网络。
+
 ## 配置一览
 
 | 文件 | 作用 |
@@ -129,7 +152,8 @@ Claude Code 和 Codex 目前只开放给**开发**角色：Loop Engine 会复核
 - [ ] 评审类角色支持 Claude Code / Codex，接入 Gemini CLI
 - [x] 英文界面
 - [ ] 英文提示词
-- [ ] 一条命令安装与 Docker Compose
+- [x] Docker Compose
+- [ ] 一条命令安装
 - [ ] GitHub Issues 与需求卡双向同步、PR 模式
 - [ ] 可分享的需求回放（从建卡到合并的完整时间线）
 - [ ] 社区流程模板

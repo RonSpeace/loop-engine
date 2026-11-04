@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & ideas / 提问与讨论
+    url: https://github.com/RonSpeace/loop-engine/discussions
+    about: Ask questions, share flows and setups, discuss ideas. 使用问题、流程分享与想法讨论。
+  - name: Security vulnerability / 安全漏洞
+    url: https://github.com/RonSpeace/loop-engine/security/advisories/new
+    about: Report security problems privately, not as a public issue. 请私密报告，不要公开提 issue。

@@ -12,6 +12,7 @@ from storage_time import storage_datetime
 import json
 import os
 import platform
+import shutil
 from pathlib import Path
 
 
@@ -672,12 +673,32 @@ def _git_credential_test(name, entry, url):
     return {"ok": False, "message": text or "连接失败（git 退出码非 0）"}
 
 
+def _linux_folder_picker_argv():
+    """Linux 图形会话下可用的目录选择器命令；无显示环境或未装 zenity/kdialog 时返回 None。"""
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return None
+    if shutil.which("zenity"):
+        return ["zenity", "--file-selection", "--directory", "--title=选择仓库目录"]
+    if shutil.which("kdialog"):
+        return ["kdialog", "--getexistingdirectory", str(Path.home()), "--title", "选择仓库目录"]
+    return None
+
+
 @bp.route('/api/system/pick-folder', methods=['POST'])
 def api_system_pick_folder():
-    """macOS 原生「选择文件夹」：{path} / {cancelled:true}；非 darwin 501、失败 500（不回显命令）。"""
-    if platform.system() != "Darwin":
-        return jsonify({"error": "当前系统不支持系统文件夹选择（仅 macOS）"}), 501
-    argv = ["osascript", "-e", 'POSIX path of (choose folder with prompt "选择仓库目录")']
+    """系统原生「选择文件夹」：{path} / {cancelled:true}；不支持 501（前端据此隐藏按钮）、失败 500（不回显命令）。
+    macOS 走 osascript；Linux 在有图形会话（DISPLAY/WAYLAND_DISPLAY）且装有 zenity 或 kdialog 时使用之；
+    其余环境（含 Docker、无头服务器）返回 501，用户直接输入路径。"""
+    system = platform.system()
+    if system == "Darwin":
+        argv = ["osascript", "-e", 'POSIX path of (choose folder with prompt "选择仓库目录")']
+    elif system == "Linux":
+        argv = _linux_folder_picker_argv()
+    else:
+        argv = None
+    if argv is None:
+        return jsonify({"error": "当前环境不支持系统文件夹选择，请直接输入仓库绝对路径",
+                        "unsupported": True}), 501
     try:
         r = resolve("subprocess").run(argv, capture_output=True, text=True, timeout=120)
     except Exception:  # noqa: BLE001 - 超时/启动失败：不把内部命令与异常细节回给前端
@@ -686,6 +707,9 @@ def api_system_pick_folder():
     err = (r.stderr or "").strip()
     if r.returncode != 0:
         if "-128" in err or "User canceled" in err or "用户已取消" in err:
+            return jsonify({"cancelled": True})
+        # zenity / kdialog：用户取消 = 退出码 1 且无输出
+        if system == "Linux" and r.returncode == 1 and not out:
             return jsonify({"cancelled": True})
         return jsonify({"error": "选择文件夹失败，请手动输入路径"}), 500
     if not out:

@@ -7,7 +7,7 @@
 assistant / sessions / meta 七个资源蓝图，按 blueprints.ALL 注册）。跨项目的待开发需求管理：
 记录、状态流转（待开发/进行中/已完成）、按项目分组。
 服务层在 board_modules/services/（model_pool / harness_config / projects / requirements / session_runtime / presentation / dispatcher_ops / chat_runtime / mcp_servers / reqchat_runtime / assistant_card / assistant_runtime / assistant_mcp / project_git）。
-只监听 127.0.0.1，本机使用，无鉴权。
+默认只监听 127.0.0.1，本机使用，无鉴权（REQ_BOARD_HOST 可显式改监听地址，见 README 的 Docker 一节）。
 
 运行: ./start.sh
 访问: http://127.0.0.1:8899
@@ -506,6 +506,11 @@ if __name__ == '__main__':
     _start_chat_recovery_worker()
     # 端口默认 8899，可用环境变量 REQ_BOARD_PORT 覆盖（worktree 测试用，避免与 main 实例冲突）
     port = int(os.environ.get('REQ_BOARD_PORT', '8899'))
-    print(f"需求看板: http://127.0.0.1:{port}")
-    # 只监听本机回环地址，局域网/外网均不可达，无需鉴权
-    app.run(host='127.0.0.1', port=port, debug=False, threaded=True)
+    # 默认只监听本机回环地址，局域网/外网均不可达（看板无鉴权）。REQ_BOARD_HOST 显式设置时才改监听地址
+    # （Docker 容器内需 0.0.0.0 才能做端口映射）——看板没有任何鉴权，非回环地址只应配合仅本机可达的端口映射使用。
+    host = (os.environ.get('REQ_BOARD_HOST') or '').strip() or '127.0.0.1'
+    if host not in ('127.0.0.1', 'localhost', '::1'):
+        print(f"[警告] REQ_BOARD_HOST={host}：看板没有鉴权，任何能访问该地址的人都能读写需求、驱动 agent；"
+              "请确认只在可信网络/本机端口映射下使用。", file=sys.stderr, flush=True)
+    print(f"需求看板: http://{host}:{port}")
+    app.run(host=host, port=port, debug=False, threaded=True)

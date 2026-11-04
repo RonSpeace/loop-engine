@@ -7,6 +7,7 @@ Agents that plan, code, review each other, and refuse to merge bad work.
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+[![CI](https://github.com/RonSpeace/loop-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/RonSpeace/loop-engine/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)
@@ -114,6 +115,32 @@ file write they ask to run, but it can't yet prove the read-only limits of the r
 those runtimes, so it refuses to start them there rather than run them unconstrained.
 Details: [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择).
 
+### Linux
+
+Everything runs on Linux with `scripts/run_local.sh` (launchd and `start.sh` are macOS-only).
+Logs written by the scripts default to `$XDG_STATE_HOME/loop-engine/logs`
+(`~/.local/state/loop-engine/logs`); set `REQ_BOARD_LOG_DIR` to change it. The **Choose folder**
+button in the project dialog uses `zenity` or `kdialog` when a desktop session is available;
+otherwise it hides itself and you type the repository path.
+For a long-running service, wrap `scripts/run_local.sh` in a systemd user unit or use Docker.
+
+### Docker
+
+```bash
+mkdir -p config && cp projects.example.json config/projects.json   # paths = paths under LOOP_REPOS
+LOOP_UID=$(id -u) LOOP_GID=$(id -g) LOOP_REPOS=$HOME/code docker compose up --build
+```
+
+The compose file runs the board and the dispatcher in one container, keeps the database in a named
+volume, mounts `config/` (`projects.json`, `feishu.json`), `~/.req-board` state and your repositories
+(at the same path as on the host), and publishes the board on `127.0.0.1:8899` only. Uncomment the
+volume for your agent runtime's login (`~/.kimi-code-deepseek`, `~/.claude`, `~/.codex`).
+
+> **Security:** the board has **no authentication** — anyone who can reach it can edit cards and make
+> agents change your code. It listens on `127.0.0.1` unless `REQ_BOARD_HOST` is set; the compose file
+> sets `REQ_BOARD_HOST=0.0.0.0` only so Docker can forward the port, and binds that port to the host's
+> loopback. Never publish it on `0.0.0.0` or an untrusted network.
+
 ## Configuration at a glance
 
 | File | Purpose |
@@ -136,7 +163,8 @@ Details: [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择).
 - [ ] Claude Code / Codex for reviewer roles, Gemini CLI
 - [x] English UI
 - [ ] English prompt set
-- [ ] One-command install and Docker Compose
+- [x] Docker Compose
+- [ ] One-command install
 - [ ] GitHub Issues ⇄ cards sync, PR mode
 - [ ] Shareable card replays (timeline of a requirement from card to merge)
 - [ ] Community flow templates

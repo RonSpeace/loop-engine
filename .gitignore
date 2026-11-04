@@ -35,3 +35,7 @@ scripts/flow-probe/out/
 # archify 视觉自检产物（截图/报告，本地生成不入库）
 docs/diagrams/*.visual-check.*
 .claude/
+
+# docker compose 本地挂载目录（projects.json / feishu.json / agent 产物）
+/config/
+/state/

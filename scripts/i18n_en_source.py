@@ -129,7 +129,7 @@ PHRASES = {
     "未检测到 git 仓库：请确认路径指向含 .git 的仓库根目录": "No git repository found: the path must point at a repository root containing .git",
     "：非 git 仓库（请在路径中填写含 .git 的仓库根目录）": ": not a git repository (use the repository root that contains .git)",
     "探测仓库失败": "Failed to detect repositories", "网络错误，探测仓库失败": "Network error; repository detection failed",
-    "选择文件夹失败": "Failed to choose a folder", "网络错误，选择文件夹失败": "Network error; could not choose a folder",
+    "选择文件夹失败": "Failed to choose a folder", "当前环境不支持系统文件夹选择，请直接输入仓库绝对路径": "Folder picker is not available here; type the repository's absolute path instead", "网络错误，选择文件夹失败": "Network error; could not choose a folder",
     "保存 Git 配置失败": "Failed to save Git settings", "网络错误，保存 Git 配置失败": "Network error; failed to save Git settings",
     "凭据已保存并测试通过": "Credentials saved and tested", "凭据已保存，但连通性测试失败": "Credentials saved, but the connectivity test failed",
     "凭据保存失败：": "Failed to save credentials: ", "凭据保存失败（HTTP": "Failed to save credentials (HTTP", "网络错误，凭据保存失败": "Network error; failed to save credentials",

@@ -9,11 +9,17 @@
 #   已知代价：复制与清空之间的几行可能丢（标准 copytruncate 语义，可接受）。
 #
 # 由 launchd 定时任务 local.automation.log-rotate 每 30 分钟调用一次；也可手工执行。
-# 可调：REQ_BOARD_LOG_DIR（默认 ~/Library/Logs/req-board）、REQ_BOARD_LOG_MAX_MB（默认 20）、
+# 可调：REQ_BOARD_LOG_DIR（默认 macOS ~/Library/Logs/req-board；Linux 等
+#       ${XDG_STATE_HOME:-~/.local/state}/loop-engine/logs，与 dispatcher_ops._default_log_dir 同口径）、REQ_BOARD_LOG_MAX_MB（默认 20）、
 #       REQ_BOARD_LOG_KEEP（默认 2，保留 .1/.2）
 set -euo pipefail
 
-DATA_DIR="${REQ_BOARD_LOG_DIR:-$HOME/Library/Logs/req-board}"
+if [ "$(uname -s)" = "Darwin" ]; then
+    DEFAULT_LOG_DIR="$HOME/Library/Logs/req-board"
+else
+    DEFAULT_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/loop-engine/logs"
+fi
+DATA_DIR="${REQ_BOARD_LOG_DIR:-$DEFAULT_LOG_DIR}"
 MAX_MB="${REQ_BOARD_LOG_MAX_MB:-20}"
 KEEP="${REQ_BOARD_LOG_KEEP:-2}"
 LIMIT_BYTES=$(( MAX_MB * 1024 * 1024 ))
@@ -31,7 +37,9 @@ rotated=0
 for name in "${LOG_FILES[@]}"; do
     f="$DATA_DIR/$name"
     [ -f "$f" ] || continue
-    size=$(stat -f%z "$f" 2>/dev/null || echo 0)
+    # wc -c 在 BSD/GNU 上通用（stat 的参数两边不同：-f%z vs -c%s）
+    size=$(wc -c < "$f" 2>/dev/null | tr -d ' ')
+    size=${size:-0}
     if [ "$size" -le "$LIMIT_BYTES" ]; then
         continue
     fi

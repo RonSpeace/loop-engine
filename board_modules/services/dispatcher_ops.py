@@ -8,12 +8,14 @@ import json
 import os
 import re
 import signal
+import sys
 import time
 import urllib.request
 
 from board_modules.runtime import resolve
 # read_logs 白名单里 launchd 日志目录的候选文件名（严格闭集，不合模式一律拒）。
-# 目录 = REQ_BOARD_LOG_DIR 或 ~/Library/Logs/req-board（plists/ 下三个 plist 的 StandardOutPath 落点）
+# 目录 = REQ_BOARD_LOG_DIR，缺省按平台：macOS ~/Library/Logs/req-board（plists/ 下三个 plist 的
+# StandardOutPath 落点）；其它系统 $XDG_STATE_HOME/loop-engine/logs（缺省 ~/.local/state/loop-engine/logs）
 REQ_CHAT_LOG_NAME_RE = re.compile(r"req-board(-dispatcher)?(\.err)?\.log(\.\d+)?\Z")
 
 
@@ -31,11 +33,21 @@ def _reqchat_automation_data():
         return None
 
 
+def _default_log_dir():
+    """平台缺省日志目录（与 scripts/log-rotate.sh 同一口径）：macOS ~/Library/Logs/req-board；
+    其它系统 $XDG_STATE_HOME/loop-engine/logs，XDG_STATE_HOME 未设/非绝对路径时 ~/.local/state/loop-engine/logs。"""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Logs" / "req-board"
+    xdg = (os.environ.get("XDG_STATE_HOME") or "").strip()
+    state = Path(xdg) if xdg and os.path.isabs(xdg) else Path.home() / ".local" / "state"
+    return state / "loop-engine" / "logs"
+
+
 def _reqchat_launchd_log_dir():
-    """launchd 日志目录（plists/ 三个 plist 的 StandardOutPath 落点）：REQ_BOARD_LOG_DIR 或
-    ~/Library/Logs/req-board。目录不存在也照常返回（白名单判定不看文件是否存在）。"""
+    """日志目录（launchd 下即 plists/ 三个 plist 的 StandardOutPath 落点）：REQ_BOARD_LOG_DIR 或
+    平台缺省（_default_log_dir）。目录不存在也照常返回（白名单判定不看文件是否存在）。"""
     raw = os.environ.get("REQ_BOARD_LOG_DIR") or ""
-    base = Path(raw).expanduser() if raw.strip() else Path.home() / "Library" / "Logs" / "req-board"
+    base = Path(raw).expanduser() if raw.strip() else _default_log_dir()
     try:
         return base.resolve()
     except Exception:

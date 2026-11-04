@@ -1,0 +1,74 @@
+name: Bug report / 问题反馈
+description: Something is broken or behaves unexpectedly. 功能异常或行为不符合预期。
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Chinese or English are both fine. 中英文均可。
+        **Do not paste credentials, API keys, tokens or private project data.** 请勿粘贴凭据、密钥或私有项目数据。
+        Security problems: use private vulnerability reporting instead of a public issue. 安全问题请走私密漏洞报告。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / 发生了什么
+      description: What did you do, what did you expect, and what happened instead? 操作步骤、预期结果与实际结果。
+      placeholder: |
+        1. Create a card with status open …
+        2. …
+        Expected: …
+        Actual: …
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component / 涉及模块
+      options:
+        - Board UI / 看板页面
+        - Board API / 看板接口
+        - Dispatcher / 调度器
+        - Agent runtime (kimi / claude-code / codex) / 运行体
+        - Flows & prompts / 流程与提示词
+        - Feishu / Lark / 飞书
+        - Install, Docker, scripts / 安装、Docker、脚本
+        - Other / 其它
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it? / 运行方式
+      options:
+        - scripts/run_local.sh
+        - launchd (macOS)
+        - Docker / docker compose
+        - Other / 其它
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment / 环境
+      description: OS, Python version, agent runtime and version, commit (`git rev-parse --short HEAD`).
+      placeholder: "Ubuntu 24.04, Python 3.12.3, kimi 1.x, commit abc1234"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / 日志
+      description: |
+        Relevant output from the run_local.sh terminal or the log directory
+        (macOS `~/Library/Logs/req-board/`, Linux `~/.local/state/loop-engine/logs/`), and `scripts/doctor.py` output.
+        相关日志与 `scripts/doctor.py` 输出（请先脱敏）。
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist / 自查
+      options:
+        - label: I searched existing issues. / 已搜索过现有 issue。
+          required: true
+        - label: I removed credentials and private data from this report. / 已去除凭据与私有数据。
+          required: true

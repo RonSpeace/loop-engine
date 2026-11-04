@@ -2673,7 +2673,7 @@ void main() {
             } catch (e) { /* 拉取失败保持「未配置」展示；保存时以服务端结果为准 */ }
         }
 
-        // 「选择文件夹」：成功追加一行路径并自动探测；取消（cancelled）静默返回
+        // 「选择文件夹」：成功追加一行路径并自动探测；取消（cancelled）静默返回；不支持（501）隐藏按钮并提示手输
         async function pmPickFolder() {
             const btn = document.getElementById('pmPickFolder');
             btn.disabled = true;
@@ -2682,6 +2682,13 @@ void main() {
                     method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'
                 });
                 const d = await res.json().catch(() => ({}));
+                if (res.status === 501 || d.unsupported) {
+                    // 当前环境没有系统选择框（Linux 无图形会话/未装 zenity、Docker 等）：隐藏按钮，提示直接输入路径
+                    btn.hidden = true;
+                    pmSetError(d.error || '当前环境不支持系统文件夹选择，请直接输入仓库绝对路径');
+                    document.getElementById('pmPaths').focus();
+                    return;
+                }
                 if (!res.ok) { pmSetError(d.error || '选择文件夹失败'); return; }
                 if (d.cancelled || !d.path) return;   // 用户取消：静默
                 document.getElementById('pmPaths').value = pmPathsAppend(document.getElementById('pmPaths').value, d.path);

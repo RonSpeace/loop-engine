@@ -1,0 +1,23 @@
+# 本地数据与密钥：绝不进镜像
+data/
+projects.json
+projects.json.*
+feishu.json
+feishu.json.*
+.env
+config/
+state/
+
+# 开发环境与缓存
+.git/
+.github/
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+.req-board/
+.playwright-mcp/
+scripts/flow-probe/out/
+*.bak
+.DS_Store
