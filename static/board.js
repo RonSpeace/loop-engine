@@ -1332,10 +1332,10 @@ void main() {
         //   status→doing 起「入队」；spawn/「完成，进入「X」」/「进入首节点「X」」起阶段；
         //   未通过打回同时把评审阶段记 reject、目标阶段记 redo；进入流程收尾/需求完成起「收尾」。
         // 同一阶段被打回重做后仍合并为一行（阶段数按去重阶段计），耗时累加各次进入区间。
-        function dispatchTsMs(ts) {
-            const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(ts || ''));
-            if (!m) return null;
-            return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+        function dispatchTsMs(ts, times) {
+            // 墙钟字符串只作显示/索引；时间运算使用服务端 epoch，浏览器时区不参与解析。
+            const ms = times && times.get(ts);
+            return typeof ms === 'number' && isFinite(ms) ? ms : null;
         }
         function formatDispatchDuration(ms) {
             const mins = Math.floor(Math.max(0, Number(ms) || 0) / 60000);
@@ -1345,6 +1345,7 @@ void main() {
         }
         function buildDispatchStages(events) {
             const list = Array.isArray(events) ? events : [];
+            const times = new Map(list.map(e => [e.ts, e.ts_ms]));
             const ENQUEUE = '入队', TERMINAL = '收尾';
             const rePass = /^「(.+?)」评审通过/;
             const reEnter = /^「(.+?)」完成.*?进入「(.+?)」/;
@@ -1396,7 +1397,7 @@ void main() {
             list.forEach(e => {
                 const content = String((e && e.content) || '');
                 const ts = e && e.ts;
-                const ms = dispatchTsMs(ts);
+                const ms = dispatchTsMs(ts, times);
                 if (ms != null) { lastMs = ms; lastTs = ts; }
                 let m;
                 if (e.kind === 'status' && /→ 进行中\(doing\)/.test(content)) {
@@ -1494,8 +1495,8 @@ void main() {
             stages.forEach(s => {
                 let ms = 0;
                 s.visits.forEach(v => {
-                    const a = dispatchTsMs(v.start);
-                    const b = v.end != null ? dispatchTsMs(v.end) : lastMs;
+                    const a = dispatchTsMs(v.start, times);
+                    const b = v.end != null ? dispatchTsMs(v.end, times) : lastMs;
                     if (a != null && b != null && b >= a) ms += b - a;
                 });
                 s.durationMs = ms;
@@ -1508,7 +1509,7 @@ void main() {
                     : s.reviewPass ? '评审通过'
                     : s.done ? '完成' : '';
             });
-            const firstMs = stages.length ? dispatchTsMs(stages[0].startTs) : null;
+            const firstMs = stages.length ? dispatchTsMs(stages[0].startTs, times) : null;
             return {
                 stages,
                 stats: {
@@ -4475,11 +4476,10 @@ void main() {
             interrupted: '自动路径已停止，可发消息继续',
             failed: '对话建立失败（发消息即新建对话）', closed: '对话已结束（发消息即新建对话）'};
 
-        // 事件 ts 是本地时间字符串（YYYY-MM-DD HH:MM:SS，与 now_str() 同源）；解析失败返回 null
+        // 事件计时只消费服务端 epoch；缺失时不猜测浏览器本地时区。
         function reqChatEventMs(ev) {
-            if (!ev || !ev.ts) return null;
-            const t = Date.parse(String(ev.ts).replace(' ', 'T'));
-            return isFinite(t) ? t : null;
+            const t = ev && ev.ts_ms;
+            return typeof t === 'number' && isFinite(t) ? t : null;
         }
 
         function reqChatActivityModel(s, events, nowMs) {

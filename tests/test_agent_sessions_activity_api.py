@@ -9,7 +9,7 @@
 - B5 server_now：GET /api/agent-sessions 每行 float、贴近服务端时钟、同一响应多行同值
 - B6 req_status：卡 done → 行带 req_status='done'；需求行删除后会话行仍返回（LEFT JOIN）且 req_status=None
 - B7 按需求查询：GET /api/requirements/<id>/sessions 同样带 server_now/req_status
-- B8 事件 ts_ms：GET /api/requirements/<id>/events 每行 ts_ms 为 int 毫秒、与 ts（北京时间 +08:00）解析一致，历史行同样被补
+- B8 事件 ts_ms：GET /api/requirements/<id>/events 每行 ts_ms 为 int 毫秒、与 ts（配置的存储时区）解析一致，历史行同样被补
 
 运行（worktree 内，用 main 工作区的 .venv）：
     .venv/bin/python -m unittest tests.test_agent_sessions_activity_api -v
@@ -228,11 +228,11 @@ class AgentSessionsActivityApiTest(unittest.TestCase):
 
     # ---- B8 ----
     def test_b8_events_ts_ms(self):
-        # ① 接口写入行（ts = now_str，北京时间）
+        # ① 接口写入行（ts = now_str，存储时区）
         resp = self.client.post(f"/api/requirements/{self.req_id}/events",
                                 json={"events": [{"kind": "message", "content": "现场"}]})
         self.assertEqual(resp.status_code, 201, resp.get_data(as_text=True))
-        # ② 直插历史行（模拟 #421 之前的存量事件：ts 已是北京时间字符串、无 ts_ms 列）
+        # ② 直插历史行（模拟 #421 之前的存量事件：ts 已是存储时区字符串、无 ts_ms 列）
         old_ts = "2026-01-02 03:04:05"
         with b.get_db() as conn:
             conn.execute("INSERT INTO agent_events (req_id, kind, content, ts)"
@@ -243,9 +243,10 @@ class AgentSessionsActivityApiTest(unittest.TestCase):
         for row in rows:
             self.assertIsInstance(row["ts_ms"], int, f"{row['content']}: ts_ms 应为 int 毫秒")
             self.assertEqual(row["ts_ms"], b._ts_ms(row["ts"]))
-        # 历史行同样被补：03:04:05(+08:00) == 前一天 19:04:05 UTC
+        # 历史行按相同存储时区解释
         hist = [r for r in rows if r["content"] == "历史行"][0]
-        expected = int(datetime(2026, 1, 1, 19, 4, 5, tzinfo=timezone.utc).timestamp() * 1000)
+        from storage_time import parse_storage_time
+        expected = int(parse_storage_time(old_ts).timestamp() * 1000)
         self.assertEqual(hist["ts_ms"], expected)
         # 新鲜行 ts_ms ≈ now（服务端刚写入）
         fresh = [r for r in rows if r["content"] == "现场"][0]

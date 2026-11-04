@@ -37,7 +37,7 @@ import tempfile
 import threading
 import time
 import urllib.request
-from datetime import datetime
+from storage_time import parse_storage_time, format_storage_time
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -539,20 +539,20 @@ def api_board(method, path, body=None):
         return json.loads(resp.read())
 
 def _parse_ts(s):
-    """看板时间戳 'YYYY-MM-DD HH:MM:SS'（本地时间）-> epoch；解析失败返回 0（视为足够旧，可捞取）
+    """看板时间戳 'YYYY-MM-DD HH:MM:SS'（存储时区）-> epoch；解析失败返回 0（视为足够旧，可捞取）
     注意：失败返回 0 的宽松语义只适用于「捞取」判断，删除路径不得复用（见 _session_age_sec）。"""
     try:
-        return datetime.strptime(s or "", "%Y-%m-%d %H:%M:%S").timestamp()
+        return parse_storage_time(s or "").timestamp()
     except Exception:
         return 0
 
 
 def _session_age_sec(created_at):
-    """#431：注册行 created_at（看板北京本地时间字符串）-> 距今秒数。
+    """#431：注册行 created_at（看板存储时区字符串）-> 距今秒数。
     缺失/非法/空返回 None —— 调用方（空会话清理）必须按 fail-closed 跳过，不得复用 _parse_ts
     （其失败返回 0 = 视为足够旧，用于删除会误删刚建的行）。"""
     try:
-        ts = datetime.strptime(str(created_at or ""), "%Y-%m-%d %H:%M:%S").timestamp()
+        ts = parse_storage_time(created_at or "").timestamp()
     except Exception:
         return None
     return time.time() - ts
@@ -1133,7 +1133,7 @@ def dev_branch(req):
     需求来自 TAPD（notes 含 TAPD 链接）时追加 -tapd<需求ID>，便于分支与 TAPD 需求对应。"""
     d = str(req.get("created_at") or "")[:10].replace("-", "")
     if not d:
-        d = datetime.now().strftime("%Y%m%d")
+        d = format_storage_time()[:10].replace("-", "")
     branch = f"f-{d}-{req['id']}"
     tid = tapd_id_from_notes(req)
     if tid:
@@ -8619,7 +8619,7 @@ def report_previous_exit():
                 # 兜底：退出时未读到来源（竞态残留），启动时补进心跳
                 last = dict(last, source=src)
                 write_heartbeat({"last_shutdown": last})
-            at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last["at"]))
+            at = format_storage_time(last["at"])
             src_txt = f"（来源: {last['source']}）" if last.get("source") else "（来源未知）"
             log.info(f"调度器启动：上次退出 {last.get('signal', '信号')} @ {at}{src_txt}")
         elif src:
@@ -8746,7 +8746,7 @@ def _watchdog_check():
     stalled = time.monotonic() - last_tick_mono
     if last_tick_mono and stalled > TICK_WARN_SEC:
         log.warning(f"主循环 tick 停滞告警：{stalled:.0f}s 无新 tick"
-                    f"（last_tick={datetime.fromtimestamp(last_tick).strftime('%H:%M:%S')}），"
+                    f"（last_tick={format_storage_time(last_tick)[11:]}），"
                     f"调度器仍在运行但主循环疑似阻塞（_main_loop_tick），心跳未更新")
         return True
     return False

@@ -5,6 +5,7 @@
 
 
 from board_modules.runtime import resolve
+from board_modules.common import _ts_ms
 
 
 from pathlib import Path
@@ -178,7 +179,7 @@ def api_chat_events(chat_id):
         rows = conn.execute(
             "SELECT id, kind, content, ts FROM chat_events WHERE chat_id = ? AND id > ? ORDER BY id LIMIT 500",
             (chat_id, after)).fetchall()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([dict(r, ts_ms=_ts_ms(r["ts"])) for r in rows])
 
 
 @bp.route('/api/chat/<int:chat_id>/materials', methods=['POST'])
@@ -584,7 +585,7 @@ def api_req_chat_events(req_id):
     if row is None:
         return jsonify({'chat': None, 'events': []})
     with resolve("get_db")() as conn:
-        events = [dict(r) for r in conn.execute(
+        events = [dict(r, ts_ms=_ts_ms(r["ts"])) for r in conn.execute(
             "SELECT id, kind, content, ts FROM req_chat_events WHERE req_chat_id = ? AND id > ? ORDER BY id",
             (row["id"], after)).fetchall()]
     return jsonify({'chat': dict(row), 'events': events})

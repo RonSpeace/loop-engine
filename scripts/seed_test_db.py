@@ -11,7 +11,7 @@
 启动，页头角标因此恒为确定性的「显式停用」，不是真实调度器状态）。
 
 确定性约定：
-- 所有时间戳由冻结时刻（--freeze-time，默认 DEFAULT_FREEZE_TIME，北京时间）倒推，不读系统时钟；
+- 所有时间戳由冻结时刻（--freeze-time，默认 DEFAULT_FREEZE_TIME，按 REQ_BOARD_TZ 解释）倒推，不读系统时钟；
 - 自增主键只由插入顺序决定；同一份 flows.json 下两次落库的逻辑内容完全一致（见 dump_db）；
 - 会话/对话类行只种终态（idle/failed/毒会话），绝不种 running/interrupted——看板启动时的恢复逻辑
   会对这两种状态尝试拉起 kimi。
@@ -24,13 +24,14 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# 默认冻结时刻（北京时间）：种子数据的「现在」，test_instance.sh --seed 与 visual_gate.py 同取此值
+# 默认冻结时刻（按 REQ_BOARD_TZ 解释）：种子数据的「现在」，test_instance.sh --seed 与 visual_gate.py 同取此值
 DEFAULT_FREEZE_TIME = "2026-01-15 10:30:00"
-BEIJING_TZ = timezone(timedelta(hours=8))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from storage_time import parse_storage_time
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 STATUSES = ("later", "open", "doing", "done", "dropped")
 PROJECTS = ("demo-alpha", "demo-beta", "demo-gamma")
@@ -123,10 +124,10 @@ def dump_db(db_path):
 
 # ==================== 数据集 ====================
 class _Clock:
-    """由冻结时刻倒推时间戳：s(分钟前) → 北京时间字符串；e(分钟前) → epoch 秒。"""
+    """由冻结时刻倒推时间戳：s(分钟前) → 存储时区字符串；e(分钟前) → epoch 秒。"""
 
     def __init__(self, freeze_time):
-        self.now = datetime.strptime(freeze_time, TS_FMT).replace(tzinfo=BEIJING_TZ)
+        self.now = parse_storage_time(freeze_time)
 
     def s(self, minutes_ago):
         return (self.now - timedelta(minutes=minutes_ago)).strftime(TS_FMT)
@@ -354,7 +355,7 @@ def main(argv=None):
     ap.add_argument("--data-dir", help="目标数据目录（必填；写入 board.db / projects.json / dispatcher_state.json）")
     ap.add_argument("--force", action="store_true", help="目标库已有数据时删库重建")
     ap.add_argument("--freeze-time", default=DEFAULT_FREEZE_TIME,
-                    help=f"冻结时刻（北京时间 YYYY-MM-DD HH:MM:SS，默认 {DEFAULT_FREEZE_TIME}）")
+                    help=f"冻结时刻（存储时区 YYYY-MM-DD HH:MM:SS，默认 {DEFAULT_FREEZE_TIME}）")
     ap.add_argument("--print-freeze-time", action="store_true", help="只打印默认冻结时刻后退出")
     args = ap.parse_args(argv)
     if args.print_freeze_time:

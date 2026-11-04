@@ -159,9 +159,9 @@ class DispatcherRestartApiTest(unittest.TestCase):
 
     @staticmethod
     def _ts_str(seconds_ago):
-        """agent_events.ts（北京时间字符串；#421 统一按 +08:00 解析成 epoch 毫秒）"""
-        return (datetime.now(b.BEIJING_TZ) - timedelta(seconds=seconds_ago)) \
-            .strftime('%Y-%m-%d %H:%M:%S')
+        """agent_events.ts（按配置的存储时区生成）"""
+        from storage_time import format_storage_time
+        return format_storage_time(time.time() - seconds_ago)
 
     # ---- C1 ----
     def test_c1_guard_matrix_rejects_without_command(self):

@@ -45,12 +45,12 @@ import sys
 import tempfile
 import time
 import urllib.parse
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# 默认冻结时刻（北京时间），与 scripts/seed_test_db.py 的 DEFAULT_FREEZE_TIME 同值（测试钉死一致）
+# 默认冻结时刻（按 REQ_BOARD_TZ 解释），与 scripts/seed_test_db.py 的 DEFAULT_FREEZE_TIME 同值（测试钉死一致）
 DEFAULT_FREEZE_TIME = "2026-01-15 10:30:00"
-BEIJING_TZ = timezone(timedelta(hours=8))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from storage_time import parse_storage_time
 GATES = ("console", "tokens", "computed_style", "layout_shift", "contrast", "native_controls")
 FAILURE_CAP = 50              # 每个闸门写进报告的失败条目上限（总数仍记在 counts）
 LAYOUT_TOLERANCE = 0.5        # 包围盒差异容差（px）
@@ -517,9 +517,9 @@ def parse_skins(text):
 
 
 def freeze_ms(text):
-    """冻结时刻字符串（北京时间）→ epoch 毫秒；非法抛 ToolError。"""
+    """冻结时刻字符串（按 REQ_BOARD_TZ 解释）→ epoch 毫秒；非法抛 ToolError。"""
     try:
-        dt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BEIJING_TZ)
+        dt = parse_storage_time(text)
     except (TypeError, ValueError):
         raise ToolError("--freeze-time 非法: %r（需为 YYYY-MM-DD HH:MM:SS）" % (text,))
     return int(dt.timestamp() * 1000)
@@ -1256,7 +1256,7 @@ def build_parser():
     ap.add_argument("--skins", default="dark,light", help="皮肤列表，逗号分隔（默认 dark,light）")
     ap.add_argument("--viewports", default="1440x900,390x844", help="视口列表（默认 1440x900,390x844）")
     ap.add_argument("--freeze-time", default=DEFAULT_FREEZE_TIME,
-                    help="冻结页面时钟到该北京时间（默认 %s，与种子数据一致）" % DEFAULT_FREEZE_TIME)
+                    help="冻结页面时钟到该时刻（按 REQ_BOARD_TZ 解释）（默认 %s，与种子数据一致）" % DEFAULT_FREEZE_TIME)
     return ap
 
 

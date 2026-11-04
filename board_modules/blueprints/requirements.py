@@ -343,7 +343,7 @@ def api_dispatcher_events_list(req_id):
         rows = conn.execute(
             "SELECT id, kind, content, ts, session_id FROM dispatcher_events WHERE req_id = ? ORDER BY id",
             (req_id,)).fetchall()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([dict(r, ts_ms=_ts_ms(r["ts"])) for r in rows])
 
 
 @bp.route('/api/requirements/<int:req_id>/dispatcher-events', methods=['POST'])

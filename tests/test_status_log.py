@@ -8,6 +8,7 @@
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -302,7 +303,7 @@ class StatusLogTimestampTest(unittest.TestCase):
         self.assertLess(self._local_seconds(row["ts"]), 60)
 
     def test_legacy_utc_rows_migrated_once(self):
-        """存量 UTC 行一次性 +8h；user_version 守卫保证不重复迁移"""
+        """存量 UTC 行一次性转存储时区；user_version 守卫保证不重复迁移"""
         with b.get_db() as conn:
             conn.execute(
                 "INSERT INTO req_status_log (req_id, old_status, new_status, actor, detail, ts) "
@@ -315,10 +316,9 @@ class StatusLogTimestampTest(unittest.TestCase):
                 "SELECT ts FROM req_status_log WHERE req_id = 990001").fetchone()["ts"]
             ver = conn.execute("PRAGMA user_version").fetchone()[0]
         self.assertEqual(ver, 1)
-        delta_h = (datetime.strptime(migrated, "%Y-%m-%d %H:%M:%S")
-                   - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 3600
-        self.assertAlmostEqual(delta_h, 8, delta=0.05, msg=f"迁移后应≈北京时间: {migrated}")
-        b.init_db()   # 再启动一次：不得二次 +8h
+        from storage_time import parse_storage_time
+        self.assertLess(abs(parse_storage_time(migrated).timestamp() - time.time()), 60)
+        b.init_db()   # 再启动一次：不得重复转换
         with b.get_db() as conn:
             again = conn.execute(
                 "SELECT ts FROM req_status_log WHERE req_id = 990001").fetchone()["ts"]

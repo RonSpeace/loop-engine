@@ -370,7 +370,9 @@ class ContractAndReportTest(unittest.TestCase):
                         (vg.parse_skins, ""), (vg.freeze_ms, "2026-13-01 00:00:00"), (vg.freeze_ms, None)):
             with self.assertRaises(vg.ToolError):
                 fn(bad)
-        self.assertEqual(vg.freeze_ms("1970-01-01 08:00:01"), 1000)      # 北京时间口径
+        from storage_time import parse_storage_time
+        self.assertEqual(vg.freeze_ms("1970-01-01 08:00:01"),
+                         int(parse_storage_time("1970-01-01 08:00:01").timestamp() * 1000))
         self.assertEqual(vg.DEFAULT_FREEZE_TIME, seed_test_db.DEFAULT_FREEZE_TIME)
 
     def _collection(self, **over):

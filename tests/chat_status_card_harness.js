@@ -41,8 +41,8 @@ const CHAT_ADD_STATUS_ICO = {creating: '🔄', restoring: '🔄', confirming: '�
     failed: '⛔', closed: '⏹', created_new: '💬'};
 
 // ts（本地时间字符串）→ 毫秒：与 reqChatEventMs 同口径
-function ms(ts) { return Date.parse(String(ts).replace(' ', 'T')); }
-const EV = (ts, kind) => ({id: 1, kind: kind || 'message', content: 'x', ts});
+function ms(ts) { return Date.parse(String(ts).replace(' ', 'T') + 'Z'); }
+const EV = (ts, kind) => ({id: 1, kind: kind || 'message', content: 'x', ts, ts_ms: ms(ts)});
 
 // ---- DOM 桩 ----
 function line(k, text) {

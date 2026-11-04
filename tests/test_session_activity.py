@@ -85,12 +85,11 @@ class SessionActivityHarnessTest(unittest.TestCase):
         self.assertIn("const ACTIVITY_WARN_SEC = 60;", frontend_js())
         self.assertEqual(180, board.AGENT_STALL_SEC)
 
-    def test_a_ts_ms_beijing(self):
-        """服务端 ts_ms：按 +08:00 解析（机器时区无关），与 ts 一致"""
-        import calendar
+    def test_a_ts_ms_storage_timezone(self):
+        """服务端 ts_ms：按配置的存储时区解析，与 ts 一致"""
         import board
-        # 2026-09-18 02:00:00 (+08:00) == 2026-09-17 18:00:00 UTC
-        expect = calendar.timegm((2026, 9, 17, 18, 0, 0, 0, 0, 0)) * 1000
+        from storage_time import parse_storage_time
+        expect = int(parse_storage_time("2026-09-18 02:00:00").timestamp() * 1000)
         self.assertEqual(expect, board._ts_ms("2026-09-18 02:00:00"))
         self.assertIsNone(board._ts_ms(None))
         self.assertIsNone(board._ts_ms("not-a-time"))

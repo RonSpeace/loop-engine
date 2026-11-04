@@ -11,6 +11,7 @@
     "DATA_DIR",
     "DB_PATH",
     "FEISHU_JSON_PATH",
+    "FREEZE_TIME_STR",
     "FREEZE_TS",
     "HEARTBEAT_FILE",
     "KIMI_CODE_MCP_JSON",
@@ -55,5 +56,5 @@
     "session_homes",
     "subprocess"
   ],
-  "count": 54
+  "count": 55
 }

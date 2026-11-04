@@ -2,6 +2,9 @@
 // #51 调度历史回放：buildDispatchStages / formatDispatchDuration / dispatchTsMs node 断言。
 // 函数源码由 test_dispatch_history_replay.py 从 static/board.js 提取后拼在本文件前面执行。
 
+const buildFromApi = buildDispatchStages;
+buildDispatchStages = events => buildFromApi(events && events.map(e => ({...e,
+    ts_ms: e.ts_ms == null ? Date.parse(e.ts.replace(' ', 'T') + 'Z') : e.ts_ms})));
 const results = [];
 function check(name, pass, detail) {
     results.push({ name: name, pass: !!pass, detail: detail == null ? '' : String(detail) });
@@ -218,7 +221,7 @@ const heavy = [
         && formatDispatchDuration(6360000) === '1h46m',
         [0, 59000, 60000, 3600000, 6360000].map(formatDispatchDuration).join('|'));
     check('D4_时间戳解析：合法/空/非法',
-        dispatchTsMs('2026-09-01 15:02:03') != null
+        dispatchTsMs('2026-09-01 15:02:03', new Map([['2026-09-01 15:02:03', 1234]])) === 1234
         && dispatchTsMs('') === null && dispatchTsMs(null) === null
         && dispatchTsMs('bad') === null, '');
 }

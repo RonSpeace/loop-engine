@@ -8,6 +8,7 @@ from board_modules.runtime import resolve
 
 
 import datetime
+from storage_time import storage_datetime
 import json
 import os
 import platform
@@ -198,7 +199,7 @@ def _day_epoch_bounds(s):
         d = datetime.datetime.strptime(s, "%Y-%m-%d")
     except (ValueError, TypeError):
         return None
-    return d.timestamp(), (d + datetime.timedelta(days=1)).timestamp()
+    return storage_datetime(d).timestamp(), storage_datetime(d + datetime.timedelta(days=1)).timestamp()
 
 
 def _model_stats_group(role, model):

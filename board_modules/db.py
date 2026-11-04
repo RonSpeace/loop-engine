@@ -5,6 +5,8 @@ DB_PATH 经 runtime.resolve 晚绑定（测试会 patch board.DB_PATH 指向临�
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
+from storage_time import format_storage_time
 from contextlib import contextmanager
 
 from board_modules.runtime import resolve
@@ -405,15 +407,17 @@ def init_db():
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_status_log_req ON req_status_log(req_id, id)")
-        # 时间口径迁移：req_status_log.ts 历史上取自列默认值 CURRENT_TIMESTAMP（UTC），与卡面/事件流
-        # （now_str 北京时间）差 8 小时——#410 修了 dispatcher_events，同事务的 status 审计行漏改。
-        # 存量行一次性 +8h 对齐，此后写入方显式传 now_str()。幂等守卫用 PRAGMA user_version
-        # （1=口径迁移完成；回滚口径：UPDATE ... datetime(ts,'-8 hours') 后置 user_version=0）
+        # 历史审计行默认 CURRENT_TIMESTAMP（UTC），首次迁移到配置的存储时区。
+        # 已完成迁移的库保持原值；移动机器须保留原 REQ_BOARD_TZ。
         if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
-            migrated = conn.execute("UPDATE req_status_log SET ts = datetime(ts, '+8 hours')").rowcount
+            rows = conn.execute("SELECT id, ts FROM req_status_log").fetchall()
+            for row in rows:
+                epoch = datetime.fromisoformat(row["ts"]).replace(tzinfo=timezone.utc).timestamp()
+                conn.execute("UPDATE req_status_log SET ts = ? WHERE id = ?",
+                             (format_storage_time(epoch), row["id"]))
             conn.execute("PRAGMA user_version = 1")
-            if migrated:
-                print(f"[req-status-log] 时间口径迁移：{migrated} 行 UTC → 北京时间", flush=True)
+            if rows:
+                print(f"[req-status-log] 时间口径迁移：{len(rows)} 行 UTC → 存储时区", flush=True)
         # #386 自动合并冲突网页决策通道：存在记录=该需求处于 merge 冲突待处理；action IS NULL=等待用户
         # 操作（按钮渲染信号），action∈{retry,takeover}=用户已点击待调度器 reconcile 消费（消费后删除）。
         # 与 dispatcher state.pending_confirm（kind=merge）双存储，以 pending 为权威：本表仅作

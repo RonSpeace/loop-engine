@@ -28,7 +28,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from storage_time import parse_storage_time
 from pathlib import Path
 
 from flask import Flask, render_template, request
@@ -47,7 +47,7 @@ from acp_shared import ro_search_hits, FILE_MAX_BYTES, FILE_MAX_LINES_LIMIT, DIR
 # 先注册别名，保证 `python board.py`（__main__）下 sys.modules["board"] 指向同一模块。
 sys.modules.setdefault("board", sys.modules[__name__])
 from board_modules.db import get_db, init_db
-from board_modules.common import BEIJING_TZ, STATUS_LABEL_CN, _now_ts, now_str, _ts_ms, _status_label_cn, parse_artifact_legacy_roots
+from board_modules.common import STATUS_LABEL_CN, _now_ts, now_str, _ts_ms, _status_label_cn, parse_artifact_legacy_roots
 from board_modules.sse import _SSE_ENABLED, _SSE_MAX_CONNS, _SSE_HEARTBEAT_SEC, _SSE_PROBE_SEC, _SSE_QUEUE_MAX, _sse_lock, _sse_subs, _SSE_STATS, _SSEConn, _sse_publish, _sse_acquire, _sse_peer_gone, _SSEStream
 # SSE 发布序号单一源在本模块：sse.py 经 runtime.resolve 读、runtime.bump 写回（不留模块级副本）。
 _sse_seq = 0             # 全局递增序号，便于测试断言与排障
@@ -66,7 +66,7 @@ HEALTH_STALE_SEC = 180  # 心跳超过该秒数未更新视为调度器疑似故
 BOARD_STARTED_AT = time.time()
 
 # REQ_BOARD_FREEZE_TIME（仅测试实例/视觉闸门用，缺省零变化）：冻结「现在」到固定时刻，
-# 值为北京时间字符串 YYYY-MM-DD HH:MM:SS（与 now_str / _ts_ms 的 +08:00 口径一致，不随本机时区漂移）。
+# 值为存储时区字符串 YYYY-MM-DD HH:MM:SS（与 now_str / _ts_ms 共用 REQ_BOARD_TZ）。
 # 设置后：now_str()、server_now、心跳 age 等进页面的服务端「现在」均取该时刻；首页另注入一段内联脚本
 # 把浏览器 Date.now()/new Date() 钉到同一时刻（计时器/角标渲染逐次一致）。非法值直接拒绝启动——
 # 静默回落真实时钟会让视觉基线悄悄失去确定性。
@@ -74,8 +74,7 @@ FREEZE_TIME_STR = (os.environ.get("REQ_BOARD_FREEZE_TIME") or "").strip() or Non
 FREEZE_TS = None  # 冻结时刻的 epoch 秒；None = 未冻结（走真实时钟）
 if FREEZE_TIME_STR:
     try:
-        FREEZE_TS = datetime.strptime(FREEZE_TIME_STR, '%Y-%m-%d %H:%M:%S').replace(
-            tzinfo=timezone(timedelta(hours=8))).timestamp()
+        FREEZE_TS = parse_storage_time(FREEZE_TIME_STR).timestamp()
     except ValueError:
         raise SystemExit(f"REQ_BOARD_FREEZE_TIME 非法: {FREEZE_TIME_STR!r}（需为 YYYY-MM-DD HH:MM:SS）")
 

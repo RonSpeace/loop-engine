@@ -101,7 +101,8 @@ def _reqchat_active(req_id):
 def _reqchat_create(req_id):
     """新建对话占位行（created）。"""
     with resolve("get_db")() as conn:
-        cur = conn.execute("INSERT INTO req_chats (req_id, status) VALUES (?, 'created')", (req_id,))
+        cur = conn.execute("INSERT INTO req_chats (req_id, status, created_at, updated_at) VALUES (?, 'created', ?, ?)",
+                           (req_id, resolve("now_str")(), resolve("now_str")()))
         conn.commit()
     return cur.lastrowid
 

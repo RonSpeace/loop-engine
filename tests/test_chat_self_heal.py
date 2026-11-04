@@ -159,7 +159,9 @@ class ChatSelfHealTest(unittest.TestCase):
         chat_id = self._insert(status="idle")
         resp, code = b._start_chat_round(chat_id, "你好", event=("user", "你好"))
         self.assertEqual(code, 202)
-        self.assertTrue(self._wait(lambda: self._status(chat_id) == "idle" and chat_id in self.sessions))
+        # 恢复桩先登记 idle，会话线程随后才提交 prompt；等待真实消息证据，避免调度竞态。
+        self.assertTrue(self._wait(lambda: self._status(chat_id) == "idle"
+                                   and chat_id in self.sessions and self.sessions[chat_id].prompts))
         # 用旧 session_id 恢复，而非新建
         self.assertEqual(self.boot_calls[-1]["resume_session_id"], "old-session")
         # 用户消息确实送达 kimi（首轮会拼系统提示词）

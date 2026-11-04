@@ -56,7 +56,7 @@
 | POST | `/api/dispatcher/restart` | #421 网页端「疑似卡死 → 重启调度器」入口：`{req_id, agent_session_id, confirm: true}`——服务端按红态口径复核（会话属该需求且 `status='running'`、`turn_step='llm'`、心跳与事件流最近活性证据均静默 >180s，四心跳全 NULL 或 `confirm` 非 true 一律拒绝），通过后写一条 system 事件留痕 → 重启调度器（来源标记 `web`）→ 返回 `{restarted, label, health, heartbeat_updated, detail}`；守卫不通过 400、会话不存在/不属该需求 404、重启失败 502。重启执行按模式分流（#8）：launchd = `launchctl kickstart -k`；`REQ_BOARD_SUPERVISOR=run_local` = 心跳 pid 三重校验（缺 pid/进程死/末 token 非 dispatcher.py 一律 fail-closed）→ 写标记 → SIGTERM → 等心跳 `boot_at` 变化（execv 同 PID，`label=run_local`），写标记失败或超时 502。**有意不做**「有运行中 agent 即拒」预检（卡死现场本就有活进程）；已知代价：其它运行中会话被中断、卡死进程可能残留为孤儿进程（人工 `ps -axo pid,ppid,command` 定位 ppid≈1 后 kill，agent 不自行 kill） |
 | GET | `/api/artifacts` | 各需求阶段主产物元数据 `{req_id: [{role, filename, short, path, exists, mtime, source}]}`（role 顺序由 `flows.json` 角色配置派生，含 `diff`=diff.patch；short 恒为 `project/req-<id>/<文件名>`；`path` 为命中根绝对路径（悬停 title），`exists`=磁盘存在，`source`=current/legacy/缺失 null；#53 候选顺序 = 当前根 → legacy 根），供卡片会话信息栏产物行渲染，前端不自行拼路径；`exists=false` 时前端显示「产物缺失（路径不存在）」 |
 | GET | `/api/requirements/<id>/artifacts/<filename>` | 只读产物内容：`.md`/`.svg` 按文本返回、图片二进制返回；仅限当前产物根或 legacy 产物根内（DB 查 project + 文件名白名单正则 + 逐候选根 resolve/双 is_relative_to + 扩展名白名单防路径穿越），越权/不存在一律 404 |
-| GET | `/api/requirements/<id>/events?after=<事件id>` | 查询执行过程事件（after 做增量拉取；#421 起每行附 `ts_ms`=按 +08:00 解析的 epoch 毫秒，前端统一用「服务端基准 − ts_ms」算事件 age，不依赖浏览器时区/时钟） |
+| GET | `/api/requirements/<id>/events?after=<事件id>` | 查询执行过程事件（after 做增量拉取；#421 起每行附 `ts_ms`=按存储时区解析的 epoch 毫秒，前端统一用「服务端基准 − ts_ms」算事件 age，不依赖浏览器时区/时钟） |
 | POST | `/api/requirements/<id>/events` | 追加执行过程事件 `{events: [{kind, content}]}`，kind: message/tool/system/user（user=人工续跑消息） |
 | GET | `/api/stream?req=<需求id>&session=<会话sid>` | #416 页面事件流（SSE，poke-only）：`data:` 帧 `{topic: init/proc/sessions/chat/reqchat, ...}` 通知「有变更」，前端收到后仍走既有 GET 增量接口拉取渲染；`req` 决定 proc/reqchat 的订阅过滤，`session` 当前不参与过滤（#418 起收口为「URL 形态保留、服务端忽略」，订阅只记 req）；每 15s `: ping` 心跳注释行；客户端断开后由 fd 级探测（`select`+`MSG_PEEK`，不写流）在 ≤0.3s 内释放槽位（#417；探测节拍 `_SSE_PROBE_SEC=0.25s`），15s 心跳与既有降级语义不变；`503` = 服务端开关关闭（`REQ_BOARD_SSE=0`）或连接数超上限 16，前端据此降级为 1 秒轮询 |
 | GET | `/api/sse-stats` | #417 SSE 订阅状态只读快照（验收/排障，不占槽、不写 DB、无鉴权同全站约定）：`{enabled, subs, max, heartbeat_sec, probe_sec, seq, opened, released, rejected, released_by_probe, subs_by_req}`；计数为进程内累计（重启清零） |
@@ -112,3 +112,9 @@
 | `board_modules/blueprints/assistant.py` | `/api/assistant/*` |
 | `board_modules/blueprints/sessions.py` | `/api/sessions*`、`/api/agent-sessions*`、`/api/manual-commands*`、`/api/requirements/<id>/sessions*` |
 | `board_modules/blueprints/meta.py` | `/api/meta`、`/api/dispatcher-health`、`/api/dispatcher/restart`、`/api/artifacts*`、`/api/stream`、`/api/sse-stats`、`/`、`/guide` |
+
+### 时间约定
+
+`REQ_BOARD_TZ` 是看板、调度器及运维脚本共同的存储时区，接受 IANA 名（如 `Asia/Shanghai`、`America/New_York`）或固定偏移（如 `+08:00`、`-05:30`）；空值/未设置使用机器本地时区（按目标日期处理夏令时），非法值拒绝启动。数据库仍存 `YYYY-MM-DD HH:MM:SS`；执行过程、调度回放、建卡聊天和需求对话事件附 `ts_ms`，浏览器用 epoch 毫秒计算时间，不按浏览器时区解释服务端字符串。冻结时间 `REQ_BOARD_FREEZE_TIME` 也按该配置解释。
+
+已有数据库没有时区信息，迁移到不同时区机器时应显式保留原存储时区（中国历史安装设置 `REQ_BOARD_TZ=Asia/Shanghai`）；修改配置不会重写历史数据。夏令时回拨的重复墙钟时间无法由旧格式区分，需避免歧义时使用固定偏移或 UTC。配置必须在看板、调度器和脚本间保持一致，变更后由运维重启看板及调度器；代码合并后按现有调度器流程自动重启对应进程。

@@ -8,7 +8,7 @@ import json
 import os
 import time
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from storage_time import format_storage_time, parse_storage_time
 from pathlib import Path
 
 from flask import request
@@ -16,25 +16,22 @@ from flask import request
 from board_modules.runtime import resolve
 
 
-BEIJING_TZ = timezone(timedelta(hours=8))
-
 def _now_ts():
     """服务端「现在」的 epoch 秒：冻结时钟开启时返回固定时刻，否则 time.time()。"""
     return resolve("FREEZE_TS") if resolve("FREEZE_TS") is not None else time.time()
 
 def now_str():
-    """本地时间字符串（北京时间），与 SQLite CURRENT_TIMESTAMP 格式一致"""
+    """按存储时区生成时间字符串，与 SQLite CURRENT_TIMESTAMP 格式一致"""
     if resolve("FREEZE_TIME_STR"):
         return resolve("FREEZE_TIME_STR")
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return format_storage_time()
 
 def _ts_ms(ts):
-    """本地时间字符串（now_str 格式）→ epoch 毫秒；缺失/解析失败返回 None"""
+    """存储时区字符串（now_str 格式）→ epoch 毫秒；缺失/解析失败返回 None"""
     if not ts:
         return None
     try:
-        return int(datetime.strptime(str(ts)[:19], '%Y-%m-%d %H:%M:%S')
-                   .replace(tzinfo=BEIJING_TZ).timestamp() * 1000)
+        return int(parse_storage_time(ts).timestamp() * 1000)
     except Exception:
         return None
 

@@ -39,7 +39,8 @@ import board as b  # noqa: E402
 
 SEED_SCRIPT = REPO / "scripts" / "seed_test_db.py"
 FREEZE = "2026-01-15 10:30:00"
-FREEZE_TS = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone(timedelta(hours=8))).timestamp()
+from storage_time import parse_storage_time
+FREEZE_TS = parse_storage_time(FREEZE).timestamp()
 
 
 def _clean_env(**extra):
