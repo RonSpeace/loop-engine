@@ -148,6 +148,9 @@ class FeishuChatE2E(unittest.TestCase):
         b.ARTIFACTS_ROOT = cls.tmp / "artifacts"
         b.init_db()
         cls._patches = [
+            # 看板侧项目校验读 board.PROJECT_PATHS（源自本机 projects.json）——钉住测试项目，
+            # 不依赖开发者本机是否恰好注册了 loop-engine
+            mock.patch.object(b, "PROJECT_PATHS", dict(b.PROJECT_PATHS, **{"loop-engine": [str(REPO)]})),
             mock.patch.object(b, "ACPSession", FakeSession),
             mock.patch.object(b, "CreateRequirementMcpServer", FakeCreateServer),
         ]

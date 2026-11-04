@@ -46,7 +46,7 @@ class L0ReconcileStartup(unittest.TestCase):
     """L0 单测：mock 副作用，校验退回补 phase 事件 / pending 保护 / 看板不可达降级"""
 
     # 本类会替换的 dispatcher 模块属性，tearDown 统一恢复（防污染同进程后续测试）
-    _MUTATED = ("state", "PROJECTS", "get_doing_reqs", "set_status",
+    _MUTATED = ("state", "PROJECTS", "get_doing_reqs", "get_open_reqs", "set_status",
                 "post_dispatcher_event", "log")
 
     def setUp(self):
@@ -58,6 +58,8 @@ class L0ReconcileStartup(unittest.TestCase):
         self.posted = []    # post_dispatcher_event 调用记录 (req_id, content, kwargs)
         d.set_status = lambda rid, st: self.patched.append((rid, st))
         d.post_dispatcher_event = lambda rid, content, **kw: self.posted.append((rid, content, kw))
+        # open 扫描同样走看板 HTTP：不钉住就会真连 127.0.0.1:8899（本机恰好开着看板时才通过）
+        d.get_open_reqs = lambda project: []
 
     def tearDown(self):
         for name, val in self._orig.items():

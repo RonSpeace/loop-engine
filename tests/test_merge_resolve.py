@@ -98,7 +98,11 @@ class MergeResolveApprovalTest(unittest.TestCase):
         self.art.mkdir()
         self.wt = self.tmp / "wt"
         self.wt.mkdir()
-        self.main_ws = Path(tempfile.mkdtemp(prefix="req396-main-"))
+        # 主工作区不能落在 /tmp 下：/tmp 本身就在写白名单里（Linux 的 mkdtemp 默认就是 /tmp，
+        # macOS 是 /var/folders，所以此前只在 macOS 上成立）。真实主工作区也从不在临时目录里。
+        ws_parent = Path.home() / ".cache" / "loop-engine-tests"
+        ws_parent.mkdir(parents=True, exist_ok=True)
+        self.main_ws = Path(tempfile.mkdtemp(prefix="req396-main-", dir=ws_parent))
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

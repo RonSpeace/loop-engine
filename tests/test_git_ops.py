@@ -90,6 +90,7 @@ class GitEnvTest(GitOpsBase):
 
     def test_token_askpass_exists_during_and_removed_after(self):
         g.save_credential("proj", kind="token", username="u", password="p@ss word")
+        ambient = os.environ.get("GIT_ASKPASS")   # IDE/终端可能本来就设了，断言的是「不泄漏」而非「不存在」
         with g.git_env("proj") as env:
             ask = env["GIT_ASKPASS"]
             self.assertTrue(Path(ask).is_file())
@@ -98,7 +99,7 @@ class GitEnvTest(GitOpsBase):
             self.assertNotIn("p@ss word", Path(ask).read_text(encoding="utf-8"))
             d = Path(ask).parent
         self.assertFalse(d.exists())
-        self.assertNotIn("GIT_ASKPASS", os.environ)
+        self.assertEqual(os.environ.get("GIT_ASKPASS"), ambient)
 
     def test_ssh_env_uses_key(self):
         key = self.tmp / "id_ed25519"

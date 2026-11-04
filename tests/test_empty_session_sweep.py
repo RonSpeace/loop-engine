@@ -7,6 +7,7 @@
 运行（worktree 内，用 main 工作区的 .venv）：
     .venv/bin/python -m unittest tests.test_empty_session_sweep -v
 """
+import contextlib
 import json
 import shutil
 import sys
@@ -161,30 +162,25 @@ class StartupWiringTest(unittest.TestCase):
 
     def test_startup_purge_unlimited_age(self):
         calls = []
-        with mock.patch.object(d, "load_state"), \
-             mock.patch.object(d, "_verify_pending_restart"), \
-             mock.patch.object(d, "_mount_file_logger"), \
-             mock.patch.object(d, "write_heartbeat"), \
-             mock.patch.object(d, "register_shutdown_handlers"), \
-             mock.patch.object(d, "report_previous_exit"), \
-             mock.patch.object(d, "reconcile_ghost_pending"), \
-             mock.patch.object(d, "backfill_flow_snapshots"), \
-             mock.patch.object(d, "reconcile_adopt_results"), \
-             mock.patch.object(d, "reconcile_startup"), \
-             mock.patch.object(d, "reconcile_orphan_sessions"), \
-             mock.patch.object(d, "cleanup_stale_worktrees"), \
-             mock.patch.object(d, "recover_manual_commands",
-                               side_effect=lambda: calls.append("recover")), \
-             mock.patch.object(d, "cleanup_orphan_held"), \
-             mock.patch.object(d, "sweep_empty_sessions",
-                               side_effect=lambda max_age_sec=None: calls.append(
-                                   ("sweep", max_age_sec))), \
-             mock.patch.object(d.threading, "Thread"), \
-             mock.patch.object(d, "NO_FEISHU", True), \
-             mock.patch.multiple(d, init_feishu=mock.DEFAULT,
-                                 HEARTBEAT_FILE=Path(tempfile.mkdtemp(prefix="sweep-hb-")) / "hb.json"), \
-             mock.patch.object(d, "_main_loop_tick", side_effect=KeyboardInterrupt), \
-             mock.patch.object(d.time, "sleep"):
+        # 21 个补丁写成单个 with 会超过 CPython 静态嵌套块上限（20），整个文件无法编译——用 ExitStack
+        with contextlib.ExitStack() as stack:
+            for name in ("load_state", "_verify_pending_restart", "_mount_file_logger", "write_heartbeat",
+                         "register_shutdown_handlers", "report_previous_exit", "reconcile_ghost_pending",
+                         "backfill_flow_snapshots", "reconcile_adopt_results", "reconcile_startup",
+                         "reconcile_orphan_sessions", "cleanup_stale_worktrees", "cleanup_orphan_held"):
+                stack.enter_context(mock.patch.object(d, name))
+            stack.enter_context(mock.patch.object(d, "recover_manual_commands",
+                                                  side_effect=lambda: calls.append("recover")))
+            stack.enter_context(mock.patch.object(
+                d, "sweep_empty_sessions",
+                side_effect=lambda max_age_sec=None: calls.append(("sweep", max_age_sec))))
+            stack.enter_context(mock.patch.object(d.threading, "Thread"))
+            stack.enter_context(mock.patch.object(d, "NO_FEISHU", True))
+            stack.enter_context(mock.patch.multiple(
+                d, init_feishu=mock.DEFAULT,
+                HEARTBEAT_FILE=Path(tempfile.mkdtemp(prefix="sweep-hb-")) / "hb.json"))
+            stack.enter_context(mock.patch.object(d, "_main_loop_tick", side_effect=KeyboardInterrupt))
+            stack.enter_context(mock.patch.object(d.time, "sleep"))
             with self.assertRaises(KeyboardInterrupt):
                 d.main()
         self.assertEqual(calls, ["recover", ("sweep", None)])
