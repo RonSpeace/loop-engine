@@ -697,6 +697,10 @@ class Browser:
                 "--mute-audio", "about:blank"]
         if "headless-shell" not in os.path.basename(self.chrome):
             args.insert(1, "--headless=new")
+        # CI 容器/新版 Ubuntu（AppArmor 限制非特权 user namespace）里 Chrome 沙箱起不来会立即 abort（exit -6）。
+        # 只渲染本地测试页，CI 下关闭沙箱；本机默认保留沙箱，VISUAL_GATE_NO_SANDBOX=1 可显式关闭
+        if os.environ.get("CI") or os.environ.get("VISUAL_GATE_NO_SANDBOX"):
+            args.insert(1, "--no-sandbox")
         try:
             self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError as e:

@@ -167,11 +167,11 @@ class SweepIntervalTest(StaleWorktreeBase):
     """主循环巡检节流（_maybe_sweep_stale_worktrees）"""
 
     def tearDown(self):
-        d._last_stale_wt_sweep = 0.0
+        d._last_stale_wt_sweep = None
         super().tearDown()
 
     def test_sweep_throttled_by_interval(self):
-        d._last_stale_wt_sweep = 0.0
+        d._last_stale_wt_sweep = None
         with mock.patch.object(d, "cleanup_stale_worktrees") as sweep, \
              mock.patch.object(d.time, "monotonic", return_value=1000.0):
             d._maybe_sweep_stale_worktrees()          # 首轮：距上次 1000s > 间隔
@@ -180,7 +180,7 @@ class SweepIntervalTest(StaleWorktreeBase):
             sweep.assert_called_once()
 
     def test_sweep_runs_again_after_interval(self):
-        d._last_stale_wt_sweep = 0.0
+        d._last_stale_wt_sweep = None
         with mock.patch.object(d, "cleanup_stale_worktrees") as sweep, \
              mock.patch.object(d.time, "monotonic", return_value=1000.0):
             d._maybe_sweep_stale_worktrees()

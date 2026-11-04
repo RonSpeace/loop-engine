@@ -744,7 +744,7 @@ class Delivery(RouterBase):
         d.feishu = fake_feishu()
         d.FEISHU_CHAT_IDLE_SEC = 86400
         d.FEISHU_IDLE_SWEEP_INTERVAL = 300
-        d._last_feishu_idle_sweep = 0.0
+        d._last_feishu_idle_sweep = None
         d.state["feishu_chats"]["oc_a"] = active_sess(session_id=1)
         d._feishu_expire_idle_chats()
         self.assertEqual(board.closed, [1])              # 仅第一条
@@ -755,7 +755,7 @@ class Delivery(RouterBase):
         self.assertEqual(board.closed, [])
         # IDLE_SEC=0 → 整体跳过
         d.FEISHU_CHAT_IDLE_SEC = 0
-        d._last_feishu_idle_sweep = 0.0
+        d._last_feishu_idle_sweep = None
         d._feishu_expire_idle_chats()
         self.assertEqual(board.closed, [])
 

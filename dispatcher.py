@@ -2861,13 +2861,13 @@ def cleanup_stale_worktrees():
 
 # 残留 worktree 巡检间隔（秒）：只在到点的 tick 真查（有 git 开销），默认 5 分钟
 STALE_WORKTREE_INTERVAL = int(os.environ.get("REQ_BOARD_STALE_WT_SEC", "300"))
-_last_stale_wt_sweep = 0.0
+_last_stale_wt_sweep = None  # None = 尚未巡检；不能用 0.0：monotonic 从开机起算，开机不足一个周期时首轮会被误判为「刚巡检过」
 
 def _maybe_sweep_stale_worktrees():
     """主循环低频巡检（#428）：人工收尾不触发调度器 done 路径，靠定期对账回收残留。"""
     global _last_stale_wt_sweep
     now = time.monotonic()
-    if now - _last_stale_wt_sweep < STALE_WORKTREE_INTERVAL:
+    if _last_stale_wt_sweep is not None and now - _last_stale_wt_sweep < STALE_WORKTREE_INTERVAL:
         return
     _last_stale_wt_sweep = now
     cleanup_stale_worktrees()
@@ -2876,7 +2876,7 @@ def _maybe_sweep_stale_worktrees():
 # 巡检间隔秒。删除闸门在看板 DELETE 端点（有未消费人工命令/真实会话一律 409），调度器只做候选筛选。
 EMPTY_SESSION_TTL_SEC = int(os.environ.get("REQ_BOARD_EMPTY_SESSION_TTL_SEC", "86400"))
 EMPTY_SESSION_SWEEP_INTERVAL = int(os.environ.get("REQ_BOARD_EMPTY_SESSION_SWEEP_SEC", "1800"))
-_last_empty_session_sweep = 0.0
+_last_empty_session_sweep = None  # None = 尚未巡检；不能用 0.0：monotonic 从开机起算，开机不足一个周期时首轮会被误判为「刚巡检过」
 
 def sweep_empty_sessions(max_age_sec=None):
     """#431 清理空会话注册行（候选筛选后逐个经看板 DELETE 端点删除，服务端可拒）。
@@ -2922,7 +2922,7 @@ def _maybe_sweep_empty_sessions():
     if EMPTY_SESSION_TTL_SEC <= 0:
         return
     now = time.monotonic()
-    if now - _last_empty_session_sweep < EMPTY_SESSION_SWEEP_INTERVAL:
+    if _last_empty_session_sweep is not None and now - _last_empty_session_sweep < EMPTY_SESSION_SWEEP_INTERVAL:
         return
     _last_empty_session_sweep = now
     sweep_empty_sessions(max_age_sec=EMPTY_SESSION_TTL_SEC)
@@ -4641,7 +4641,7 @@ def start_feishu_ws(app_id, app_secret):
 # → 项目解析（未定则追问）→ 素材按句柄延迟下载 → 等会话 idle → /prompt → 轮询轮次结束 → 文本发回飞书。
 # 本地状态 state["feishu_chats"][chat_id] 只存文本与下载句柄，素材字节永不落盘/常驻。
 
-_last_feishu_idle_sweep = 0.0
+_last_feishu_idle_sweep = None  # None = 尚未巡检；不能用 0.0：monotonic 从开机起算，开机不足一个周期时首轮会被误判为「刚巡检过」
 # 建卡指令（整行归一化全等，非包含/前缀；无活跃建卡会话时等同普通文本）
 FEISHU_CMD_END = "结束建卡"
 FEISHU_CMD_NEW = "新建建卡"
@@ -5899,7 +5899,7 @@ def _feishu_expire_idle_chats():
     if feishu is None or FEISHU_CHAT_IDLE_SEC <= 0:
         return
     now = time.monotonic()
-    if now - _last_feishu_idle_sweep < FEISHU_IDLE_SWEEP_INTERVAL:
+    if _last_feishu_idle_sweep is not None and now - _last_feishu_idle_sweep < FEISHU_IDLE_SWEEP_INTERVAL:
         return
     _last_feishu_idle_sweep = now
     try:

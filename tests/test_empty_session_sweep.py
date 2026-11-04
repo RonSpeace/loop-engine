@@ -44,7 +44,7 @@ class SweepUnitTest(unittest.TestCase):
         self._orig_ttl = d.EMPTY_SESSION_TTL_SEC
         self._orig_interval = d.EMPTY_SESSION_SWEEP_INTERVAL
         self._orig_last = d._last_empty_session_sweep
-        d._last_empty_session_sweep = 0.0
+        d._last_empty_session_sweep = None
 
     def tearDown(self):
         d.EMPTY_SESSION_TTL_SEC = self._orig_ttl
