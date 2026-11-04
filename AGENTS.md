@@ -7,7 +7,7 @@
 ## 架构概览
 
 - 后端 Flask + SQLite，看板入口 `board.py`（后端共享层在 `board_modules/`，前端页面在 `templates/board.html`，CSS/JS 在 `static/board.css`、`static/board.js`），只监听 `127.0.0.1:8899`，无鉴权。
-- 调度器 `dispatcher.py` 作为 ACP 客户端驱动 `kimi acp` 子进程；`acp_shared.py` 是会话、只读工具、角色能力的共享层。
+- 调度器 `dispatcher.py` 作为 ACP 客户端驱动 agent 子进程（默认 `kimi acp`，运行体注册表 `acp_shared.AGENT_RUNTIMES`）；`acp_shared.py` 是会话、角色能力的共享层，审批策略与只读工具拆在 `acp_modules/`（`limits` / `command_policy` / `readonly_tools`），名字经 `acp_shared` 显式回挂——测试替换实现要改定义所在模块。
 - 流程是配置：`flows.json`（前置环节 + 流程节点 + 角色展示/模型/技能）+ `prompts/*.md`；项目清单 `projects.json`（本地数据，不进 git）。
 - 两个进程都由 launchd 托管（plist 模板在 `plists/*.plist.tmpl`，`scripts/install-launchd.sh` 按本机路径渲染到 `~/Library/LaunchAgents/`；入口 `scripts/launchd-run.sh`，日志在 `~/Library/Logs/req-board/`）。
 - 表结构见 [docs/data-model.md](docs/data-model.md)，REST 端点见 [docs/api.md](docs/api.md)，调度细节见 [docs/dispatcher.md](docs/dispatcher.md)，项目清单与提示词三层见 [docs/project-manifest.md](docs/project-manifest.md)。

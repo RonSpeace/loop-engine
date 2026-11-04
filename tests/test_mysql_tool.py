@@ -22,6 +22,9 @@ sys.path.insert(0, str(REPO))
 
 import board as b  # noqa: E402
 import acp_shared as a  # noqa: E402
+# _mysql_connector 定义在拆分后的 acp_modules.readonly_tools（tool_mysql_query 按定义模块的全局名查找），
+# 替换驱动须改这里，改 acp_shared 上的回挂名不生效
+import acp_modules.readonly_tools as rt  # noqa: E402
 
 
 class FakeCur:
@@ -134,8 +137,8 @@ class MysqlToolTest(unittest.TestCase):
     def test_mysql_query_readonly_flow(self):
         conn = FakeConn()
         fake = FakeMysql(conn=conn)
-        old = a._mysql_connector
-        a._mysql_connector = lambda: fake
+        old = rt._mysql_connector
+        rt._mysql_connector = lambda: fake
         server = self._server({"env_file": str(self.env)})
         try:
             out = server.tool_mysql_query({"sql": "SELECT id, name FROM t LIMIT 2"})
@@ -150,13 +153,13 @@ class MysqlToolTest(unittest.TestCase):
             self.assertTrue(conn.rolled)
             self.assertTrue(conn.closed)
         finally:
-            a._mysql_connector = old
+            rt._mysql_connector = old
             server.close()
 
     def test_mysql_error_redacts_password(self):
         fake = FakeMysql(error=RuntimeError("access denied for supersecret"))
-        old = a._mysql_connector
-        a._mysql_connector = lambda: fake
+        old = rt._mysql_connector
+        rt._mysql_connector = lambda: fake
         server = self._server({"env_file": str(self.env)})
         try:
             with self.assertRaises(ValueError) as ctx:
@@ -165,7 +168,7 @@ class MysqlToolTest(unittest.TestCase):
             self.assertNotIn("supersecret", msg)
             self.assertIn("***", msg)
         finally:
-            a._mysql_connector = old
+            rt._mysql_connector = old
             server.close()
 
     def test_project_mysql_env_default_and_override(self):
