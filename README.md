@@ -72,6 +72,7 @@ flowchart LR
 - Per-role and per-project model selection with a 4-level fallback chain; works with any provider your agent runtime supports
 - Live session view: tool calls, thoughts, diffs, token usage, cost and rejection stats per project
 - Human-in-the-loop by design: `need_confirm` questions answered from the board (or Feishu/Lark IM, optional)
+- Notifications to Slack, any webhook (HMAC-signed JSON) or Feishu when a card needs you, finishes or fails
 - Multi-project: one board, many repositories, parallel agents per project
 - English and Chinese UI (follows your browser language; toggle in the header)
 

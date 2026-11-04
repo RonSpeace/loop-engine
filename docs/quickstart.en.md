@@ -163,7 +163,7 @@ turns Feishu off automatically when `lark-oapi` is not installed or no credentia
 1. On the Feishu open platform, create a custom app, enable the bot capability and choose **long connection (WebSocket)**
    for event subscription (no public URL needed).
 2. Request permissions to send and receive direct messages (`im:message` and related), then publish a version.
-3. On the board, open Settings → Feishu bot, enter the App ID / App Secret and save (written to `feishu.json` at the repo root).
+3. On the board, open Settings → Notifications, and in the Feishu bot section enter the App ID / App Secret and save (written to `feishu.json` at the repo root).
 4. Restart the dispatcher (it reads credentials only at start-up), then send the bot a direct message to open the conversation.
 
 ## 4. Prepare a project

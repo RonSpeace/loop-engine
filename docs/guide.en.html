@@ -327,7 +327,7 @@ Not doing it: any unfinished card ──▶ Dropped dropped</pre>
         <ul>
             <li><b>Overview</b>: read-only view of flows, roles, runtime environment and tools.</li>
             <li><b>Models</b>: edits the <code>config.toml</code> read by the kimi runtime (in the harness home, <code>~/.kimi-code-deepseek</code> by default): providers, API keys, model aliases and the default model. Changes are validated before saving; nothing is written if validation fails.</li>
-            <li><b>Feishu bot</b>: App ID / App Secret, a connectivity test, and the assistant ability switches. Restart the dispatcher after changing credentials.</li>
+            <li><b>Notifications</b>: the Feishu bot (App ID / App Secret, connectivity test, assistant capability switches; restart the dispatcher after changing credentials), plus outbound Webhook and Slack notifications (enable, send a test, choose events; saved changes apply immediately).</li>
         </ul>
         <h3>Per-project model tuning (right end of the project bar)</h3>
         <p>Pick a model per project and role. Saved changes apply from the next card on, with no restart. A role's model is the first value found in this order:</p>
