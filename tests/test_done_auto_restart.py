@@ -244,7 +244,7 @@ class VerifyPendingRestartTest(unittest.TestCase):
         d.state["pending_restart"] = {"99": {"at": 1000.0, "attempts": 1}}
         self._run({"last_poll_at": 3000.0, "last_shutdown": {"at": 2000.0, "signal": "SIGTERM", "source": "auto"}})
         self.assertEqual(d.state.get("pending_restart"), {})
-        ok_text = "调度器已自动重启，调度器模块（dispatcher.py / acp_shared.py）改动已生效"  # #423 触发面扩到 acp_shared.py
+        ok_text = d.DISPATCHER_AUTO_RESTART_OK
         self.assertTrue(any(ok_text in s for _, s in self.summaries))
         self.assertTrue(any(k == "merge" and ok_text in c for _, k, c in self.events))
         # 心跳标记透出到看板角标「自动重启成功」

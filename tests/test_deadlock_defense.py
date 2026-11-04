@@ -450,25 +450,32 @@ class StaticScanTest(DeadlockBase):
     """T15：save_state 调用点不得处于 with state_lock: 块内（S1 同类回归防线）"""
 
     def test_no_save_state_inside_state_lock(self):
-        src = Path(d.__file__).read_text(encoding="utf-8")
-        tree = ast.parse(src)
+        from tests._dispatcher_src import dispatcher_source_files
+
+        def named(expr, name):
+            # 拆分后 dispatcher_modules/ 经 D.<name> 晚绑定引用，两种写法都要认
+            return ((isinstance(expr, ast.Name) and expr.id == name)
+                    or (isinstance(expr, ast.Attribute) and expr.attr == name
+                        and isinstance(expr.value, ast.Name) and expr.value.id == "D"))
+
         offenders = []
-        for node in ast.walk(tree):
+        nodes = []
+        for path in dispatcher_source_files():
+            nodes += [(path.name, n) for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))]
+        self.assertGreater(sum(1 for _, n in nodes if isinstance(n, ast.With)), 5, "扫描到的 with 块偏少，疑似解析异常")
+        for fname, node in nodes:
             if not isinstance(node, ast.With):
                 continue
             holds_state_lock = any(
-                (isinstance(it.context_expr, ast.Name) and it.context_expr.id == "state_lock")
-                or (isinstance(it.context_expr, ast.Call)
-                    and isinstance(it.context_expr.func, ast.Name)
-                    and it.context_expr.func.id == "state_lock")
+                named(it.context_expr, "state_lock")
+                or (isinstance(it.context_expr, ast.Call) and named(it.context_expr.func, "state_lock"))
                 for it in node.items
             )
             if not holds_state_lock:
                 continue
             for sub in ast.walk(node):
-                if (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
-                        and sub.func.id == "save_state"):
-                    offenders.append(node.lineno)
+                if isinstance(sub, ast.Call) and named(sub.func, "save_state"):
+                    offenders.append(f"{fname}:{node.lineno}")
         self.assertEqual(offenders, [],
                          f"save_state 出现在 with state_lock: 块内（行 {offenders}）——"
                          f"同 #410 S1 死锁形态，禁止锁内调 save_state")

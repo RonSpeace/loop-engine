@@ -7,7 +7,7 @@
 ## 架构概览
 
 - 后端 Flask + SQLite，看板入口 `board.py`（后端共享层在 `board_modules/`，前端页面在 `templates/board.html`，CSS 在 `static/board.css`；JS 源码分片在 `static/board/*.js`，由 `scripts/build_board_js.py` 拼成实际加载的 `static/board.js`——改分片后必须重新生成），只监听 `127.0.0.1:8899`，无鉴权。
-- 调度器 `dispatcher.py` 作为 ACP 客户端驱动 agent 子进程（默认 `kimi acp`，运行体注册表 `acp_shared.AGENT_RUNTIMES`）；`acp_shared.py` 是会话、角色能力的共享层，审批策略与只读工具拆在 `acp_modules/`（`limits` / `command_policy` / `readonly_tools`），名字经 `acp_shared` 显式回挂——测试替换实现要改定义所在模块。
+- 调度器 `dispatcher.py` 只留配置、状态与主循环，各功能段拆在 `dispatcher_modules/`（经 `runtime.D` 晚绑定读写 dispatcher 上的状态与可补丁名，测试照旧改写 `dispatcher.X`；契约见 `tests/test_dispatcher_split_contract.py`）。调度器作为 ACP 客户端驱动 agent 子进程（默认 `kimi acp`，运行体注册表 `acp_shared.AGENT_RUNTIMES`）；`acp_shared.py` 是会话、角色能力的共享层，审批策略与只读工具拆在 `acp_modules/`（`limits` / `command_policy` / `readonly_tools`），名字经 `acp_shared` 显式回挂——测试替换实现要改定义所在模块。
 - 流程是配置：`flows.json`（前置环节 + 流程节点 + 角色展示/模型/技能）+ `prompts/*.md`；项目清单 `projects.json`（本地数据，不进 git）。
 - 两个进程都由 launchd 托管（plist 模板在 `plists/*.plist.tmpl`，`scripts/install-launchd.sh` 按本机路径渲染到 `~/Library/LaunchAgents/`；入口 `scripts/launchd-run.sh`，日志在 `~/Library/Logs/req-board/`）。
 - 表结构见 [docs/data-model.md](docs/data-model.md)，REST 端点见 [docs/api.md](docs/api.md)，调度细节见 [docs/dispatcher.md](docs/dispatcher.md)，项目清单与提示词三层见 [docs/project-manifest.md](docs/project-manifest.md)。
@@ -49,7 +49,7 @@
 - **时间感知**：单次运行默认上限 240 分钟，需求 notes 可写 `timeout: <分钟>` 覆盖（15~480）。用 `date` 关注耗时，约剩 5 分钟时先 commit 当前进度（dev）再写 `result.json` 保底。失败原因（超时、进程异常、非法 JSON、预算截停等）会注入重试会话，先读原因自查再继续。
 - **会话预算**：每轮工具调用步数有硬上限（dev 1000，accept 和 code_review 500，merge_resolve 200，其余 400，可在 projects.json 的 `budgets` 调），到上限会被截停并只给一轮限步收尾，接近上限前先写保底结果。
 - **流程**：前置环节（需求分析）产出 `suggested_flow` 与 `repos`；内置三条流程 quick（dev → 收尾，仅限文案/配置类极小改动，改到 `.loop/project.json` 声明的高风险路径会自动升级为 standard）、standard（dev → code_review → accept）、heavy（tech → tech_review → dev → code_review → accept）；没有合法推荐时兜底走 `default_flow` = heavy。需求 notes 可写 `repos: <仓库目录名, 逗号分隔>` 覆盖分析识别的仓库清单。退役一条流程前先冻结引用它的历史卡 `flow_name`。评审第 1–3 次打回自动重做（第 3 次时若项目配了 `escalation_model` 先升级作者模型），第 4 次转人工。projects.json 的 `external_roles`（如 `["tech"]`）声明由外部主 Agent 负责的角色：流程走到或打回到这些角色时调度器不拉会话、只把卡停成暂缓，外部写好产物后把卡指向下一节点并改回待开发即可继续。
-- **生效方式必须写明**：涉及长驻进程的改动，在建卡 notes、分析/方案的证据清单、dev 完成总结里显式写是否需重启、重启对象、谁触发；无法确定写「待方案确认」。`board.py`（含 `board_modules/`）合并后由调度器自动重启；`dispatcher.py`/`acp_shared.py` 合并后调度器自动重启自身；改 `flows.json`、`prompts/` 无热加载，需重启两个进程（`./start.sh` 与 `scripts/dispatcher-restart.sh <pid> config-change`）。人工在 main 工作区改 `board.py` 后必须 `./start.sh` 并 curl 验证 200；改了 `plists/` 后跑一次 `scripts/install-launchd.sh`；重启调度器走脚本，裸 `kill` 仅应急。
+- **生效方式必须写明**：涉及长驻进程的改动，在建卡 notes、分析/方案的证据清单、dev 完成总结里显式写是否需重启、重启对象、谁触发；无法确定写「待方案确认」。`board.py`（含 `board_modules/`）合并后由调度器自动重启；`dispatcher.py`/`acp_shared.py`（含 `dispatcher_modules/`、`acp_modules/`、`notifiers/`）合并后调度器自动重启自身；改 `flows.json`、`prompts/` 无热加载，需重启两个进程（`./start.sh` 与 `scripts/dispatcher-restart.sh <pid> config-change`）。人工在 main 工作区改 `board.py` 后必须 `./start.sh` 并 curl 验证 200；改了 `plists/` 后跑一次 `scripts/install-launchd.sh`；重启调度器走脚本，裸 `kill` 仅应急。
 - **模型与思考档位**：角色模型走四层兜底链（projects.json 项目级 → flows.json 角色级 → 环境变量 → 全局）；思考档位统一模型默认（不请求、不配置、不展示）。
 - **飞书**：need_confirm 推送后回复 `y <编号>` 同意、`n <编号> <原因>` 否决。改动 `on_message` 的 y/n 处理逻辑时，必须同步更新 [docs/guide.html](docs/guide.html) 的「飞书回复与状态流转」表。
 - **本机环境**：仓库在 `~/Documents` 下，launchd 进程要读它须给 `/bin/bash` 授予「完全磁盘访问权限」；看板访问日志默认关闭，排查请求时用 `REQ_BOARD_ACCESS_LOG=1 ./start.sh`。

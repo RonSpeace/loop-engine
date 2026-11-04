@@ -47,7 +47,10 @@
   },
   "high_risk_paths": [
     "dispatcher.py",
+    "dispatcher_modules/",
     "acp_shared.py",
+    "acp_modules/",
+    "notifiers/",
     "board.py",
     "board_modules/",
     "templates/",

@@ -20,6 +20,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from tests import _baseline  # noqa: E402
+from tests._dispatcher_src import dispatcher_source  # noqa: E402
 
 _baseline.pin()
 
@@ -55,7 +56,7 @@ class PromptVerificationRuleTest(unittest.TestCase):
 
     def test_t3_resume_prompt_confirm_step(self):
         """续跑 prompt 补确认步骤：源码含「先确认改动完好、无残留 result.json」"""
-        src = Path(d.__file__).read_text(encoding="utf-8")
+        src = dispatcher_source()
         self.assertIn("先确认改动完好（git status 等）、产物目录无残留 result.json", src)
 
     def test_t4_agents_md_verification_section(self):

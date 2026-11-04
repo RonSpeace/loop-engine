@@ -77,6 +77,18 @@ class DispatcherSplitContract(unittest.TestCase):
                 problems.append(f"{path.name}: {name} 应从 dispatcher_modules.runtime 导入")
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_split_packages_trigger_self_restart(self):
+        """调度器进程加载的拆分包改动合并后必须触发自动重启（只认 dispatcher.py 会让拆出的代码静默不生效）。"""
+        sys.path.insert(0, str(REPO))
+        from tests import _baseline  # noqa: F401  确保 projects.json 存在
+        import dispatcher as d
+        for path in _modules() + [PKG / "runtime.py"]:
+            self.assertTrue(d.is_restart_trigger(path.relative_to(REPO).as_posix()), path)
+        for rel in ("acp_modules/limits.py", "notifiers/slack.py", "dispatcher.py", "acp_shared.py"):
+            self.assertTrue(d.is_restart_trigger(rel), rel)
+        for rel in ("static/board.js", "docs/dispatcher.md", "board_modules/db.py"):
+            self.assertFalse(d.is_restart_trigger(rel), rel)
+
     def test_main_entry_shares_module_object(self):
         src = (REPO / "dispatcher.py").read_text(encoding="utf-8")
         self.assertIn('sys.modules.setdefault("dispatcher", sys.modules[__name__])', src)

@@ -35,6 +35,14 @@ scripts/test_instance.sh stop 8931
 - [ ] Schema changes are migrations (`ALTER TABLE`), never drop-and-recreate
 - [ ] No personal data, real project names, credentials or absolute machine paths in code, tests or docs
 
+## Dispatcher source layout
+
+`dispatcher.py` keeps configuration, state and the main loop; each feature lives in `dispatcher_modules/`.
+Inside that package, read and write dispatcher state through `D.<name>` (`from dispatcher_modules.runtime import D`),
+never `global` — tests patch names on the `dispatcher` module and the split code must see the patch.
+`tests/test_dispatcher_split_contract.py` enforces this; if you add a test that patches a new name, run
+`.venv/bin/python scripts/dispatcher_patch_names.py` to refresh the fixture.
+
 ## Frontend source layout
 
 The board's script is split into `static/board/*.js` (loaded as one file). Edit the parts, then run

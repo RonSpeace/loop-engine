@@ -30,6 +30,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from tests import _baseline  # noqa: E402
+from tests._dispatcher_src import dispatcher_source  # noqa: E402
 from tests._frontend_src import backend_text, frontend_css, frontend_js  # noqa: E402
 
 _baseline.pin()
@@ -167,7 +168,7 @@ class StartNoThinkingRequestTest(unittest.TestCase):
 class DispatcherWiringTest(unittest.TestCase):
 
     def test_a6_no_thinking_channel_in_dispatcher(self):
-        src = Path(REPO / "dispatcher.py").read_text(encoding="utf-8")
+        src = dispatcher_source()
         self.assertNotIn("role_thinking", src)
         self.assertNotIn("post_thinking_events", src)
         self.assertNotIn('kind="thinking"', src)

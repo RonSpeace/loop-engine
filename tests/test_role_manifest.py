@@ -27,6 +27,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from tests import _baseline  # noqa: E402
+from tests._dispatcher_src import dispatcher_source  # noqa: E402
 from tests._frontend_src import frontend_src  # noqa: E402
 
 _baseline.pin()
@@ -295,7 +296,7 @@ class AddRoleDemoTest(unittest.TestCase):
 
     def test_dispatcher_reads_via_manifest(self):
         """锁定收编事实：dispatcher 的能力判断一律经 role_capability（不再硬编码角色字符串路由）"""
-        src = (REPO / "dispatcher.py").read_text()
+        src = dispatcher_source()
         self.assertIn("role_capability(role, \"readonly\")", src)        # run_agent 构造参数
         self.assertIn("role_capability(role, \"tapd_readonly\")", src)   # TAPD 前缀注入
         # #419：收尾校验门槛改由节点类型驱动（code → 代码变更 / artifact·review → 产物非空），
