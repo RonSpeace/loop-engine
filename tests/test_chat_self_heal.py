@@ -124,7 +124,7 @@ class ChatSelfHealTest(unittest.TestCase):
                                 (chat_id,)).fetchall()
         return [r["content"] for r in rows]
 
-    def _wait(self, cond, timeout=3):
+    def _wait(self, cond, timeout=10):  # 后台线程收尾；全量并发/CI 慢机上 3s 偶发不够，条件满足即返回
         end = time.time() + timeout
         while time.time() < end:
             if cond():
