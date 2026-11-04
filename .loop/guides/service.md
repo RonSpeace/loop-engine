@@ -1,0 +1,3 @@
+- 长驻进程：看板 board.py（launchd 服务 local.req-board）；调度器 dispatcher.py + acp_shared.py（launchd 服务 local.automation.req-board-dispatcher）。
+- 生效方式：board.py 改动合并后由调度器自动重启看板；dispatcher.py / acp_shared.py 改动合并后由调度器登记自动重启自身；flows.json 与 prompts/ 无热加载，改后需重启两个进程（看板 ./start.sh、调度器 scripts/dispatcher-restart.sh <pid> config-change），由人执行，写进「上线操作」与 todos。
+- 被测对象是 prompts/配置、launchd 单例或调度器自身时，测试实例拉不起被测进程，验收按降级出口处理。

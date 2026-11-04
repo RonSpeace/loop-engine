@@ -1,0 +1,7 @@
+- 实例脚本：scripts/test_instance.sh start|stop|status <端口>；worktree 内没有 .venv，以 REQ_BOARD_PYTHON 指向主工作区 .venv/bin/python。
+- 端口：dev 段 8902-8941、accept 段 8942-8981，段基址 + 需求 id 取模；避开 main 实例 8899 与脚本默认 8901。启动前先 scripts/test_instance.sh status <端口> 探测，被占用则顺延到本段内下一个空闲端口（同项目并行上限 3；脚本 start 会先停同端口实例，同端口会互杀其它会话正在跑的实例）。
+- ./start.sh 重启的是 main 实例，开发/验收会话禁止运行。
+- 实例清理只用 scripts/test_instance.sh stop <端口>（PID 文件 + 精确 PID/后代清理）。
+- 跑测试用主工作区 .venv/bin/python 的绝对路径；全量约 4.5 分钟，前台跑完再下结论；一次传多个测试文件时按字母序。
+- 需要可复现的页面数据时用种子实例：scripts/test_instance.sh start <端口> --seed（隔离数据目录 + 固定数据集 + 冻结时钟，不读真实库；stop 时自动清理）。启动命令不要接管道。
+- 界面/样式改动跑视觉闸门：<主工作区>/.venv/bin/python scripts/visual_gate.py --url http://127.0.0.1:<端口>/ --out <产物目录>/visual（可加 --baseline-url 指向 main 代码起的另一个种子实例做布局/令牌/计算样式对比）；把 visual-report.json 的各闸门结论写进自测/验收报告。浅色皮肤的次要灰字对比度是已知存量问题，报告里注明「存量」即可，不算本次引入。用法见 docs/visual-gate.md。

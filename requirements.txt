@@ -1,0 +1,2 @@
+# Loop Engine 运行依赖（看板 + 调度器）
+flask>=3.0

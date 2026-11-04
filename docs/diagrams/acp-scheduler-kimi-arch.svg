@@ -1,0 +1,243 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1230" viewBox="0 0 2048 1230" font-family="PingFang SC, sans-serif">
+  <defs>
+    <marker id="arS" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#475569"/>
+    </marker>
+    <marker id="arG" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#059669"/>
+    </marker>
+    <marker id="arO" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#ea580c"/>
+    </marker>
+  </defs>
+
+  <rect width="2048" height="1230" fill="#f8fafc"/>
+
+  <!-- ═══ 标题 ═══ -->
+  <text x="60" y="64" font-size="30" font-weight="700" fill="#0f172a">req-board:调度器 / 看板进程 ↔ kimi code 进程 · ACP 通信架构</text>
+  <text x="60" y="96" font-size="15" fill="#64748b">两个进程按 ACP 协议对话:一进一出两条管道,一句话一行(细节来源:acp_shared.py / dispatcher.py / board.py)</text>
+
+  <!-- ═══ 左:调度器/看板进程 ═══ -->
+  <rect x="40" y="140" width="620" height="840" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2"/>
+  <rect x="40" y="140" width="620" height="58" rx="14" fill="#c7d2fe"/>
+  <rect x="40" y="182" width="620" height="16" fill="#c7d2fe"/>
+  <text x="60" y="177" font-size="20" font-weight="700" fill="#312e81">调度器 / 看板进程(对话的另一端 · Python)</text>
+
+  <!-- ① 两种宿主 -->
+  <rect x="60" y="212" width="580" height="170" rx="10" fill="#ffffff" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="76" y="238" font-size="16" font-weight="700" fill="#312e81">① 两种宿主,共用同一个「会话客户端」</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="76" y="262">调度器(常驻后台):轮流查看各项目待办,按规则推进阶段</text>
+    <text x="76" y="283">(分析→方案→技术→开发→验收);每个阶段在独立工作区起一个模型会话</text>
+    <text x="76" y="304">会话过程自动上报:调度器发到看板接口</text>
+    <text x="76" y="330">看板(127.0.0.1:8899):「建卡对话」「需求助手」在进程内直接起模型会话</text>
+    <text x="76" y="351">(不走调度器);过程直接写聊天记录表,页面轮询展示</text>
+  </g>
+
+  <!-- ② 会话客户端核心 -->
+  <rect x="60" y="394" width="580" height="158" rx="10" fill="#ffffff" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="76" y="420" font-size="16" font-weight="700" fill="#312e81">② 「会话客户端」核心:收发与调度</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="76" y="444">每个模型会话拉起一个独立子进程(独立进程组,好管好杀)</text>
+    <text x="76" y="465">发出请求 = 登记后同步等回复;收不到就超时(向管理者报告)</text>
+    <text x="76" y="486">常驻监听线程:把「回复」「汇报」「反向请求」分门别类处理</text>
+    <text x="76" y="507">文字流攒够一小段才上报;工具调用等事件也在这里分发</text>
+    <text x="76" y="528">失败、断线都有兜底记录,不默默吞掉</text>
+  </g>
+
+  <!-- ③ 审批与代办 -->
+  <rect x="60" y="564" width="580" height="140" rx="10" fill="#ffffff" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="76" y="590" font-size="16" font-weight="700" fill="#312e81">③ 审批与代办(全部先审后做)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="76" y="614">自动审批:开发角色全放行(附工作区防护);提交类命令会被拒</text>
+    <text x="76" y="635">只读角色只放行白名单命令;需要人拍板时弹页面确认(是/否)</text>
+    <text x="76" y="656">读写文件由本进程代办:写之前查白名单(内置工具只能事后取消)</text>
+    <text x="76" y="677">命令执行也由本进程起子进程,执行前核对(红线/白名单/防护)</text>
+  </g>
+
+  <!-- ④ 只读工具服务 -->
+  <rect x="60" y="716" width="580" height="168" rx="10" fill="#ffffff" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="76" y="742" font-size="16" font-weight="700" fill="#312e81">④ 只读工具服务(建对话时注入给模型)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="76" y="766">列目录 / 读文件 / 查看板数据库 / 看提交记录 / 搜文本 / 看改动状态</text>
+    <text x="76" y="787">可另配项目数据库的只读查询</text>
+    <text x="76" y="812">建卡工具:给「建卡对话」专用(防重复建卡)</text>
+    <text x="76" y="836">维护工具:改需求 / 写产物文档 / 回评论(仅人工明确授权)</text>
+    <text x="76" y="857">安全校验都在工具本体里,模型拿不到越界数据</text>
+  </g>
+
+  <!-- ⑤ 落地与监管 -->
+  <rect x="60" y="896" width="580" height="72" rx="10" fill="#ffffff" stroke="#a5b4fc" stroke-width="1.5"/>
+  <text x="76" y="921" font-size="15" font-weight="700" fill="#312e81">⑤ 落地与监管</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="76" y="937">调度器:回合结束写结果文件 → 更新需求状态/合并/清理</text>
+    <text x="76" y="955">看板:过程与事件入表;错误日志落盘便于排查</text>
+  </g>
+
+  <!-- ═══ 中:ACP 通道 ═══ -->
+  <g transform="translate(44,0)">
+  <rect x="680" y="140" width="600" height="840" rx="14" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+  <rect x="680" y="140" width="600" height="58" rx="14" fill="#cbd5e1"/>
+  <rect x="680" y="182" width="600" height="16" fill="#cbd5e1"/>
+  <text x="700" y="177" font-size="19" font-weight="700" fill="#1e293b">ACP 通道:进/出两条管道 · 一句话一行</text>
+
+  <!-- 车道① 客户端→服务端 -->
+  <rect x="688" y="212" width="584" height="150" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="702" y="238" font-size="15.5" font-weight="700" fill="#1d4ed8">① 客户端 → 服务端:一问一答(每句都等回应)</text>
+  <g font-size="13" fill="#334155">
+    <text x="702" y="261">先相互认识:声明协议版本和客户端能力(能代读代写文件、能托管执行)</text>
+    <text x="702" y="281">必要时先登录;然后新建或续接对话:告诉对方工作目录,注入只读工具</text>
+    <text x="702" y="301">设置对话:切到「人工审批」模式、固定模型</text>
+    <text x="702" y="321">发送任务消息 = 一个回合;可随时取消当前回合</text>
+    <text x="702" y="341">每句都要等到对方答话才算完;等不到就按超时异常处理</text>
+  </g>
+
+  <!-- 车道② 服务端→客户端 通知 -->
+  <rect x="688" y="374" width="584" height="162" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="702" y="400" font-size="15.5" font-weight="700" fill="#1d4ed8">② 服务端 → 客户端:主动汇报(模型的一举一动)</text>
+  <g font-size="13" fill="#334155">
+    <text x="702" y="423">模型开口说话:文字一段段流出(攒够一小段才转发,防刷屏)</text>
+    <text x="702" y="443">模型要动手:先报「准备使用某个工具」(此时还没有具体参数)</text>
+    <text x="702" y="463">参数随后陆续补上(完整命令会被记下来,供审批时核对——</text>
+    <text x="702" y="483">审批弹窗里的描述文字会被截断,所以必须以这份记录为准)</text>
+    <text x="702" y="503">这些汇报自动转发:调度器发到看板接口;看板自己写进聊天记录</text>
+    <text x="702" y="526">页面上的「执行过程」实时刷新,靠的就是这条单向通知流</text>
+  </g>
+
+  <!-- 车道③ 服务端→客户端 反向请求 -->
+  <rect x="688" y="548" width="584" height="214" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="702" y="574" font-size="15.5" font-weight="700" fill="#1d4ed8">③ 服务端 → 客户端:反向请求(有事相求,必须回应)</text>
+  <g font-size="13" fill="#334155">
+    <text x="702" y="597">请求批准:模型说「要执行这个」→ 按角色自动决定批或拒</text>
+    <text x="702" y="620">读文件/写文件:由本进程代办,写之前按白名单拦截(先审后落地)</text>
+    <text x="702" y="640">跑命令:交给本进程开子进程,执行前核对(红线/白名单/工作区防护)</text>
+    <text x="702" y="663">搜文件/列文件:限制在项目工作区内,不出界</text>
+    <text x="702" y="683">命令输出分段回传:模型每 250ms 来取一次;完成后取退出码</text>
+    <text x="702" y="706">过程没结束可以喊停;进程由本进程整组管理,不留孤儿</text>
+    <text x="702" y="726">新版 kimi 起,这几个能力都走这条通道;客户端没声明支持就不可用</text>
+    <text x="702" y="749">每条请求用一个独立线程应答,不影响主收发循环</text>
+  </g>
+
+  <!-- 车道④ 生命周期 -->
+  <rect x="688" y="774" width="584" height="194" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="702" y="800" font-size="15.5" font-weight="700" fill="#1d4ed8">④ 回合与生命周期</text>
+  <g font-size="13" fill="#334155">
+    <text x="702" y="823">一次任务消息 = 一个回合;模型把动作序列跑完,回合即结束</text>
+    <text x="702" y="842">回合结束 → 调度器写结果文件 → 推进状态/合并工作区/清理</text>
+    <text x="702" y="861">每轮结束顺手关掉模型进程(不长期占用);会话号留到下轮续接</text>
+    <text x="702" y="880">阶段重试:按会话号续上上文(评审关口 = 会话边界)</text>
+    <text x="702" y="899">人工想继续:直接复用原进程,上下文不丢</text>
+    <text x="702" y="918">异常:等不到回应超时 → 杀掉整个进程组;没交结果 → 同会话补一轮</text>
+    <text x="702" y="937">(只补 1 次);重试耗尽 → 标记为异常会话,人可手动接手</text>
+    <text x="702" y="956">收尾:先礼貌退出(发结束信号),5 秒不退再整组强杀</text>
+  </g>
+  </g>
+
+  <!-- 车道方向箭头:左右对称(空带各 64px)。①源=左框目标=车道卡;②③源=右框目标=车道卡,再一段由车道卡指向左框 -->
+  <g stroke="#475569" stroke-width="2.5" fill="none">
+    <line x1="662" y1="287" x2="732" y2="287" marker-end="url(#arS)"/>
+    <line x1="1318" y1="287" x2="1387" y2="287" marker-end="url(#arS)"/>
+    <line x1="730" y1="455" x2="661" y2="455" marker-end="url(#arS)"/>
+    <line x1="1387" y1="455" x2="1318" y2="455" marker-end="url(#arS)"/>
+    <line x1="730" y1="655" x2="661" y2="655" stroke-dasharray="6 4" marker-end="url(#arS)"/>
+    <line x1="1387" y1="655" x2="1318" y2="655" stroke-dasharray="6 4" marker-end="url(#arS)"/>
+  </g>
+
+  <!-- ═══ 右:kimi code 进程 ═══ -->
+  <g transform="translate(128,0)">
+  <rect x="1260" y="140" width="620" height="840" rx="14" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="2"/>
+  <rect x="1260" y="140" width="620" height="58" rx="14" fill="#ddd6fe"/>
+  <rect x="1260" y="182" width="620" height="16" fill="#ddd6fe"/>
+  <text x="1280" y="177" font-size="20" font-weight="700" fill="#4c1d95">kimi code 进程(模型 · 对话的另一端)</text>
+
+  <!-- ① 启动器 -->
+  <rect x="1280" y="212" width="580" height="114" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1296" y="238" font-size="16" font-weight="700" fill="#4c1d95">① 启动器(独立进程名 + 独立配置)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="258">用独立进程名启动(可辨认,防止维护时误杀)</text>
+    <text x="1296" y="277">真正的模型进程是它的子进程,输入输出直连</text>
+    <text x="1296" y="296">独立配置目录:模型指向 DeepSeek 视觉版</text>
+    <text x="1296" y="315">其余配置(外部工具、技能、插件)与主配置共享</text>
+  </g>
+
+  <!-- ② 模型会话服务 -->
+  <rect x="1280" y="336" width="580" height="134" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1296" y="362" font-size="16" font-weight="700" fill="#4c1d95">② 模型会话服务:上下文 + 本轮驱动</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="386">会话状态、工具调度都在本地进程;一条任务消息驱动一个完整回合</text>
+    <text x="1296" y="407">自带工具:读写改文件、查文件、搜文件、网页搜索、等待、任务清单…</text>
+    <text x="1296" y="428">命令/搜索/文件枚举这三个重活委托客户端执行(新版 kimi 起)</text>
+    <text x="1296" y="449">写改类工具有「自动放行」策略,客户端靠事件到达即取消兜底</text>
+  </g>
+
+  <!-- ③ 外部工具客户端 -->
+  <rect x="1280" y="482" width="580" height="94" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1296" y="508" font-size="16" font-weight="700" fill="#4c1d95">③ 外部工具客户端(工具的另一来源)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="528">只读工具(本地小服务,建对话时注入):列目录/读文件/查库/看提交…</text>
+    <text x="1296" y="546">外部工单工具(经共享配置接入;只放只读功能)</text>
+    <text x="1296" y="564">说明:模型侧没有「客户端注册工具」的协议,只接受远程地址形式的工具</text>
+  </g>
+
+  <!-- ④ 模型推理 -->
+  <rect x="1280" y="584" width="580" height="120" rx="10" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5" stroke-dasharray="7 4"/>
+  <text x="1296" y="610" font-size="16" font-weight="700" fill="#c2410c">④ 模型推理:在云端(不在本地进程)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="630">走通用接口 → api.deepseek.com(默认 DeepSeek 视觉版)</text>
+    <text x="1296" y="649">本地只组织会话上下文和调度工具;推理请求发往云端</text>
+    <text x="1296" y="668">模型在会话级锁定,不依赖全局配置</text>
+    <text x="1296" y="687">(全局配置会在升级时被重置,锁定是为了行为可控)</text>
+  </g>
+
+  <!-- ⑤ 硬约束 -->
+  <rect x="1280" y="716" width="580" height="112" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1296" y="742" font-size="16" font-weight="700" fill="#4c1d95">⑤ 提示词内硬约束(调度器注入)</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="762">不准自己再起模型会话 · 严禁误杀模型进程/本程序</text>
+    <text x="1296" y="780">写完结果文件就收工;只读场景双保险:提示词约束+人工审批模式</text>
+    <text x="1296" y="798">兜底:请求超时由客户端杀进程组</text>
+    <text x="1296" y="816">报错信息记录到日志文件(/tmp/req_board_agent_&lt;id&gt;.log)</text>
+  </g>
+
+  <!-- ⑥ 会话标识与续跑 -->
+  <rect x="1280" y="838" width="580" height="130" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1296" y="864" font-size="15" font-weight="700" fill="#4c1d95">⑥ 会话标识与续跑</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="1296" y="888">会话号(会话的身份证)= 续接的钥匙:调度器登记表和看板对话共用</text>
+    <text x="1296" y="909">阶段完成会采集:上下文用量、模型版本、分支 → 存档</text>
+    <text x="1296" y="930">异常/空会话也登记;人工接手 = 新建会话或按号续接</text>
+    <text x="1296" y="951">看板退出时清理残留的模型进程(防孤儿)</text>
+  </g>
+
+  </g>
+
+  <!-- ═══ MCP 工具调用连接(绿) ═══ -->
+  <path d="M1698 980 V1002 L360 1002 V980" fill="none" stroke="#059669" stroke-width="2.5" marker-end="url(#arG)"/>
+  <text x="1024" y="1032" font-size="14" fill="#047857" text-anchor="middle">工具调用(本机小服务)— 模型作为工具客户端连接,只读工具在调度器进程内校验后返回</text>
+
+  <!-- ═══ 图例(与主图实际样式一一对应) ═══ -->
+  <g font-size="14" fill="#334155">
+    <line x1="60" y1="1060" x2="110" y2="1060" stroke="#475569" stroke-width="2.5" marker-end="url(#arS)"/>
+    <text x="120" y="1065">一问一答 / 主动汇报(车道 ①②)</text>
+    <line x1="480" y1="1060" x2="530" y2="1060" stroke="#475569" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#arS)"/>
+    <text x="540" y="1065">反向请求(车道 ③)</text>
+    <line x1="800" y1="1060" x2="850" y2="1060" stroke="#059669" stroke-width="2.5" marker-end="url(#arG)"/>
+    <text x="860" y="1065">工具调用(本机服务)</text>
+    <text x="1120" y="1065" fill="#64748b">注:所有消息都是文本行、一行一条;读管道由单线程顺序处理</text>
+  </g>
+
+  <!-- ═══ 底部:三种消息区分 ═══ -->
+  <rect x="40" y="1094" width="1968" height="112" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="60" y="1122" font-size="15.5" font-weight="700" fill="#1e293b">三种消息怎么区分?</text>
+  <g font-size="13.5" fill="#334155">
+    <text x="60" y="1148" font-size="14.5" font-weight="700" fill="#1d4ed8">「回复」= 你问,它答</text>
+    <text x="60" y="1172">有编号、没有「事相求」——就是答在等的那个请求</text>
+    <text x="60" y="1193">对应车道①;答完,等待方继续往下走</text>
+    <text x="740" y="1148" font-size="14.5" font-weight="700" fill="#1d4ed8">「汇报」= 它说,你听</text>
+    <text x="740" y="1172">没编号、单向——模型边干边说,记下转发即可</text>
+    <text x="740" y="1193">对应车道②;不打断任何流程</text>
+    <text x="1420" y="1148" font-size="14.5" font-weight="700" fill="#1d4ed8">「反向请求」= 它求,你办</text>
+    <text x="1420" y="1172">有编号、带着「事相求」——必须应答后它才继续</text>
+    <text x="1420" y="1193">对应车道③(批准 / 代读写 / 托管命令)</text>
+  </g>
+</svg>

@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>需求看板操作指南</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #fafafa;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --text: #111827;
+            --text-2: #6b7280;
+            --text-3: #9ca3af;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --code-bg: #f3f4f6;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.7;
+            margin: 0;
+            padding: 32px 16px 64px;
+        }
+        .page {
+            max-width: 1280px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px 36px 40px;
+        }
+        h1 { font-size: 22px; margin: 0 0 6px; }
+        .subtitle { color: var(--text-2); font-size: 13px; margin: 0 0 28px; }
+        h2 {
+            font-size: 17px;
+            margin: 36px 0 12px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+        h2:first-of-type { border-top: none; margin-top: 0; }
+        p { margin: 8px 0; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back-link { display: inline-block; margin-bottom: 20px; font-size: 13px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 8px;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: var(--code-bg);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        /* 流程表（board.py 注入，table.flows）「状态」列（第 4 列）：不折行 + 给定宽度，
+           「已启用」不被两侧长文本挤成两行 */
+        .flows th:nth-child(4), .flows td:nth-child(4) { width: 76px; white-space: nowrap; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: var(--code-bg);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 12.5px;
+        }
+        ul, ol { margin: 8px 0 8px 20px; padding: 0; }
+        li { margin: 4px 0; }
+        .note {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin: 12px 0;
+            font-size: 13px;
+            color: #1e40af;
+        }
+        .warn {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin: 12px 0;
+            font-size: 13px;
+            color: #92400e;
+        }
+        /* 页内 tab：操作指南 / 架构与调度流程图 / Prompt 配置指引 */
+        .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 20px; overflow-x: auto; }
+        .tab-btn {
+            font: inherit; font-size: 14px; color: var(--text-2);
+            background: none; border: none; border-bottom: 2px solid transparent;
+            padding: 8px 16px; margin-bottom: -1px; cursor: pointer; flex-shrink: 0;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+        .tab-btn:focus-visible, .sub-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .tab-pane[hidden] { display: none; }
+        .sub-tabs { display: flex; gap: 8px; margin: 0 0 12px; }
+        .sub-btn {
+            font: inherit; font-size: 13px; color: var(--text-2); background: var(--code-bg);
+            border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer;
+        }
+        .sub-btn[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+        .diagram-frame {
+            width: 100%; height: calc(100vh - 230px); min-height: 560px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+        }
+        .prompt-nav { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 16px 0 24px; }
+        .prompt-guide code { overflow-wrap: anywhere; }
+        .prompt-guide pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; line-height: 1.6; }
+        .prompt-guide pre code { padding: 0; overflow-wrap: normal; }
+        .prompt-guide details { margin: 14px 0; }
+        .prompt-guide summary { cursor: pointer; font-weight: 600; }
+        .prompt-guide .table-scroll { overflow-x: auto; }
+        .prompt-guide table { min-width: 640px; }
+        @media (max-width: 720px) {
+            .page { padding: 20px 16px 32px; }
+            th, td { padding: 6px 8px; }
+            .tabs { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <a class="back-link" href="/">← 返回需求看板</a>
+        <h1>需求看板操作指南</h1>
+        <p class="subtitle">req-board（<a href="http://127.0.0.1:8899" target="_blank" rel="noopener"><code>http://127.0.0.1:8899</code></a>）使用说明 · 本机工具 · 无鉴权</p>
+
+        <div class="tabs" role="tablist" aria-label="指南内容">
+            <button class="tab-btn" id="tab-guide" role="tab" aria-selected="true" aria-controls="pane-guide" type="button">操作指南</button>
+            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">架构与调度流程图</button>
+            <button class="tab-btn" id="tab-prompts" role="tab" aria-selected="false" aria-controls="pane-prompts" type="button">Prompt 配置指引</button>
+        </div>
+
+        <div class="tab-pane" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide">
+        <h2 id="urls">一、项目地址速查</h2>
+        <p>下表登记看板已接入项目（<code>projects.json</code> 的键）的访问地址，忘记时先来这里查。本地地址来源：<code>projects.json</code> 的 <code>restart.verify</code> 或各项目 README/启动脚本；生产（线上）地址来源：各项目部署文档，未登记的项目填「—」。</p>
+        <table>
+            <tr><th>项目</th><th>本地地址</th><th>生产 / 线上地址</th><th>说明 / 来源</th></tr>
+            <tr><td><code>loop-engine</code></td><td><a href="http://127.0.0.1:8899" target="_blank" rel="noopener"><code>http://127.0.0.1:8899</code></a></td><td>—</td><td>本看板自身（launchd <code>local.req-board</code>，或 <code>scripts/run_local.sh</code> 前台直跑；两种形态端口都是 8899），仅本机可用</td></tr>
+        </table>
+        <div class="note">本表由人工维护，新增项目时按同一格式补一行（如 <code>my-app</code> / <code>api-server</code>）。</div>
+
+        <h2 id="status">二、状态含义</h2>
+        <table>
+            <tr><th>状态</th><th>名称</th><th>含义</th></tr>
+            <tr><td><code>later</code></td><td>暂缓</td><td>只记录、不开发，调度器不捞取；人工改回 open 后恢复自动调度</td></tr>
+            <tr><td><code>open</code></td><td>待开发</td><td>调度器唯一自动捞取的状态，静置满约 1 分钟后按卡上流程快照的当前节点拉起对应角色（未入流程 → 前置环节角色）</td></tr>
+            <tr><td><code>doing</code></td><td>进行中</td><td>有 agent 正在跑；等待你确认（need_confirm）或流程收尾（terminal，不拉起 agent）时也停留在此</td></tr>
+            <tr><td><code>done</code></td><td>已完成</td><td>完成态，记录完成时间；doing/done 禁止删除</td></tr>
+            <tr><td><code>dropped</code></td><td>已废弃</td><td>终态，方案废弃，可删除</td></tr>
+        </table>
+        <div class="note">
+            历史值 <code>route</code>（通道待确认）与 <code>review</code>（评审中）为 #419 前的人工中间态：现已不再产生，仅历史状态日志保留中文回放；过渡窗口写入的原值由调度器启动回填统一转换（route 卡转 open 重走前置环节，review 卡按已通过推进）。
+        </div>
+
+        <h2 id="flow">三、飞书回复与状态流转</h2>
+        <p>#419 起人工介入只剩「需要确认」（need_confirm）一条通道——通道确认与人工评审两个中间态已取消（新流程不再产生；过渡窗口照存的历史 <code>route</code>/<code>review</code> 待办仍保留消费分支，仅兼容不再新增），回复 y/n 后的变化如下：</p>
+        <table>
+            <tr><th>确认节点</th><th>触发时机</th><th>回复前状态</th><th>回复 y 后</th><th>回复 n 后</th></tr>
+            <tr>
+                <td>需要确认<br><code>need_confirm</code></td>
+                <td>任意节点 agent 提问（带倾向建议）；评审节点连续 3 轮未通过仍自动打回，第 4 轮仍未通过转人工裁决（附各轮打回要点）；<code>confirm</code> 项目或识别到清单外仓库时确认推荐流程</td>
+                <td>doing</td>
+                <td>保持 doing，恢复原会话继续跑，你写的文字作为答复注入给 agent，并追加一行「人工答复（问题：…）：…」到开发总结留档（该字段会进 agent 上下文，会话重开/重试后的新 agent 也能看到这条澄清，不会重复追问）；评审超限场景 = 放行进入下一节点；流程确认场景 = 采纳推荐流程并继续推进</td>
+                <td>退回 open，原因写入 summary；约 1 分钟后按卡上流程快照的当前节点重跑（原因进历史）；评审超限场景 = 打回前驱节点再修一轮；流程确认场景 = 转人工处理（置 later）</td>
+            </tr>
+            <tr>
+                <td>自动合并冲突<br><code>merge_conflict</code></td>
+                <td>流程收尾（terminal）合并分支冲突，merge_resolve 自动解决未成/耗尽</td>
+                <td>doing（待处理）</td>
+                <td>重试合并：成功→done；仍冲突→保持 doing 继续等待</td>
+                <td>置 later（暂缓），dev 分支与 worktree 保留，改由人工接管</td>
+            </tr>
+            <tr>
+                <td>自动合并冲突（网页端）<br><code>merge_conflict</code></td>
+                <td>同上一行；网页端按钮（见下）</td>
+                <td>doing（待处理）</td>
+                <td>「重试合并」= 飞书 y 同效：成功→done；仍冲突→保持 doing，按钮重置等待再次点击</td>
+                <td>「人工接管」= 飞书 n 同效：置 later（暂缓），dev 分支与 worktree 保留</td>
+            </tr>
+            <tr>
+                <td>代码审查发现问题<br><code>verdict: "reject"</code>（#419 自动打回）</td>
+                <td>合并前的只读 diff 审查（<code>review</code> 节点）报 <code>verdict: "reject"</code>：<b>自动打回上游开发节点复修，不转人工</b>；同一评审节点前 3 轮未通过都自动打回（第 3 轮时若项目配了 <code>escalation_model</code> 先升级作者模型），第 4 轮仍未通过才转 <code>need_confirm</code> 人工裁决</td>
+                <td>doing（自动复修中）</td>
+                <td>（自动）打回后开发节点修复，评审转 pass 即进入流程收尾 → done；人工裁决时 y = 放行进入下一节点</td>
+                <td>（自动）打回即退开发复修（注入审查意见）；人工裁决时 n &lt;原因&gt; = 打回前驱节点再修一轮。历史 <code>review_gate</code> 条目（#419 起不再写入）保留旧三档语义：y=确认仍合并 / <code>n &lt;编号&gt; 转开发</code>=退开发复修 / 普通 n=否决合并转暂缓</td>
+            </tr>
+            <tr>
+                <td>收尾校验豁免<br><code>need_confirm</code>（confirm_override）</td>
+                <td>agent 报 done 但收尾校验不通过（无代码变更/缺产物等），且 result.json 带 <code>waive_gate</code> 申报豁免（#399，如实现已人工提交 main）</td>
+                <td>doing（待处理，未合并）</td>
+                <td>豁免完成：summary 红字「机制校验未过，人工确认豁免」留档后直接收口 → done</td>
+                <td>退回 open（按卡上快照的当前节点重跑）；原因以 <code>later</code> 开头则置 later（暂缓），dev 分支与 worktree 保留</td>
+            </tr>
+            <tr>
+                <td>网页端确认按钮<br><code>confirmations</code>（#400）</td>
+                <td>任一待确认卡在网页端渲染的动作按钮（confirm_override「豁免完成/退回待开发/置暂缓」、超限态「停止追问转暂缓」；合并冲突另有「重试合并 / 人工接管」按钮见上）。历史 <code>review_gate</code> 条目（#419 起不再写入）的三档动作 <code>pass/rework/reject</code> 仅在过渡窗口内保留消费，看板前端不渲染这组按钮</td>
+                <td>doing（待处理）</td>
+                <td>与飞书 y 等效：点击即由调度器执行（同状态/通知/留痕），按钮转「已提交待处理」，最长 15s 内生效；「停止追问转暂缓」为网页新增明示出口（飞书无对等指令）</td>
+                <td>与飞书 n 等效（含 later 前缀语义）；对话类选项点击 = 预填右栏聊天框（可编辑后发送，人工输入恒对话类不触发机制动作）</td>
+            </tr>
+        </table>
+        <div class="note">
+            <b>回复编号与条目内容不一致（#27）</b>：待确认条目的键与内容应同源；万一不一致（键指向的卡与问题实际所属的卡不同），调度器<b>不执行任何状态变更</b>——回复会被拒绝，条目按内容归属归位（目标编号已有待确认项时保留原键、累计到第 3 次清条目转人工），并给你一条说明「回复编号 #X 与待确认条目内容不一致（内容属需求 #Y）」。收到这类提示时请按<b>内容所属的编号</b>重新回复；条目内容所属卡已 done/dropped 时该条目直接清理，需按提示人工处理。
+        </div>
+        <p><b>#22 起「飞书多轮聊天建卡」相关回复</b>（与上面 need_confirm 的 y/n 通道并存，优先级低于 y/n）：<b>存在活跃建卡会话时</b>，飞书私聊机器人可多轮对话建卡——未给项目时机器人追问并列出项目名清单，选定后进入建卡讨论（素材/文档链接随消息交给 agent），确认（回复 <code>确认建卡</code>）后经 <code>create_requirement</code> 建卡（默认 <code>later</code>）。</p>
+        <p><b>#24 起「飞书看板助手」</b>：飞书私聊的普通文本（非 y/n、非素材、非建卡指令，且无活跃建卡会话）由跨项目常驻「看板助手」接管——可用自然语言查<b>项目 / 需求卡 / 服务状态</b>（调度器心跳、运行中会话、待确认项），也可先确认项目再<b>跨项目建卡</b>。回答中的卡号、数字、状态一律来自服务端只读业务工具，查不到会明确说明、不编造。单条消息只跑一次模型，整轮 <b>90 秒</b>超时（超时回固定提示「这轮没查完，重发一次或到网页看。」并取消本轮）。<b>首条消息</b>仍先回一次连接问候，且问候后<b>继续处理本条</b>（#24 修复了原先把首条消息整条吞掉、不入队也不建卡的问题）。<b>#26 起</b>另有几条增强能力，各由一个开关控制、<b>默认关闭</b>（在网页左下角齿轮「设置 → 飞书机器人」标签页的「看板助手能力」分组里开启，保存即生效；<b>#30 起</b>新增第三条「需求卡清单卡片」，<b>#54 起</b>新增第四条「代码拉取与提交」）：<b>①代码只读分析</b>——在被授权范围内读文件、按模式列文件、按内容检索，数据范围是项目清单里的<b>全部项目</b>（跨项目），结论会引用具体文件与行号；<b>②状态变更</b>——仅支持把已建卡从 <b>暂缓改为待开发</b>（约 1 分钟后会被调度器自动纳入开发流程）。<b>③需求卡清单卡片（#30）</b>——说「把 X 项目的卡清单发我」这类清单诉求时，助手以<b>飞书交互卡片</b>发出该项目需求卡清单：每张需求一个独立区块（编号/标题/<b>中文状态</b>/流程/更新时间），超出单条容量自动分多页发送、不丢卡（超出上限会在末页显式提示还剩多少张）。<b>④代码拉取与提交（#54）</b>——必须先指定<b>项目</b>（多仓库项目还要指定仓库）：先回显当前分支与最新提交，再拉取当前分支最新代码；冲突时<b>暂停</b>并列出冲突文件与四个选项（保留我方/保留对方/手动处理/放弃合并），不强制覆盖、不丢本地改动；提交分两步——先预览变更摘要与目标分支，用户确认后的<b>下一轮</b>才真正提交（不 push、不切换分支）。开关关闭时助手会明确回绝（提示去网页开启），不会静默降级或假装完成。</p>
+        <table>
+            <tr><th>指令 / 行为</th><th>匹配与效果</th></tr>
+            <tr><td><code>结束建卡</code></td><td>释放当前活跃建卡会话（调 <code>/api/chat/&lt;id&gt;/close</code>）。<b>匹配规则（整行全等）</b>：文本 <code>strip()</code> 后去首尾中英文标点（<code>，。！？、；：,.!?;:</code> 与引号括号）再<b>全等</b>比较，<b>不做包含/前缀匹配</b>，且<b>仅在存在活跃建卡会话时生效</b>——「那就确认建卡，结束建卡流程」不含整行全等，按普通消息进入建卡讨论。<b>#24</b>：无活跃建卡会话时只回「当前没有进行中的建卡会话」提示，<b>不启动任何会话</b>（原「任意文本都新建单项目建卡会话」的兜底分支已删除）</td></tr>
+            <tr><td><code>新建建卡</code></td><td>先关闭当前会话再清本地状态，下次消息重新走项目追问（匹配规则同上）。<b>#24</b>：这是<b>无活跃建卡会话时唯一能显式回到单项目建卡</b>的入口</td></tr>
+            <tr><td><code>确认建卡</code></td><td><b>用户侧唯一落卡口令</b>：草稿产出后机器人提示「回复『确认建卡』落卡」，收到即调 <code>/api/chat/&lt;id&gt;/confirm</code> 驱动 <code>create_requirement</code> 建卡（status 默认 <code>later</code>，仅明确要求开发时 <code>open</code>），并把建卡结果回发到飞书。尚无草稿时回复它只会收到「还没有草稿」提示（不调 confirm）；已建卡（<code>created</code>）时提示卡号。匹配规则与上面两条相同（整行全等，仅存在活跃建卡会话时生效）；<b>#24</b>：无活跃建卡会话时只回「还没有草稿」提示，不启动任何会话</td></tr>
+            <tr><td>普通文本（无活跃建卡会话）</td><td><b>#24 起进入「看板助手」</b>：非 y/n、非素材、非上述三条指令的任意文本由跨项目看板助手接管（自然语言查项目/卡/服务状态，或确认项目后跨项目建卡）；<b>#26 起</b>另支持只读代码分析（跨项目，引用文件与行号）与状态变更（仅 暂缓 → 待开发），<b>#30 起</b>支持需求卡清单卡片（按项目发交互卡片清单，超长自动分页），<b>#54 起</b>支持按项目拉取最新代码、处理合并冲突与预览后提交（仅限项目清单内项目，不 push、不切换分支）；各能力由网页左下角齿轮「设置 → 飞书机器人」标签页的「看板助手能力」开关控制、默认关闭</td></tr>
+            <tr><td>群聊消息</td><td><b>#22 行为变化 2：群 @ 进看板助手</b>：处理 @机器人 的<b>文本与图文</b>消息（文本剥离 <code>@_user_N</code> 占位符后交给看板助手，回复发回该群）；<b>图文混排</b>（文字+粘贴截图，飞书报文 <code>msg_type=post</code>）按正文+图片一起交给助手，图片作本轮附件（可被识图）；<b>不写</b> <code>state["chat_id"]</code>（私聊通知通道保持唯一）、不问候、不走 y/n 与建卡链路。前提：应用只订阅「群组中@机器人消息」事件（未开 <code>im:message.group_msg</code>）</td></tr>
+            <tr><td>素材与链接</td><td>图片/文档（docx/wiki 链接）随消息交给 agent：素材按句柄延迟下载后落盘，docx 抓正文、wiki 两步解析（仅一层）、普通 <code>http(s)</code> 链接抓正文，失败降级为仅传原链接 + 提示。素材类型限制 = 飞书支持<b>图片/文档白名单</b>（<code>FEISHU_MATERIAL_EXTS</code>），单文件 ≤20MB、单轮 ≤5（超 agent 单文件读取上限 1MB 只提示不阻断）。<b>#44</b>：<b>无活跃旧建卡会话</b>时图片/文件不再新建建卡会话追问项目，而是下载后作为<b>看板助手</b>本轮附件（图片可被识图，文本类正文内联、其余给绝对路径）；只有<b>存在活跃旧建卡会话</b>时素材才照旧进建卡 pending</td></tr>
+        </table>
+        <div class="note">
+            <b>#44 正在输入反馈</b>：飞书没有原生 typing 接口，机器人改用<b>用户消息上的 Typing 表情</b>表示「正在处理」——只对真正入队的看板助手消息、旧建卡文本与素材消息贴，处理完自动撤除（撤回的是自己贴的那一枚）；建卡指令（结束/新建/确认建卡）与 y/n 确认不贴。表情失败只记日志、不影响回复；应用需在飞书开放平台开通 <code>im:message.reactions:write_only</code>（或 <code>im:message</code>），未开通时只是没有表情。贴上/撤回时可能收到「机器人回应了你的消息」提示。
+        </div>
+        <div class="note">
+            <b>#24 消息优先级（从高到低）</b>：非 <code>text/post/file/image</code>（贴纸等）忽略且留日志 → 非私聊群聊：@ 文本/图文（<code>post</code> 的正文与图片一起）/图片 → 看板助手（不写 <code>state["chat_id"]</code>、不问候、不走 y/n 与建卡；图片作本轮附件）→ <code>file/image</code> 素材分支（<b>#44</b>：无活跃旧建卡会话时进看板助手当附件，有则照旧进建卡）→ 首条问候（独立「已问候 chat 集合」，同 chat 只问候一次，问候后<b>继续处理本条</b>）→ 文本 y/n 确认 → 有活跃建卡会话则走旧建卡链路 / 无活跃会话时整行「新建建卡」进旧建卡新建 → 其余普通文本进<b>看板助手</b>。y/n 语义不变（仍是文本最高优先级）；相对 #22 的变化：<b>首条消息不再被吞</b>（问候后照常路由），以及<b>无活跃会话的普通文本改由看板助手接管</b>（不再默认新建单项目建卡会话）。
+        </div>
+        <div class="note">
+            <b>图文消息（<code>msg_type=post</code>）</b>：飞书客户端把「文字 + 粘贴截图」合成一条富文本消息下发，此前不在消息类型白名单内被静默丢弃，表现为「@机器人贴图后没有反应」；现按正文+图片一起进看板助手，图片走素材白名单与 ≤20MB/单轮 ≤5 限制。
+        </div>
+        <div class="note">
+            会让需求变成 <code>later</code> 的回复有：「自动合并冲突」时的 n、「收尾校验豁免」时 n + <code>later</code> 前缀、「需要确认」中的流程推荐否决，以及历史 <code>review_gate</code> 条目（#419 起不再写入）中的普通 n（<code>n &lt;编号&gt; 转开发</code> 除外，改走复修循环）；其余 n 都只是退回 open，过约 1 分钟会被调度器按卡上流程快照的当前节点重新捞起。
+        </div>
+        <div class="note">
+            历史遗留：<code>route</code>/<code>review</code> 两个人工中间态已弃用（新流程不再产生），但过渡窗口照存的历史待办仍保留消费分支——route 卡回复 y = 按建议通道继续推进（建议人工收口则直接完成）/ n = 退回 open 重新分析；review 卡回复 y = 通过并推进下一阶段（accept 阶段直接完成）/ n = 打回重做（原因以「需求级」/「reset」开头则退 open 重来）。仅兼容存量，不再新增。
+        </div>
+
+        <h2 id="format">四、回复格式</h2>
+        <table>
+            <tr><th>意图</th><th>格式</th><th>说明</th></tr>
+            <tr><td>同意/继续</td><td><code>y 116 [原因]</code> 或 <code>同意 116 [原因]</code></td><td>编号前可带 <code>#</code>；原因会带给继续跑的 agent</td></tr>
+            <tr><td>否决/退回</td><td><code>n 116 原因</code> 或 <code>拒绝 116 原因</code></td><td>原因会写入需求 summary 与时间线，建议必填</td></tr>
+            <tr><td>转开发复修（历史通道，仅过渡窗口的旧卡）</td><td><code>n 116 转开发 [原因]</code></td><td>需求保持 doing，原 dev 会话续跑并注入审查反馈（<code>merge_review.md</code>），修复报 done 后重新审查（#411，循环无上限）。#419 起新流程不再产生该待确认条目——评审发现问题由评审 agent 直接报 <code>verdict=reject</code> 自动打回上游开发节点</td></tr>
+        </table>
+        <ul>
+            <li>只识别 <code>y / yes / 同意</code> 和 <code>n / no / 拒绝</code> 开头的回复，其他内容不会触发流转。<code>n</code> 的原因以「转开发」开头时，对代码审查问题（review_gate）触发转开发复修，其余语义不变。</li>
+            <li>编号必须是<b>问题所属卡</b>的编号：条目键与内容不一致时回复会被拒绝且不改动任何卡（见「三、飞书回复与状态流转」末条说明），请按通知里给出的正确编号重发。</li>
+            <li>原因可空，但 n 时写明原因有助于后续 agent 按你的意图重跑。</li>
+            <li>网页端答复同一问题走右栏聊天框：该卡有待答的普通提问时，消息同样留档进开发总结（口径与飞书 y 一致）；机器生成的两类提问（前置流程确认、评审超限裁决）不写这一行。</li>
+            <li>流程由前置环节产出的 <code>suggested_flow</code> 选定，并按卡上流程快照逐节点推进（各流程的节点序列见本指南内按配置渲染的流程 / 角色区块）；仅 <code>confirm</code> 项目或识别到清单外仓库时会转 need_confirm 请你确认推荐流程（y 采纳 / n 转人工）。看板网页端的确认按钮与飞书 y/n 走同一套逻辑，效果一致。</li>
+            <li>自动合并冲突（卡片/详情页 doing 待处理状态的「重试合并 / 人工接管」按钮）同样与飞书 y/n 同效：点「重试合并」后调度器最长 15 秒对账执行（成功→done；仍冲突→提示继续处理、按钮重置）；点「人工接管」置暂缓（分支/worktree 保留）。</li>
+            <li>notes 尽量把背景 / 范围 / <b>验收标准</b>写清：当前流程都不含产品方案节点，需求边界只能靠 notes 表达；<code>standard</code>（标准）流程没有技术设计方案节点（验收标准同样只能靠 notes），开发完过代码审查再进验收；<code>heavy</code>（复杂）流程才有技术方案与方案评审；<code>quick</code>（快速）流程只有开发与自测，没有代码审查和验收，仅限文案/配置类极小改动（改到调度器模块会自动升级为标准流程）。写清验收标准等于给每条流程都补上判据。</li>
+        </ul>
+
+        <h2 id="create">五、聊天建卡</h2>
+        <ol>
+            <li>点击项目名右侧的 <code>+</code>，进入该项目的「聊天建卡」面板（项目已绑定，无需手动选择）；</li>
+            <li>直接对话描述需求，agent 会整理草稿（标题/详情），先预览再确认；</li>
+            <li>可把本机 <b>html 原型</b>作为参考文件交给 agent：<b>粘贴 / 拖拽到输入区 / 点「📎 参考文件」选择</b>三种入口，仅收 <code>.html</code>/<code>.htm</code>，单文件 ≤10MB、单轮 ≤5 个（超出或类型不符在前端直接拦截并提示，不发请求）；已选文件以 chip 展示在输入框上方，可单个移除，发送后清空。发送时把「文件名 + 绝对路径」清单随消息交给 agent，agent 用只读工具 <code>read_file</code> 自行读源码理解结构/样式/交互（<b>不内联正文、不渲染 html</b>；浏览器工具仅 http/https）。</li>
+            <li>参考文件落盘在 <code>~/.req-board/materials/&lt;项目&gt;/chat-&lt;会话id&gt;/</code>（可用 <code>REQ_BOARD_MATERIALS</code> 覆盖，本机数据区）；<b>建卡成功后同一份文件再复制一份</b>到该需求产物目录 <code>~/.req-board/artifacts/&lt;项目&gt;/req-&lt;id&gt;/materials/</code>，路径写进需求卡 notes，供后续分析/开发复用（原上传文件保留不删）。</li>
+            <li>确认后建卡，默认 <code>later</code>（暂缓）状态；若项目已接入自动开发，建 <code>open</code> 会被调度器立即捞走；</li>
+            <li>切换项目不会中断其它项目正在跑的一轮（后台继续跑完），全站最多 3 个项目并行会话；空闲会话切走后自动回收进程，切回可继续；看板重启后会话可一键继续（省配额）。</li>
+        </ol>
+        <div class="note">
+            思考中发送按钮会变为「取消」，点击可中断本轮（会话与草稿保留，之后可继续会话）；创建/恢复会话期间发送按钮暂不可用。
+        </div>
+        <div class="note">
+            状态栏「就绪，可继续对话」后可点击「新建会话」：结束当前会话（有草稿时需二次确认）并自动开启同项目新会话，关闭的会话会收进历史背景框并展示会话信息。
+        </div>
+        <div class="note">
+            若项目在 projects.json 中配置了 <code>mysql</code>，agent 可用 <code>mysql_query</code> 只读查询该项目 MySQL 生产库（连接参数由服务端读取，凭据不会展示在聊天中）。
+        </div>
+
+        <h2 id="assistant">六、需求助手</h2>
+        <ul>
+            <li>每张需求卡片会话信息栏顶部固定一行「需求助手」（任何状态含 <code>later</code>/<code>done</code> 可用），点击在右栏打开独立需求助手视图（头部=需求标题+状态徽标+会话信息，中部=消息流，底部=状态卡片+输入框；详情页不再常驻聊天区）；一张卡一个对话，历史关闭行保留可回看，终态后可新建。</li>
+            <li><strong>底部状态卡片（#430 与 agent 会话同款）</strong>：绿=思考中（本轮执行中，带「已 Ns」计时）/ 灰=可继续对话、自动路径已停止、对话已结束 / 红=对话建立失败 / 蓝=本轮收尾中；整卡可展开三行判定依据（事件流 = 最后事件距今；模型层 = 在途请求与中断来源；判定 = 活着/已停止），计时基准是本轮最后一条用户消息。主按钮恒为「发送」，<b>「取消本轮」/「新建对话」在卡片动作位</b>（失败/已结束可新建；活跃对话发送即续上下文），本轮执行中不显示输入区。需求助手没有调度器的心跳/阶段证据，因此不做判死、不提供「重启调度器」。</li>
+            <li>回合制：发一条消息 → agent 完整跑一轮 → 事件写入 <code>req_chat_events</code>；每轮结束关闭进程（低频维护场景不保持），<code>session_id</code> 保留，下一轮自动 <code>session/resume</code> 续上下文；单轮 10 分钟超时；全站最多 3 个对话并行（超出 429）；board 重启后残留会话标 <code>interrupted</code>，页面可一键「继续」。</li>
+            <li>安全：默认只读（项目目录只读 MCP 工具 + 看板数据读工具）；写仅限 <strong>显式授权</strong> 的工具（未经明确要求不得调用）：<code>create_requirement</code>（建新需求卡：project 强制等于本需求所属项目、status 限 later/open 默认 later、同标题幂等防重复）、<code>update_requirement</code>（title/notes/summary 白名单，<b>#434</b> 起加 status——仅 later/open 两值，置 open 会让调度器立即捞卡开发）、<code>write_artifact</code>（仅本需求产物目录）、<code>post_review</code>（<b>#434</b>：追加一轮评审记录到 <code>req_reviews</code>，只追加不可改删，轮次与署名 reviewer 由服务端填——reviewer 取写入时刻的实时底层模型）、<code>tapd_comment</code>（进程内调 TAPD API 发评论，token 不进 agent 上下文）。</li>
+            <li>文件写白名单（<b>#434</b>）：项目工作目录（<b>#355</b> 合并授权）+ 临时目录（<code>/tmp</code> 与系统 TMPDIR，会话专属子目录 <code>/tmp/req_board_reqchat_&lt;id&gt;/</code>）；其它绝对路径一律拒绝。此前白名单只含工作目录，而审批层/fs 落地层只认产物目录（#107 遗留口径），评审时写 <code>/tmp</code> 探针会被拦并<strong>取消整轮</strong>——三处闸门现已同源（写入边界见<code>acp_shared</code> 的 <code>_in_explicit_write_roots</code>）。</li>
+            <li>git 授权：<code>git add/commit</code> 本地提交 + <strong>合并授权（#355）</strong>：<code>git merge</code>（受限 flag）、<code>git checkout/switch</code>（仅切分支）、<code>git stash</code>/<code>push -m</code>/<code>list</code>/<code>show</code>/<code>pop</code>/<code>apply</code>——均经 Bash 白名单校验（禁 push/reset/rebase/amend/cherry-pick/revert 等）；配套放开项目工作目录（主工作区）内文件写入。合并授权供「需求完成后代码合并冲突由需求助手直接解决」，仅用户明确要求处理合并/冲突时启用。</li>
+            <li>善后工具（#324）：<code>restart_dispatcher</code>（按 launchd label 重启调度器并核对心跳/健康）、按 projects.json <code>restart</code> 配方重启项目服务、白名单范围读日志（<code>/tmp/req_board_dispatcher.log</code>、<code>/tmp/req_board_agent_*.log</code>、日志目录 <code>~/Library/Logs/req-board/</code> 下 <code>req-board*.log</code> 含轮转档）。</li>
+            <li>会话与事件独立于调度器体系（不进 <code>agent_sessions</code> / <code>agent_events</code>），中间栏仅以置顶「需求助手」入口行展示。</li>
+        </ul>
+
+        <h2 id="view">七、产物 / 会话 / 执行过程</h2>
+        <ul>
+            <li>卡片底部「会话信息」展示模型、上下文占比、分支；点击会话 id 可查看完整执行过程。</li>
+            <li><strong>后台 agent 模型（四层兜底链，逐层取首个非空值）</strong>：① <code>projects.json</code> 项目级 <code>models</code> 段（看板「机器人抽屉 —— 模型调参（项目级）」配置，保存后下一张卡生效）→ ② <code>flows.json</code> 的 <code>roles.&lt;id&gt;.model</code>（角色级，空 = 走下一层）→ ③ 环境变量 <code>KIMI_MODEL_&lt;角色大写&gt;</code> → ④ 全局 <code>KIMI_MODEL</code>（缺省 <code>deepseek/v4.1-flash</code>）。层序唯一判定点在 <code>acp_shared.resolve_role_model</code> / <code>role_model_detail</code>，本页「九、内置 agent 定义」的「生效模型」列即按此链渲染——想知道当前某角色实际用的是什么模型、来源是哪一层，看那一列即可，不必翻配置。会话建立时固定模型（不随 kimi 升级漂移）；<b>思考档位统一模型默认</b>（不请求、不配置、不展示）。终端直接运行 kimi 不受影响（走独立的 <code>~/.kimi-code/config.toml</code>）。</li>
+            <li>#273 起会话列表展示全部已建立会话（同一角色可有多条，含中断/毒会话；#390 起中间栏不再展示「可继续」灰块徽标，人工继续入口统一在右栏状态行/聊天框；#431 起 <code>session_id</code> 为空的待接管行不展示，调度器接管回填后自动出现）；点击会话行进入右栏执行过程 + 底部聊天框，发消息默认继续该会话（调度器自动 resume 旧会话或新建真实会话并置为进行中）。状态行「新建聊天」#431 起只进入右栏草稿态（不落库、中间栏零变化，草稿文本按需求 id 存 localStorage，刷新/切走后再点可续写；清空输入框即清草稿），发送第一条消息时才落注册行并开始。</li>
+            <li>「产物」行按<b>流程节点实际产生的产物</b>展示（<code>analysis.md</code> / <code>prd.md</code> / <code>tech.md</code> / <code>self-test.md</code> / <code>accept.md</code>；评审节点为 <code>tech_review.md</code> / <code>code_review.md</code>；另有历史通道闸门时代遗留的 <code>merge_review.md</code> 仍会列出），点击即可查看内容——不同流程走过的节点不同，产物集合也不同（如 <code>standard</code> 流程只有需求分析与验收产物 + 代码审查报告，没有产品方案/技术方案/方案评审产物）。</li>
+            <li>执行过程面板：进行中由 SSE 推送即时刷新（#416：单条 EventSource + poke，回显 &lt;300ms；SSE 关闭/降级时回落 1 秒轮询，原 2 秒），终态后保留可回看。</li>
+            <li>产物目录：<code>~/.req-board/artifacts/&lt;项目&gt;/req-&lt;编号&gt;/</code></li>
+            <li><strong>结果契约（result.json）</strong>：每轮会话结束前 agent 把结果写入产物目录 <code>result.json</code>（旧名工作目录根 <code>.req-board-result.json</code> 仅兜底），调度器读取成功即删；文件不记作者，身份由收尾时传入的会话角色（注册表键 <code>角色:需求编号</code>）确定。必填 <code>status</code>（done/blocked/need_confirm）与要点化 <code>summary</code>（≤10 行），<code>question</code> 仅 need_confirm 时填；可选 <code>suggested_flow</code>（仅前置环节角色：推荐的后置流程 id，须命中 <code>flows.json</code> 且未被软禁用（<code>enabled: false</code>）；缺失/非法/已禁用则兜底默认流程并留痕，不阻塞）、<code>suggested_flow_reason</code>（仅前置环节角色：一句话说明命中了所选流程的哪条适用场景，≤200 字；只落调度事件留档，不进 summary）、<code>repos</code>（涉及仓库清单，前置环节产出，缺失/非法按校验失败处理）、<code>options</code>（仅 <code>need_confirm</code> 时合法：<code>[{label, hint}]</code> 文本选项数组，网页端渲染为预填按钮——点击只是预填右栏聊天框可编辑后再发，不触发机制动作；非法/超限置空不阻断）、<code>waive_gate</code>（字符串：已完成但收尾校验预计不通过时申报豁免理由，非空转人工裁决 y=豁免完成/n=退回，不申报按校验失败处理）、<code>todos</code>。必须 JSON 合法（换行用 <code>\n</code> 转义），非法则改名 <code>result.json.invalid</code> 留现场；缺失/非法/超时按进程级失败重试 1 次后转 later。<code>status=done</code> 按卡上流程快照推进：当前节点完成即进入下一节点（评审节点 <code>pass</code> 前进 / <code>reject</code> 打回前驱节点复修，打回超限转 need_confirm）；末个节点完成后由收尾节点（terminal）执行合并/接测，全流程无人工中间态；<code>need_confirm</code> 转飞书提问；<code>blocked</code> 转 later 停止自动调度；<code>done</code> 但收尾校验不通过 + 申报 <code>waive_gate</code> → 转人工裁决（#399，y=豁免完成/n=退回）。</li>
+        </ul>
+
+        <h2 id="session">八、会话详情与 agent 进程管理</h2>
+        <p>会话详情页（中间栏点击会话行进入）展示某条 ACP 会话的完整执行过程，底部聊天框可继续该会话。agent 进程由调度器统一管理，生命周期如下：</p>
+        <ul>
+            <li><strong>消息流转</strong>：聊天框发消息 → 写入 <code>manual_commands</code> 队列 → 调度器约 2 秒轮询消费 → 拉起或复用 kimi 进程，经 ACP 协议驱动一轮 → 收尾（result.json 校验、需求状态推进、执行事件与运行记录落库）。</li>
+            <li><strong>按需拉起</strong>：每轮由调度器拉起独立 kimi acp 进程；ACP 会话上下文持久化，续跑走 <code>session/resume</code> 恢复（保留上下文，接续 prompt），进程不常驻。</li>
+            <li><strong>进程保持（#284）</strong>：人工续跑一轮正常结束后进程不关闭，闲置 <code>REQ_BOARD_HELD_TTL_SEC</code>（默认 300 秒）内下一条消息直接复用同一进程（省去拉起与 resume，事件打「agent 复用保持进程」）；超时未用由回收线程自动关闭；保持进程已死自动回退正常拉起。</li>
+            <li><strong>异常处置</strong>：运行超时先发 <code>session/cancel</code> 再杀进程；一轮结束但未提交 result.json 时，同一会话续接一轮补写（上限 1 次）。</li>
+            <li><strong>重启兜底</strong>：调度器重启时按 state 中 pid 镜像清理残留保持进程（pid + 命令行校验，防误杀）；<strong>重启对账（#388）</strong>：doing 卡 + 产物 result.json 合法（status ∈ done/blocked/need_confirm）时直接采纳推进（不退 open、不重跑），缺失/非法维持退 open 重跑；建卡对话/需求助手进程由看板进程退出时统一清理（SIGTERM 处理器），看板重启后残留会话标 <code>interrupted</code>，页面可一键「继续」（自动恢复，省配额）。</li>
+            <li><strong>状态栏语义（#421 会话活性状态行）</strong>：底部状态行按活性分级并每秒刷新时长——<b>绿</b>：等模型响应 / 思考中（模型推理）/ 响应中（流式输出）；<b>琥珀（自动展开判定依据）</b>：等模型响应偏慢 / 思考偏慢 / 响应偏慢（≥60s 无新证据）；<b>红（自动展开 + 「重启调度器」入口）</b>：疑似卡死 / 输出中断（>180s 无响应、无输出或思考，且事件流同样静默 >180s）；<b>中性蓝</b>：执行命令/写文件（带已运行时长，<b>不计入卡死判定</b>，长命令不受 180s 约束）/ 输出持续中（事件流仍在刷新）/ 已发送，等待调度器接管；<b>灰</b>：会话已结束（可发消息继续）/ 自动路径已停止（中断或毒会话，可发消息继续）/ 需求已完成（不可继续会话，输入区不显示）。整行可点击展开三行判定依据（事件流 / 模型层 / 判定），偏慢与卡死态自动展开、收起后不会被每秒重绘冲掉（#431 起草稿态输入不被全局刷新打断：注册表心跳 / sessions poke / 15s 轮询只重绘中间栏，右栏 textarea 原样保留）；时长按<b>服务端时间</b>计算（心跳时间戳由调度器在状态切换时落库，事件时间取服务端下发的毫秒时间戳），浏览器时钟/时区漂移不影响。运行中（含疑似卡死）不显示输入区；会话已结束/已中断恢复为可输入 + 「新建聊天」；需求已完成不显示输入区。历史行无心跳数据时显示中性「运行中」（不计时、不判卡死，fail-safe 不误报）。「重启调度器」需二次确认，服务端按同一红态口径复核（证据不足一律拒绝），重启会中断其它运行中的会话、卡死进程可能残留为孤儿进程（人工 <code>ps -axo pid,ppid,command</code> 定位 ppid≈1 后 kill）。<br><b>#430 起这张状态卡片是三处共用的单一实现</b>（调度器会话 / 需求助手 / 聊天建卡）：容器、五档配色、图标层级、展开交互与 1 秒计时同一套（<code>.chat-status</code> + <code>chatStatusCardHtml</code> + <code>tickChatStatusCard</code>），差异只在各自的状态模型纯函数（<code>agentActivityModel</code> / <code>reqChatActivityModel</code> / <code>chatAddActivityModel</code>）。需求助手与聊天建卡没有调度器的心跳/阶段证据，只做「会话状态 + 事件流时间」两档证据——<b>不做判死、不给「重启调度器」</b>；两处主按钮恒为「发送」，「取消本轮 / 新建对话（新建会话）」在卡片动作位，不可输入时（本轮执行中、创建/恢复阶段、已建卡）不显示输入区。</li>
+            <li><strong>消息回显</strong>：发送后消息立即以「已发送，等待调度器接管…」标记显示在事件流，调度器接管写入后转为正式记录（乐观回显，不重复）。</li>
+        </ul>
+        <div class="note">
+            自动开发（open 需求自动捞取）不保持进程，行为与人工续跑不同；两种路径共用同一 ACP 会话能力（acp_shared.ACPSession），生命周期管理按宿主各自实现。
+        </div>
+
+        <!-- builtin-agents-section -->
+
+        <h2 id="autoflow">十、需求自动开发流程（节点序列生命周期）</h2>
+        <p>研发流程是配置数据：仓库根 <code>flows.json</code> 定义 1 个前置环节共享槽位（<code>pre.role</code>，当前 analysis）+ 若干后置流程（每条流程 = 节点序列，节点按 <code>node_type</code> 分产物/开发/评审/收尾），角色展示名、产物、提示词、模型也在配置里；增删流程与节点、换前置角色都只改配置（改后需重启看板与调度器）；某条流程可置 <code>"enabled": false</code> 软禁用——定义保留（改回 true 即恢复），但不再进入推荐目录与可选列表。一条 open 需求从被捞起到 done 的生命周期如下。</p>
+        <p><strong>① 拉起之前（主循环 → spawn）</strong></p>
+        <ol>
+            <li><strong>轮询发现</strong>：主循环每 15 秒扫各项目 open 需求（<code>updated_at</code> 静置满 1 分钟；每项目最多 3 个并行，其余排队）；未入流程（无快照）的卡按前置环节角色拉起，已入流程的卡按卡上快照的当前节点角色拉起；</li>
+            <li><strong>去重</strong>：<code>active_runs</code> 检查，已有活跃 agent 则跳过（防并发重复拉起）；</li>
+            <li><strong>角色守卫</strong>：role 与卡上快照当前节点角色匹配校验（无快照 → 前置环节角色；当前节点为 terminal 收尾节点时不拉起 agent），防绕过调度器拉起非法角色；</li>
+            <li><strong>置 doing</strong>：状态置进行中（不再写 phase）；</li>
+            <li><strong>建 worktree</strong>：在项目全部仓库创建独立 worktree（分支 <code>f-YYYYMMDD-&lt;编号&gt;[-tapd&lt;ID&gt;]</code>），分支显式从主干默认分支（本地 master/main，fallback origin/HEAD）拉取，基线 commit 记录到 <code>state["worktrees"][编号]["base"]</code> —— 全部节点共用，调研基线 = 开发基线 = 主干，不随主工作区 checkout 漂移；</li>
+            <li><strong>拼 prompt</strong>：角色模板（<code>prompts/&lt;角色&gt;.md</code>）填充（需求 notes、上游节点产物路径清单、仓库清单、产物路径、时间预算、评审反馈、只读工具指引、工作约束检查单）；卡处于前置阶段时另追加 <code>suggested_flow</code>/<code>suggested_flow_reason</code>/<code>repos</code> 输出契约段（契约全文见「九、内置 agent 定义」的 <code>PRE_SLOT_CONTRACT</code> 块）；</li>
+            <li><strong>起进程</strong>：拉起 <code>kimi acp</code> 子进程（cwd = worktree 聚合目录，按角色能力审批路由，只读 roots = worktree + 全部仓库根 + 产物目录）。</li>
+        </ol>
+        <p><strong>② 运行中（agent 干活，调度器并行观察）</strong></p>
+        <ul>
+            <li>事件流实时写 <code>agent_events</code>（消息文本 + 工具调用摘要），看板「执行过程」面板由 SSE 推送即时刷新（降级 1 秒轮询）；</li>
+            <li>工具审批（request_permission）按角色能力档位路由（#339）：只读角色（analysis/proposal/tech/review/tech_review/code_review）Bash 走白名单 fail-closed（只读命令放行、其余拒绝，受限工具自动放行）；accept 只放行跑测试类命令（<code>no_commit</code>，禁改源码/git 提交）；dev 全放行（#336 Bash 写主工作区启发式护栏仍生效）；命中进程安全红线的命令一律拦截；</li>
+            <li>运行超时（默认 <b>240 分钟</b>）先发 <code>session/cancel</code> 再杀进程。时限优先级：需求 notes 里的 <code>timeout: &lt;分钟&gt;</code>（范围 15~480）＞ <code>projects.json</code> 的 <code>budgets.&lt;角色&gt;.max_minutes</code>（可收紧角色时限，无默认值）＞ 默认 240 分钟。除墙钟时限外还有<b>步数硬上限</b>（按角色可配，默认 dev 1000 / accept 与 code_review 500 / analysis、proposal、tech、tech_review 400 / merge_resolve 200，见「十二、预算与配额」）。</li>
+        </ul>
+        <p><strong>③ 结束后（收束 → handle_result，按节点类型分派）</strong></p>
+        <ol>
+            <li><strong>统一收尾</strong>：写 <code>agent_runs</code> 运行记录（起止时间/状态/工具数/context 百分比）；更新会话信息（model/thinking/context/branch/workdir，其中 thinking 仅记录响应观测值、不再展示；branch 统一记录 <code>f-&lt;编号&gt;</code>，不再读主工作区当前分支）；同步 <code>agent_sessions</code> 注册表为 idle；</li>
+            <li><strong>产物校验</strong>：按节点类型判定——前置环节 = 前置角色产物存在非空 + <code>repos</code> 仓库清单合法（缺失/非法按失败处理）；产物节点 = 本节点产物文件非空；开发节点 = 有实际代码变更；评审节点 = 产物非空且 <code>verdict</code> ∈ {pass, reject}；</li>
+            <li><strong>成功路径（前置环节）</strong>：清重试计数，<code>repos</code> 存入 state；<code>suggested_flow</code> 命中配置且未被软禁用即采纳（缺失/非法/已禁用 → 兜底默认流程 + 留痕，不阻塞）；免确认项目直接写入流程快照并拉起流程首节点；<code>confirm</code> 项目或 <code>repos</code> 含清单外仓库名（#303）→ 转 need_confirm 请你确认推荐流程（y 采纳推进 / n 转人工），不再有 route 中间态；</li>
+            <li><strong>成功路径（流程内节点）</strong>：更新卡上快照指针并推进——产物/开发节点进入下一节点；评审节点 <code>pass</code> 前进、<code>reject</code> 打回前驱节点复修（resume 上游会话并把评审意见与产物全文注入续跑消息，打回超限转 need_confirm）；末个节点完成后由收尾节点（terminal）执行合并/接测，全流程无人工中间态；</li>
+            <li><strong>失败路径</strong>：失败原因写入 <code>retries[编号]</code>；进程级失败（崩溃/超时/未提交结果/非法 JSON）自动重试 1 次（最多跑 2 轮，resume 旧会话并注入上次失败原因）；耗尽转 <code>later</code> 停止自动调度 + 会话标记毒会话，等人工重新开放或续跑；<code>blocked</code>（#385，内容性阻塞结论）不经重试计数——进程正常退出时直接转 <code>later</code> + 毒会话（通知卡片「需求阻塞」，可在看板需求助手续跑），blocked 但进程异常（超时/非 0 退出码）仍走进程级失败重试；<code>done</code> 但收尾校验不通过（#399）：带 <code>waive_gate</code> 申报 → 不计重试转人工裁决（y=豁免完成 / n=退回），未申报 = 视为谎报走原失败通道；</li>
+        </ol>
+        <p><strong>④ 收尾节点（terminal）到 done（调度器动作，不拉起 agent）</strong></p>
+        <ol>
+            <li><strong>前置校验</strong>：done 需有实际代码变更（dev 分支相对基线 diff）或对应产物文件（只读角色/验收）才采信；校验不符时带 <code>waive_gate</code> 申报可转人工裁决（#399，见「③ 结束后」失败路径）；</li>
+            <li><strong>合并收尾</strong>：普通项目自动 <code>--no-ff</code> 合并回各仓库 main 并清理 worktree/分支；仅推分支项目（<code>branch_only: true</code>，旧名 <code>company</code> 兼容）不本地合并 main，只把有改动仓库的 f-分支 push 到 origin（失败不阻断 done，事件+通知红字），由外部 CI/CD 或人工发版时合并；</li>
+            <li><strong>合并冲突</strong>：先自动拉起只读 <code>merge_resolve</code> 会话解决（每轮 15 分钟、最多 2 轮）；未解决/耗尽转 need_confirm（y 重试合并 / n 人工接管置 later），dev 分支与 worktree 保留；</li>
+            <li><strong>服务重启（#318）</strong>：项目配置了 <code>restart</code> 配方的服务由调度器在 done 时自动重启并做就绪校验（无需人工声明重启类待办）；agent 声明的 <code>todos</code> 遗留待办在 done 通知逐条红字展示并写入 summary。</li>
+            <li><strong>重启提醒</strong>：改动涉及 <code>dispatcher.py</code> 或 <code>acp_shared.py</code>（调度器模块）时，done 流程登记自动重启（#380）——无并行 agent 时调度器自动重启自身（kill 自身、KeepAlive 拉起、新进程自证生效），通知附「调度器将自动重启／将在并行 agent 结束后自动重启」；自动重启多次未生效才兜底提醒需手动重启（<code>kill &lt;pid&gt;</code>）。</li>
+        </ol>
+        <div class="note">
+            基线一致性：前置环节起全部节点共用同一 per-requirement worktree，产物（analysis.md 等）统一在 <code>~/.req-board/artifacts/&lt;项目&gt;/req-&lt;编号&gt;/</code>（不在任何仓库/worktree 内，不随分支清理丢失）；主工作区（人工日常 checkout）停在任何分支都不影响各节点的调研/开发基线。
+        </div>
+
+        <h2 id="dispatcher-state">十一、调度器状态</h2>
+        <p>调度器没有像需求那样的「状态机枚举」——对外是两类：持久化账本 <code>data/dispatcher_state.json</code> 与进程健康（心跳文件）。前者记录它手上所有待办与历史，后者表示它自己活得怎么样。</p>
+        <table>
+            <tr><th>键</th><th>作用</th></tr>
+            <tr><td><code>chat_id</code></td><td>飞书会话 ID（首次私聊机器人任意消息后写入；#22 起<b>群聊消息不写此键</b>——私聊通知通道保持唯一，群 @ 回复按群 <code>chat_id</code> 显式发送）</td></tr>
+            <tr><td><code>feishu_chats</code></td><td>飞书建卡会话本地状态（#22）：<code>{chat_id: {project, session_id, last_event_id, pending:{text, materials:[句柄]}, awaiting_project, updated_at}}</code>——只存文本与下载句柄，<b>素材字节永不落此文件</b></td></tr>
+            <tr><td><code>retries</code></td><td>进程级失败重试计数（崩溃/超时/未提交结果/非法 JSON；<code>blocked</code> 不经计数）</td></tr>
+            <tr><td><code>pending_confirm</code></td><td>待确认问题账本（按 <code>kind</code> 分派：<code>confirm</code> = 默认普通提问，含 agent 提问、前置环节的流程确认与评审打回超限的人工裁决；<code>merge</code> = 合并冲突；<code>confirm_override</code> = 收尾校验豁免；<code>review_gate</code> = 历史值，#419 起不再写入）</td></tr>
+            <tr><td><code>pending_route</code> / <code>pending_review</code></td><td>退役（仅过渡窗口兼容）：#419 前的 route 通道确认 / review 评审待办账本——新流程不再写入，调度器 y/n 与网页对账保留历史遗留分支消费过渡窗口照存的条目</td></tr>
+            <tr><td><code>sessions</code></td><td>各需求累计的 ACP 会话记录（键 <code>req_id:role</code> → 会话信息/分支/worktree，含 <code>poisoned</code> 毒会话标记）</td></tr>
+            <tr><td><code>worktrees</code></td><td>每需求 worktree 基线 commit（调研/开发/收尾三点 diff 的基准）</td></tr>
+            <tr><td><code>req_repos</code></td><td>每需求实际涉及的仓库清单（与实际改动对账，反向修正分析识别）</td></tr>
+            <tr><td><code>held_procs</code></td><td>人工续跑进程保持池（闲置超时回收）</td></tr>
+            <tr><td><code>pending_restart</code></td><td>done 命中的调度器自重启登记（#380，无并行 agent 时主循环 kill 自身，KeepAlive 拉起）</td></tr>
+            <tr><td><code>flow_review_rounds</code></td><td>流程评审节点打回轮次（按评审节点下标累计，第 1–3 次自动打回，第 4 次转 need_confirm 人工裁决）</td></tr>
+            <tr><td><code>review_escalation</code></td><td>评审打回超限时的作者模型升级记录（键 <code>req_id:role</code>）：第 3 次打回若项目配了 <code>escalation_model</code> 则升级作者模型重跑；评审通过 / 人工放行 / 新周期时清除</td></tr>
+            <tr><td><code>review_round_points</code></td><td>各轮打回的要点摘要（转人工裁决时拼成「各轮对比」附在问题里，避免只给最后一轮）</td></tr>
+            <tr><td><code>merge_resolve</code></td><td>自动合并冲突处理登记</td></tr>
+            <tr><td><code>confirm_rounds</code></td><td>连续追问轮数（超限后网页渲染「停止追问转暂缓」明示出口）</td></tr>
+            <tr><td><code>req_todos</code></td><td>agent 声明的遗留待办（<code>result.json</code> 的 <code>todos</code>）暂存，收尾时逐条红字写进 done 通知与 summary</td></tr>
+            <tr><td><code>model_fallback</code></td><td>本轮角色模型降级事实（配置值不在别名池/不可用时回落到下一层，收尾汇总与运行期兜底判定用）</td></tr>
+            <tr><td><code>stale_wt_blocked</code></td><td>残留 worktree 巡检的阻断/告警记录（同一 worktree 不重复刷屏）</td></tr>
+            <tr><td><code>feishu_greeted</code> / <code>feishu_seen</code></td><td>飞书首条问候的「已问候 chat 集合」与消息去重集合（同一 chat 只问候一次）</td></tr>
+            <tr><td><code>feishu_assistant</code></td><td>看板助手会话编排元数据（按 <code>chat_id</code>；只存编排状态，不存对话正文）</td></tr>
+        </table>
+        <p>进程健康在 <code>data/dispatcher_heartbeat.json</code>（<code>pid</code> / <code>boot_at</code> / <code>last_poll_at</code> + 飞书通道子状态）：</p>
+        <ul>
+            <li><code>last_poll_at</code>：每轮轮询结束原子写；看板页头健康角标、设置页与本节按同一套状态判定刷新，状态名：<b>已连接 / 凭据未加载 / 网络连接失败 / 心跳过期 / 显式停用</b>（凭据文件缺失或非法显示「凭据未配置」）——超过 180 秒未更新即「心跳过期」（覆盖进程保活但挂死的场景），不再沿用上一次上报的「已连接」；</li>
+            <li><code>pid</code> / <code>boot_at</code>：调度器启动首写（launchd 与直跑都写，并清掉上一进程残留的通道状态），此后每轮校正 <code>pid</code>；心跳 pid 与当前进程对不上只作角标后缀说明（<code>pid_status</code>），不改状态名；</li>
+            <li><code>last_shutdown</code>：上次退出信号/时间/来源标记——重启入口自带来源（<code>script</code> / <code>reqchat</code> / <code>auto</code> / <code>manual</code> 等，脚本允许自定义标记）；异常终止（无正常关闭标记）在角标作后缀提示（#408/#40）。</li>
+        </ul>
+        <div class="note">
+            与需求状态（「二、状态含义」）的区别：需求状态是卡片流转的<b>业务状态</b>（5 种枚举，<code>route</code>/<code>review</code> 为遗留值）；调度器状态是<b>账本 + 进程健康</b>——账本回答「它手上还有哪些待办」，心跳回答「它是否还活着」。#419 起人工中间态取消：<code>pending_route</code>/<code>pending_review</code> 已弃用（新流程不再写入，仅保留过渡窗口兼容的历史遗留分支消费照存条目）；<code>pending_merge_review</code> 为 #337/#411 历史键，代码仅保留残留清理点。
+        </div>
+
+        <h2 id="config">十二、配置入口：项目管理 / 模型设置 / 项目清单</h2>
+        <p>上面几节讲的是「跑起来之后会发生什么」，这一节讲「在哪改配置」。三处配置各自负责不同层面，互不重叠。</p>
+
+        <h3 style="font-size:15px;margin:22px 0 8px;">① 左栏项目管理（接入哪些项目）</h3>
+        <ul>
+            <li>左栏项目列表的数据源就是 <code>projects.json</code> 的键——<b>移除接入即从列表消失</b>，但该项目的历史卡与数据全部保留（「所有项目」视图仍可见），重新接入即恢复。</li>
+            <li>项目行 hover 出现两个操作图标：<b>编辑</b>（改项目名/路径/goal 等）与<b>移除接入</b>；「所有项目」行不提供这两个操作。项目名右侧常显 <code>+</code> 进入该项目的聊天建卡。</li>
+            <li>左栏顶部 <code>+</code>（新增项目）打开项目模态：项目名、仓库路径（可多个）、<code>base_branch</code>、以及<b>项目目标 goal</b>（可选，一句话说明项目目标/业务背景，会注入需求分析角色的上下文，让分析更贴合项目定位）。</li>
+            <li>fail-closed：项目下还有 <code>doing</code> 卡时阻断移除接入，避免跑到一半的项目被摘掉。</li>
+        </ul>
+
+        <h3 style="font-size:15px;margin:22px 0 8px;">② 设置抽屉（全局配置，左栏底部齿轮）</h3>
+        <p>齿轮抽屉三个标签页：<b>全局信息</b>（只读四分组 + 运行时环境与工具表）、<b>模型设置</b>、<b>飞书机器人</b>。内容懒加载，打开默认停「全局信息」，「重新加载」按钮丢弃未保存修改重取。</p>
+        <ul>
+            <li><b>模型设置</b>：全量维护 harness 的 <code>config.toml</code>（<code>$KIMI_CODE_HOME/config.toml</code>，即 kimi CLI 与后台 agent 实际读取的那份）——厂商（名称 / base URL / API KEY / 类型）、模型清单（别名 / provider / model / protocol / <code>max_context_size</code>）、<code>default_model</code> 编辑行。写入策略是<b>行级最小拼接</b>（只改目标行/段，未编辑行逐字节保留）+ 写前 TOML 回环校验，失败一律零写入；<code>max_context_size</code> 是必填项，缺失或非正整数整单拒绝。API KEY 只以「是否已配置」回显，明文永不出现在接口响应、日志或错误文案里。</li>
+            <li><b>机器人抽屉「模型调参（项目级）」</b>（与设置抽屉是两个入口，别混）：按<b>项目 × 角色</b>配模型，即上面四层兜底链的<b>第 ① 层</b>。保存后下一张卡生效。逐行保存已改为表格标题行右端一个「保存全部」。思考档位统一模型默认，不再提供配置项。</li>
+            <li><b>飞书机器人</b>：读写 <code>feishu.json</code> 凭据（密钥永不回显）+ 连通性测试 + 「看板助手能力」分组（代码只读分析 / 状态变更 / 需求卡清单卡片 / 代码拉取与提交四项默认关闭；<b>#52</b> 读图（多模态）默认开启、显式关闭后图片只给文件名与路径，见「三、飞书回复与状态流转」；<b>#54</b> 代码拉取与提交仅限项目清单内项目、不 push、不切换分支，冲突保留现场由用户选择）。</li>
+        </ul>
+
+        <h3 style="font-size:15px;margin:22px 0 8px;">③ 项目清单 <code>.loop/project.json</code>（项目自带约定）</h3>
+        <p>每个被接入的仓库可在自己根目录放一份清单，声明「我这个项目怎么测、怎么起、有什么雷区」。清单内容会进提示词的<b>项目约定层</b>，缺少的命令会显式标为「未配置」，不会借用其它项目的命令。项目接入、模型、预算、服务自动重启等仍由 <code>projects.json</code> 管理。完整的分层边界与 ERP 接入示例见 <a href="#prompts">Prompt 配置指引</a>。</p>
+        <table>
+            <tr><th>字段</th><th>作用</th></tr>
+            <tr><td><code>commands.{install,test,test_affected,lint,typecheck,build}</code></td><td>命令字符串；空串或缺失 = 未配置（提示词里会显式写「本项目未配置 X」，不会拿别的项目的默认值顶替）</td></tr>
+            <tr><td><code>instance.{start,stop,status,healthcheck}</code> + <code>instance.port_range</code></td><td>独立测试实例的启停与健康检查命令，<code>port_range</code> 是 <code>[起, 止]</code> 端口区间</td></tr>
+            <tr><td><code>guides.&lt;名&gt;</code></td><td>项目指引文件（仓库内相对路径，单文件进 prompt 上限 4000 字符）；写成 <code>{"file": …, "roles": [...]}</code> 可只给部分角色看。本仓库把它拆成 <code>.loop/guides/instance.md</code>（只给 dev/accept）与 <code>.loop/guides/service.md</code>（给全部调度角色）</td></tr>
+            <tr><td><code>skills.&lt;角色&gt;</code></td><td>该角色额外挂载的技能名列表；项目技能 <code>.loop/skills/&lt;名&gt;.md</code> 优先于全局 <code>prompts/skills/&lt;名&gt;.md</code>。<b>新增技能不需要改任何 Python</b>，放文件 + 点名即可（项目技能下次完整构建 Prompt 时现读；全局技能改 <code>flows.json</code> 后需重启两个进程）</td></tr>
+            <tr><td><code>high_risk_paths</code></td><td>高风险路径前缀：<code>quick</code> 流程的卡改到这些路径（或 <code>.loop/</code>、调度器模块）会<b>自动升级为标准流程</b>去走代码审查与验收</td></tr>
+            <tr><td><code>agents_md.{max_lines,max_chars}</code></td><td>本项目 AGENTS.md 的长度上限（默认 150 行 / 12000 字符），<code>scripts/doctor.py</code> 据此检查并告警</td></tr>
+        </table>
+        <div class="note">
+            同目录的 <code>AGENTS.md</code> 存放短而稳定的仓库规则：架构概览、目录约定、编码规范、业务红线、注意事项。调度器注入的是「先读 AGENTS.md」指路，不能把它当成已全文内联的 guide。维护约定是：<b>新增一条规则必须同时删掉或合并一条旧规则</b>，或者把场景性内容下沉到 <code>.loop/guides/</code>、<code>.loop/skills/</code>；背景与事件经过写进 <code>docs/agents-detail.md</code>。
+        </div>
+        <div class="warn">
+            改动生效方式别记混：<code>flows.json</code>、全局 <code>prompts/</code> 按运维约定重启看板与调度器；<code>.loop/project.json</code> 中已支持的字段及项目指引/技能内容在<b>下次构建完整 Prompt 时现读</b>，无需为此重启。新增代码尚不认识的字段不会自动获得能力。<b>旧会话 resume 不保证重新注入这些更新</b>，详见 <a href="#prompt-resume">续跑与配置变更</a>。改 <code>plists/</code> 后要跑一次 <code>scripts/install-launchd.sh</code>。
+        </div>
+
+        <h2 id="budget">十三、预算、限幅与自验工具</h2>
+        <h3 style="font-size:15px;margin:22px 0 8px;">会话预算（硬上限）</h3>
+        <p>每轮 agent 运行有三道闸，到限即截停并留结构化失败原因（<code>budget_exceeded: steps|time</code>），不会无限空转：</p>
+        <ul>
+            <li><b>步数</b>（工具调用数）：默认 dev 1000 / accept 与 code_review 500 / analysis、proposal、tech、tech_review 400 / merge_resolve 200。接近上限前会提示先写保底结果；真的截停后同会话再给<b>一轮限步收尾</b>专门用来写 <code>result.json</code>，写成了就正常收尾，写不成才按失败归因。</li>
+            <li><b>墙钟时长</b>：默认 240 分钟；优先级 notes 的 <code>timeout:</code>（15~480）＞ <code>projects.json</code> 的 <code>budgets.&lt;角色&gt;.max_minutes</code> ＞ 默认值。</li>
+            <li><b>上下文 token 上限</b>：<b>未实现</b>（运行中拿不到可靠用量）。实际可观测的是会话信息栏的上下文占比，以及 <code>agent_runs</code> 里落库的 token 峰值——它们只做展示与报表，不触发截停。</li>
+        </ul>
+        <p>覆盖方式：<code>projects.json</code> 每个项目可加 <code>budgets</code> 段，如 <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>；非法值（负数/字符串）忽略并回落默认，不会把配置错误变成运行期故障。</p>
+
+        <h3 style="font-size:15px;margin:22px 0 8px;">只读工具输出限幅</h3>
+        <p>只读工具单次输出有硬上限，超出即截断并<b>告诉你怎么续读</b>，避免一次 grep 把上下文冲爆：单次输出总长 30000 字符；<code>read_file</code> 单次最多 2000 行 / 1MB（截断按<b>整行</b>算，表头给的行数与续读 <code>offset</code> 一定对得上实际返回的行）；<code>list_dir</code> 最多 500 条；<code>search_text</code> 最多 50 条命中；<code>git_status</code> 最多 500 行（超限会显式标注「已截断」，不再静默截断）。</p>
+
+        <h3 style="font-size:15px;margin:22px 0 8px;">测试实例与视觉闸门（自验用）</h3>
+        <ul>
+            <li><code>scripts/test_instance.sh start &lt;端口&gt; [--seed] | stop &lt;端口&gt; | status &lt;端口&gt;</code>：起一个隔离的看板测试实例（默认端口 8901，避开主实例 8899）。加 <code>--seed</code> 会用确定性种子数据 + <b>冻结时钟</b>，落在每端口的临时数据目录（<code>/tmp/req_board_test_&lt;端口&gt;_data</code>），<code>stop</code> 时连目录一起删。同一个提交起两次，渲染结果逐像素一致（动效关闭时）——这是做视觉比对的前提。</li>
+            <li><code>scripts/visual_gate.py --url &lt;候选实例&gt; [--baseline-url &lt;基线实例&gt;] [--contract &lt;契约 JSON&gt;] [--out &lt;目录&gt;] [--skins dark,light] [--viewports 1440x900,390x844]</code>：用 CDP 直接驱动无头 Chrome（不新增依赖），跑六道闸门——控制台报错、令牌差异、计算样式（含 :focus-visible 焦点环与 hover 零位移）、布局零位移（逐元素包围盒比对）、对比度、深色皮肤原生控件露白。产出 <code>visual-report.json</code> + 自包含的 HTML 对照报告 + 并排截图。退出码 0=通过 / 1=闸门不过 / 2=工具错误。</li>
+            <li>契约文件（<code>--contract</code>）用来声明<b>有意为之</b>的差异（放行清单：某几个令牌、某几个选择器、某几处布局位移）和自定义探针，避免闸门把「本来就该变」的改动报成缺陷。契约里的键必须都是已知键，写错键名直接报工具错误而不是静默忽略。</li>
+            <li>清理测试实例只走 <code>test_instance.sh</code>——它按 PID 文件 + 后代收集 + lsof 精确清理。进程红线里明令禁止 agent 自己 <code>kill</code>/<code>pkill</code>，路径猜测式清理会误杀别人的会话。</li>
+        </ul>
+        <div class="note">
+            视觉闸门目前<b>只作为命令行工具</b>存在，尚未接进流程节点——也就是说它不会自动在卡上拦人，需要 dev/accept 会话主动调用，或人工在验收时跑。同理，视觉闸门与浏览器级验证是<b>两回事</b>：闸门管确定性检查（对比度、位移、露白），而「这个交互对不对、这个页面好不好看」仍要靠真开浏览器走一遍主路径。
+        </div>
+
+        <div class="warn">
+            本指南描述的是当前调度器/看板行为；若飞书回复逻辑或页面功能有调整，请同步更新本文档，避免指南过期。
+        </div>
+        </div>
+
+        <div class="tab-pane" id="pane-diagrams" role="tabpanel" aria-labelledby="tab-diagrams" hidden>
+            <div class="sub-tabs">
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-architecture.html" aria-pressed="true">系统应用架构</button>
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">调度流程</button>
+            </div>
+            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine 架构与调度流程图"></iframe>
+            <p class="subtitle" style="margin-top:10px;">图由 archify 生成，源文件在 <code>docs/diagrams/src/*.json</code>；图内可缩放、搜索、切换明暗主题。</p>
+        </div>
+
+        <div class="tab-pane prompt-guide" id="pane-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
+            <h2 id="prompts">Prompt 配置指引：让下一个项目沿用自己的规则开发</h2>
+            <p>接入一个已有成熟框架的 ERP，并在其上增加模块时，先把「平台已有能力、扩展入口、业务边界、验证方法」写入该项目仓库。每张需求卡只补充本次模块要做什么与验收标准。下面按当前代码的实际加载方式说明，不需要为新项目修改全局角色模板。</p>
+            <nav class="prompt-nav" aria-label="Prompt 配置章节">
+                <a href="#prompt-layers">内容放哪层</a><a href="#prompt-starter">ERP 接入顺序</a>
+                <a href="#prompt-manifest">清单示例</a><a href="#prompt-guides">Guide 示例</a>
+                <a href="#prompt-skills">Skill 示例</a><a href="#prompt-task">需求卡示例</a>
+                <a href="#prompt-roles">各角色读什么</a><a href="#prompt-resume">续跑与冲突</a>
+                <a href="#prompt-checklist">上线前检查</a><a href="#prompt-roadmap">后续引擎改进</a>
+            </nav>
+
+            <h2 id="prompt-layers">一、项目内容放在哪一层</h2>
+            <p><b>业务事实和长期约束写 Guide，可复用操作步骤写 Skill，单次目标和验收条件写卡片。</b>下面六类是配置职责的划分，不是六个已经实现的系统消息优先级。</p>
+            <div class="table-scroll"><table>
+                <tr><th>职责层</th><th>写在哪里 / 谁维护</th><th>写什么</th><th>ERP 示例</th></tr>
+                <tr><td>Policy：通用协议</td><td><code>dispatcher.py::COMMON_TAIL</code>、<code>acp_shared.ROLE_CAPABILITIES</code>；引擎维护者</td><td>结果契约、工具权限、写入边界、进程安全；权限由代码控制，文字不能授权越界</td><td>不操作生产数据、不越过只读角色能力；接入 ERP 时不改这一层</td></tr>
+                <tr><td>Role：角色职责</td><td><code>prompts/&lt;role&gt;.md</code>、<code>flows.json</code>；引擎维护者</td><td>各阶段输入、输出、审查职责和流程配置；跨项目复用</td><td>分析找证据，开发实现，评审查偏差，验收复核；不写 ERP 表名和客户背景</td></tr>
+                <tr><td>Project：项目约定</td><td><code>projects.json</code> + 仓库 <code>AGENTS.md</code>、<code>.loop/project.json</code>、<code>.loop/guides/*.md</code>；项目负责人</td><td>项目定位、现有框架与模块地图、业务术语、数据红线、扩展方式、测试与部署</td><td>复用已有权限、租户、工作流、菜单、字典和审计能力；给出真实代码入口与参考模块</td></tr>
+                <tr><td>Skill：场景方法</td><td><code>.loop/skills/&lt;name&gt;.md</code>，通过清单 <code>skills.&lt;role&gt;</code> 挂载；项目负责人</td><td>反复使用的操作步骤、检查顺序、产物证据格式</td><td>新增模块时核对注册、权限点、租户隔离、迁移、页面与回归的步骤</td></tr>
+                <tr><td>Task：本次需求</td><td>需求卡 <code>title</code>、<code>notes</code>；需求负责人</td><td>业务行为、范围、输入输出、验收场景、资料路径；<code>summary</code> 不作配置入口</td><td>本次新增采购申请模块；哪些状态、哪些操作、哪些角色可以看与改</td></tr>
+                <tr><td>Runtime：运行上下文</td><td>调度器注入、上游阶段产物、返工补充、看板会话；引擎与当前执行者</td><td>当前仓库/分支/产物路径、预算、失败原因、评审返工、人工答复和 PID 红线</td><td>恢复哪张卡、还剩什么、要修哪条问题；不复制为长期项目约定</td></tr>
+            </table></div>
+            <p>当前完整新会话的实际拼装顺序是：<code>角色模板 + 公共协议 → 项目约定 → 场景技能 → 卡片输入（含上游产物指路、历史摘要、extra）→ 前置环节契约（适用时）→ PID 安全红线</code>。实现入口：<code>dispatcher.build_prompt_parts / build_prompt / run_agent</code>。</p>
+            <div class="warn">这个顺序不能理解为「越靠后权限越高」。卡片、外部文档、日志和评审引用是任务资料，不能覆盖安全约束或授予写权限。当前尚无统一的输入信任分隔与冲突检测，规则冲突时应报 <code>need_confirm</code>，不能自行挑一条执行。</div>
+            <div class="table-scroll"><table>
+                <tr><th>容易混淆的配置</th><th>当前实际行为</th></tr>
+                <tr><td><code>projects.json.goal</code></td><td>一句话定位；当前内置模板中由需求分析角色消费。全员必须知道的业务约束还要写进 Guide，不能只写 goal。</td></tr>
+                <tr><td><code>AGENTS.md</code> 与 Guide</td><td>AGENTS.md 保留短规则与资料索引；当前项目约定层注入「先读 AGENTS.md」指路，并非拼入全文。已登记且匹配角色的 Guide 正文会直接注入。</td></tr>
+                <tr><td>文件存在与文件注入</td><td>只把 Markdown 放到 <code>.loop/guides/</code> 或 <code>.loop/skills/</code> 不会自动加载；必须在清单里登记。Guide 引用的其它文档也不会递归内联，Agent 需要按路径读取。</td></tr>
+                <tr><td>配置来源与 worktree</td><td>当前注入器从 <code>projects.json.paths</code> 登记的仓库目录读取清单/指引/技能；Agent 则在本卡 worktree 工作。只在需求分支修改配置，不等于注入器已经读到。首次开发前先把约定纳入接入基线；已有 worktree 续跑还须核对两边版本。</td></tr>
+                <tr><td>角色过滤与按需加载</td><td>Guide 按 <code>roles</code> 过滤，省略 roles 表示所有角色；Skill 按角色名单挂载。目前没有按需求关键词或模块自动选择的机制。</td></tr>
+                <tr><td>长度与文件边界</td><td>每个 Guide / Skill 注入上限 <b>4000 字符</b>，超长尾部截断。关键规则放前面，长参考资料放仓库文档并给路径；这不是全部 Prompt 的总长上限。</td></tr>
+                <tr><td>多仓库</td><td>当前遍历项目登记的全部仓库加载约定，不只加载本卡的改动仓库。每份 Guide 标明适用仓库；同名 Skill 按仓库顺序取首个匹配，不合并，跨仓库技能宜用不同名字。</td></tr>
+            </table></div>
+
+            <h2 id="prompt-starter">二、已有 ERP 平台新增模块：先准备什么</h2>
+            <ol>
+                <li><b>核对基线：</b>确认远端地址、分支、提交和本地代码一致，在项目管理登记仓库与正确的 <code>base_branch</code>。不要让 Agent 依据错误版本分析已有能力。</li>
+                <li><b>先做框架盘点：</b>找一个最相近且已上线的模块，记录后端分层、前端路由、菜单注册、权限、租户过滤、工作流、审计与数据库迁移的真实入口。分清框架自带、团队已封装和本模块需要新增的能力。</li>
+                <li><b>整理稳定规则：</b>把全员适用的业务与扩展边界写入 Guide，把短红线和导航写入 AGENTS.md；在清单登记命令与按角色指引。</li>
+                <li><b>验证开发环境：</b>在隔离测试库上确认安装、启动、健康检查、模块测试和关键旧模块回归真的能跑；明确新模块如何部署、是否重启、谁触发。</li>
+                <li><b>再写第一张卡：</b>用下文格式写本次目标与验收。成熟 ERP 涉及数据/权限/工作流的新模块，建议由前置分析评估走含技术方案与评审的流程；把风险与范围写清，流程仍由实际配置和分析结果决定。</li>
+            </ol>
+            <p>以下均为<b>假设的 ERP 示例</b>，不是对你下一套平台的技术栈或目录的判断。所有 <code>src/…</code>、模块名、权限标识和脚本都要用真实仓库证据替换；未核实项先完成盘点，不能带着示例直接开卡开发。</p>
+            <pre><code>erp-platform/
+  AGENTS.md                         # 短规则与资料索引
+  .loop/project.json                # 命令、Guide 角色、Skill 角色
+  .loop/guides/business.md           # 业务术语与长期约束
+  .loop/guides/framework.md          # 已有能力、扩展点、参考模块
+  .loop/guides/validation.md         # 验收与回归标准
+  .loop/guides/instance.md           # 隔离实例、测试库、部署生效方式
+  .loop/skills/erp-module.md         # 新增模块的复用步骤
+  docs/platform/module-map.md        # 细节资料：由 Guide 指路，按需读
+  docs/platform/reference-module.md  # 已验证的参考模块说明</code></pre>
+
+            <h2 id="prompt-manifest">三、项目清单怎么挂载</h2>
+            <p>在 ERP 仓库的 <code>.loop/project.json</code> 登记下列内容。示例中的 <code>scripts/test*.sh</code> 必须先在该项目真实实现并验证；它们不是 Loop Engine 自带的 ERP 脚本。命令中的 <code>&lt;端口&gt;</code> 只是给 Agent 的操作占位符，不是引擎自动替换的变量。</p>
+            <details open><summary><code>.loop/project.json</code> 示例（可复制 JSON）</summary>
+            <pre><code id="prompt-manifest-example">{
+  "version": 1,
+  "commands": {
+    "test": "bash scripts/test.sh",
+    "test_affected": "bash scripts/test-module.sh &lt;模块名&gt;"
+  },
+  "instance": {
+    "start": "bash scripts/test-instance.sh start &lt;端口&gt;",
+    "stop": "bash scripts/test-instance.sh stop &lt;端口&gt;",
+    "status": "bash scripts/test-instance.sh status &lt;端口&gt;",
+    "healthcheck": "curl --fail http://127.0.0.1:&lt;端口&gt;/health",
+    "port_range": [9100, 9199]
+  },
+  "guides": {
+    "business": {"file": ".loop/guides/business.md"},
+    "framework": {"file": ".loop/guides/framework.md"},
+    "validation": {
+      "file": ".loop/guides/validation.md",
+      "roles": ["analysis", "tech", "tech_review", "dev", "code_review", "accept"]
+    },
+    "instance": {
+      "file": ".loop/guides/instance.md",
+      "roles": ["dev", "accept"]
+    }
+  },
+  "skills": {
+    "tech": ["erp-module"],
+    "dev": ["erp-module"],
+    "code_review": ["erp-module"],
+    "accept": ["erp-module"]
+  },
+  "high_risk_paths": ["src/auth/", "src/tenancy/", "src/workflow/", "src/migrations/"],
+  "agents_md": {"max_lines": 150, "max_chars": 12000}
+}</code></pre></details>
+            <p><code>business</code> 和 <code>framework</code> 不填 roles，保证共享业务红线和框架边界对所有角色可见；具体操作环境只给实际需要的角色。roles 使用 <code>flows.json</code> 中的真实角色 ID，项目若新增或替换角色，应同步清单。高风险路径必须改成真实目录，不能把它当作权限限制。</p>
+            <p><code>projects.json</code> 留在 Loop Engine 所在机器，管理项目路径、goal、base_branch、模型、预算和自动重启等；<code>.loop/</code> 跟随 ERP 仓库提交。两台机器都要分别接入项目，不能复制另一台机器的绝对路径或凭据。<code>.loop/project.json.restart</code> 当前只是预留字段，实际自动重启配方用 <code>projects.json.restart</code>；生产部署须单独授权并在项目指引说明。</p>
+
+            <h2 id="prompt-guides">四、Guide 写事实、边界和证据入口</h2>
+            <p>每份 Guide 开头写适用仓库/模块及核对基线。规则应具体到「复用什么、去哪里找、什么情况停下来」，避免「遵循最佳实践」这种无法验收的句子。项目公共能力发生变化时更新同一份资料，不在每张卡复制一遍。</p>
+            <details><summary><code>AGENTS.md</code>：短规则示例</summary><pre><code># ERP 平台
+在已有平台内增加模块；框架能力与扩展入口见 .loop/guides/framework.md。
+业务术语见 .loop/guides/business.md，验收标准见 .loop/guides/validation.md。
+新增模块沿用现有分层、组件、权限与租户机制，参考已核对的采购订单模块。
+不直接编辑框架核心、第三方依赖或生成目录；确需修改先报告影响并请求确认。
+不连接或改写生产数据。数据库变更使用增量迁移，不删除重建已有表。
+只在本卡 worktree 内开发，不自行 push、合并主干或改卡片状态。
+权限、租户、金额、工作流语义冲突时报告 need_confirm，列明冲突出处。</code></pre></details>
+            <details><summary><code>.loop/guides/business.md</code>：业务上下文示例</summary><pre><code id="prompt-business-example"># 业务边界（适用于 erp-platform 全部模块）
+基线：填写实际核对的分支与提交；维护时重新核对下列事实。
+租户是数据隔离单位；组织是租户内的业务归属，两者不可混用。
+模块复用平台现有用户、组织、权限、编号、附件、工作流与审计服务。
+采购申请状态与审批动作见 docs/domain/purchase-request.md。
+金额精度、币种及舍入规则复用平台现行实现，证据路径填写到真实文件。
+不提供：跨租户查询、绕过审批直接生效、自动修改历史单据。
+未在需求中定义的取消、撤回、重复提交语义，开发前请求确认。
+上述语义须与实际 ERP 核对，示例术语不能直接作为业务事实。</code></pre></details>
+            <details><summary><code>.loop/guides/framework.md</code>：成熟框架扩展约定示例</summary><pre><code id="prompt-framework-example"># 平台扩展约定（适用于 erp-platform）
+基线与框架版本：填写实际分支、提交、框架名及已验证版本。
+参考模块：采购订单；路径和调用链见 docs/platform/reference-module.md。
+模块地图：docs/platform/module-map.md；每项给出真实文件/类/注册入口。
+新增模块沿用「页面 → 现有 API 层 → 应用服务 → 数据访问」的既有边界。
+菜单、权限点、租户过滤、字典、附件、编号、审批和审计沿用平台公共能力。
+不另建登录、权限、审批引擎或并行 UI 组件体系，不直接改第三方依赖。
+新增实体用现有基类与隔离规则；新增接口用现有响应、异常及事务约定。
+数据库用平台已有迁移机制；说明默认值、历史数据兼容和失败恢复办法。
+开发前先定位一个现有端到端实现，以代码证据确认扩展点，不能只凭文档猜接口。
+公共能力不能满足本卡时，先写差距、影响面和候选方案，请求确认后再实施。</code></pre></details>
+            <details><summary><code>.loop/guides/validation.md</code>：所有阶段共享的完成标准示例</summary><pre><code id="prompt-validation-example"># 模块验收与回归（适用于 erp-platform）
+验收基线：本卡 notes + 已确认需求文档 + 当前项目约定。
+验证新增模块的正常路径、异常输入、未授权访问与跨租户访问。
+验证重复提交、并发审批与状态冲突；检查事务失败后无部分写入。
+核对金额精度、编号、审计记录和历史数据兼容。
+回归采购订单及本次触及的公共权限/工作流接口；记录用例与结果。
+页面改动在独立实例真开浏览器：菜单 → 列表 → 新建 → 提交 → 审批/驳回。
+SQL、API 和页面结果应一致；角色只做其工具能力允许的检查。
+记录代码基线、命令、实例地址、样例、预期/实际结果与未覆盖项。
+开发在 self-test.md 留证，验收在 accept.md 独立复核；未执行不能写通过。
+评审指出偏离哪条约束或哪项验收条件，并附位置与复现方法。</code></pre></details>
+            <details><summary><code>.loop/guides/instance.md</code>：可运行环境示例</summary><pre><code id="prompt-instance-example"># 独立测试与生效方式（适用于 erp-platform）
+使用清单 instance 命令启动当前 worktree 的实例，先探测端口与进程归属。
+测试使用专用测试库和合成租户；不得使用生产连接串或真实客户数据。
+连接信息由本机受保护配置提供；Prompt、卡片与仓库只写配置名，不写密钥。
+启动脚本必须隔离端口、数据库与文件目录，停止脚本只清理本实例资源。
+填写依赖服务、测试账号获取方式、种子数据与 healthcheck 的真实验证步骤。
+只重启当前测试实例；共享/生产进程由部署负责人在明确授权后操作。
+分别写清后端、前端、迁移及工作流配置何时生效、谁执行、如何验证。
+无法启动时记录具体缺项，未覆盖项进入验收报告，不能宣称浏览器验证完成。</code></pre></details>
+
+            <h2 id="prompt-skills">五、Skill 写可重复使用的方法</h2>
+            <p>下面的 Skill 配合 Guide 使用：Guide 回答「本平台是什么、必须遵守什么」，Skill 回答「遇到新增模块任务时按什么步骤检查」。同一个 Skill 可以挂载多个角色，但不能让只读评审角色执行开发或写库动作。</p>
+            <details><summary><code>.loop/skills/erp-module.md</code> 示例</summary><pre><code id="prompt-skill-example"># ERP 模块扩展检查
+1. 读取 AGENTS.md、framework/business/validation 指引和本卡 notes。
+2. 对照参考模块定位实体、API、服务、页面、路由、菜单与权限注册入口。
+3. 列出「本次新增 / 复用已有 / 不涉及」，附对应文件或接口证据。
+4. 核对租户、组织、数据权限、事务、幂等、工作流、审计与迁移兼容性。
+5. 开发角色按既有扩展点实现并运行测试；只读角色只查证和报告，不改代码/数据。
+6. 用 notes 的每条验收条件对应实现位置与测试证据，标明未执行项。
+7. 输出到当前角色规定的产物路径；路径与结果 JSON 契约以运行时注入为准。
+遇到未定义业务语义、框架核心改动或权限冲突，报告 need_confirm。</code></pre></details>
+            <p>项目 Skill 优先于全局同名 Skill；同名是整份替换，不是追加继承。不要为了新增 ERP 规则覆盖全局浏览器、安全或结果契约技能。找不到的技能目前会被跳过并记日志，因此首次接入必须核对文件与挂载结果。</p>
+
+            <h2 id="prompt-task">六、需求卡只写本次要做什么</h2>
+            <p>下面的 <code>title</code> 与 <code>notes</code> 可作为第一张卡的写法参考；未指定开始开发时建卡默认暂缓。业务细节须经项目负责人确认，不能把示例视为已批准需求。</p>
+            <details open><summary>采购申请模块需求卡示例</summary><pre><code>title：在现有 ERP 平台新增采购申请模块
+
+notes：
+目标：支持租户内员工创建采购申请，并使用已有工作流提交审批。
+范围：列表、详情、新建、编辑草稿、提交、审批、驳回与查询。
+复用：现有用户/组织、权限、编号、附件、工作流及审计能力。
+业务规则：仅本人可编辑草稿；提交后不可编辑；驳回后可编辑再提交。
+数据：申请头与明细按平台迁移机制新增，金额计算沿用现有规则。
+权限：使用平台现有权限注册机制；申请人与审批人按既有组织规则授权。
+不提供：跨租户数据共享、库存扣减、付款、历史单据批量导入。
+参考：.loop/guides/framework.md；docs/domain/purchase-request.md。
+验收：
+1. 授权用户可从现有菜单进入模块，创建含两条明细的申请并保存草稿。
+2. 提交后走已有工作流；通过/驳回后的状态与审计记录符合需求文档。
+3. 未授权角色无法调用接口或操作按钮；另一租户不能查询或修改该申请。
+4. 重复提交不重复创建审批实例；金额与总额在数据库、API、页面一致。
+5. 采购订单及本次触及的公共能力回归通过，并提供可复现证据。
+生效方式：迁移、后端部署、前端发布分别按项目部署指引执行，由部署负责人触发。</code></pre></details>
+            <p>若生效方式尚未核实，卡片改写为「生效方式：待方案确认」。</p>
+            <p>多仓库且已确认范围时，可在 notes 单独写 <code>repos: 仓库目录名, 另一仓库目录名</code>；名字须来自项目登记的仓库。不要把所有平台背景、完整 Guide、账号密钥、讨论过程或被否决方案粘进 notes。</p>
+            <div class="warn"><code>notes</code> / <code>summary</code> 会进入各阶段 Prompt。<b>不要把评审结论或讨论记录写入这两个字段</b>，评审留在规定的产物或 <code>req_reviews</code>；后者不会自动注入。当前部分模板仍把 summary 称作「评审反馈/历史记录」，这是实现遗留，不是建议的配置方法。正常流程返工由调度器传递，人工评审需经看板会话明确指向对应报告与需修问题，不能只存一条评审记录就假设开发者已经看到。</div>
+
+            <h2 id="prompt-roles">七、让分析、开发和评审使用同一套依据</h2>
+            <div class="table-scroll"><table>
+                <tr><th>角色 ID</th><th>应掌握的资料</th><th>应留下的证据</th></tr>
+                <tr><td><code>analysis</code></td><td>业务、框架和验收 Guide，本卡目标，真实模块地图</td><td>确认已有能力、边界、风险与未知项；给出代码出处和生效方式，推荐合适流程</td></tr>
+                <tr><td><code>tech / tech_review</code></td><td>相同业务与框架约束，加分析产物、验收标准</td><td>扩展入口、复用/新增清单、数据与权限设计、迁移兼容和回归范围；评审不得凭个人偏好另加需求</td></tr>
+                <tr><td><code>dev</code></td><td>共享 Guide、模块 Skill、实例指引、本卡和上游产物</td><td>代码、自测报告、每条验收条件对应的测试、部署生效方式与未覆盖项</td></tr>
+                <tr><td><code>code_review</code></td><td>共享业务/框架/验收 Guide、模块 Skill、方案与 diff</td><td>偏离约束的具体位置、风险及修复条件；不把未定义的新功能作为打回条件</td></tr>
+                <tr><td><code>accept</code></td><td>相同验收标准、模块 Skill、实例指引、实现与自测证据</td><td>独立实例的端到端证据、权限/租户隔离及回归结果；明确未覆盖项</td></tr>
+            </table></div>
+            <p>减少打回的关键是提前统一验收依据：分析阶段暴露未知语义，方案阶段确认公共能力边界，开发与评审逐条对照同一份验收条件。不能只给开发者 Guide，却让评审角色只凭通用模板判断。</p>
+
+            <h2 id="prompt-resume">八、续跑、配置更新与规则冲突</h2>
+            <p><b>当前限制：</b>新会话发送完整 Prompt；成功 resume 的旧会话发送简化续跑信息、人工消息/失败原因、风格提醒和 PID 红线，不保证重新发送最新模板、清单、Guide、Skill 或卡片全文。修改文件、刷新看板或重启进程，都不能视为旧会话已自动获得新规则。</p>
+            <ol>
+                <li>修改约定前先看是否有本卡 Agent 运行，避免一边执行一边变更验收口径；有影响的变更应由负责人安排到安全交接点。核对登记仓库与本卡 worktree 的配置版本，不能只改其中一份就假设两边一致。</li>
+                <li>通过<b>看板聊天框</b>续跑时，明确列出变更文件、当前基线、已确认目标、剩余任务与验收条件；要求先回读当前规则和代码状态。新会话用看板提供的「新建聊天」入口，不自行启动 ACP。</li>
+                <li>保持同一张卡的目标与资料指向一致。规则有冲突时列出双方文件位置与影响，报 need_confirm；人工确认后，把稳定规则更新到对应 Guide，本次范围更新到卡片，确认过程仍留在会话/评审产物。</li>
+                <li>开发续跑先检查 worktree 与已提交改动、上游产物和结果文件状态；已验证与待验证分开记录，不能沿用旧报告就宣称当前通过。</li>
+            </ol>
+            <details><summary>可在看板聊天框发送的续跑交接示例</summary><pre><code>继续当前需求的当前阶段。
+本轮配置变更：.loop/guides/framework.md、.loop/guides/validation.md。
+先回读 AGENTS.md、.loop/project.json、上述指引及本卡最新 notes，核对当前分支与提交。
+已确认目标：采购申请复用现有工作流，不新增审批引擎。
+已有产物：读取本卡产物目录的分析、方案、自测及评审报告，分别核对适用基线。
+剩余工作：填写本次具体待修事项和对应验收条件，不复制整段历史讨论。
+如当前规则与旧会话冲突，列出冲突并报告 need_confirm；未执行的检查如实列明。
+产物路径、工具能力与结果 JSON 契约保持当前阶段约定。</code></pre></details>
+            <p>只读角色不能执行的命令，应由有权限的阶段或人工提供可核验证据。上述交接是当前机制下的操作办法，不能替代引擎层的配置版本校验。</p>
+
+            <h2 id="prompt-checklist">九、第一张卡启动前逐项核对</h2>
+            <ul>
+                <li>仓库路径、远端、base_branch、提交和框架版本均已核对；文档中的接口/目录真实存在。</li>
+                <li>现有能力清单和参考模块可追溯，项目红线不是只写在 goal；业务未知项已澄清。</li>
+                <li>清单是合法 JSON，Guide 路径在仓库内；所有 Skill 文件存在且名字/角色正确，单文件关键内容未超过 4000 字符。</li>
+                <li>分析、方案、开发、评审与验收都能收到共同的业务/框架/验收依据；多仓库没有同名 Skill 意外覆盖。</li>
+                <li>命令在 worktree 可运行；端口、测试库和文件目录隔离；无生产凭据或真实客户数据进入 Prompt。</li>
+                <li>需求卡有范围、范围排除、可复现验收和生效方式；评审记录没有写进 notes/summary。</li>
+                <li>先用一张范围明确的代表性模块卡验证链路，并从各角色会话实际读到的内容核对注入，不只看文件已存在。</li>
+            </ul>
+            <p>引擎机器可运行 <code>.venv/bin/python scripts/doctor.py</code> 辅助检查项目清单与规范；它不替代目标 ERP 的构建、测试及真实业务验证。更详细的字段说明见仓库 <code>docs/project-manifest.md</code>，当前角色原文见 <a href="#agents">内置 agent 定义</a>。</p>
+
+            <h2 id="prompt-roadmap">十、后续引擎改进方向（尚未实现）</h2>
+            <p>本指引补齐配置方法；下面三项需要独立开发与验证，当前不能当作已有保证：</p>
+            <ol>
+                <li><b>续跑配置一致性：</b>统一注入配置与工作代码的快照来源，记录角色模板、公共协议、项目约定、Skill 和任务输入的版本/摘要；续跑前比较，变化时补充当前规则或重建会话，并保留清楚的交接记录。</li>
+                <li><b>输入与反馈边界：</b>统一标明业务资料与引擎指令，明确冲突处理；把正式评审留档与可执行返工清单区分开，消除 summary 兼作评审通道的歧义。</li>
+                <li><b>注入可检查：</b>提供按项目/角色的 Prompt 预览、来源、字符数、截断、缺失文件与角色覆盖检查；必需 Guide/Skill 缺失时能阻断启动，避免静默跳过。</li>
+            </ol>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var tabGuide = document.getElementById('tab-guide');
+            var tabDiagrams = document.getElementById('tab-diagrams');
+            var tabPrompts = document.getElementById('tab-prompts');
+            var paneGuide = document.getElementById('pane-guide');
+            var paneDiagrams = document.getElementById('pane-diagrams');
+            var panePrompts = document.getElementById('pane-prompts');
+            var tabs = [tabGuide, tabDiagrams, tabPrompts];
+            var panes = [paneGuide, paneDiagrams, panePrompts];
+            var frame = document.getElementById('diagram-frame');
+            var subBtns = paneDiagrams.querySelectorAll('.sub-btn');
+
+            function loadDiagram(btn) {
+                subBtns.forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+                var src = btn.getAttribute('data-src');
+                if (frame.getAttribute('src') !== src) frame.setAttribute('src', src);
+            }
+            function show(which) {
+                tabs.forEach(function (tab, index) {
+                    var selected = tab.id === 'tab-' + which;
+                    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+                    panes[index].hidden = !selected;
+                });
+                if (which === 'diagrams' && !frame.getAttribute('src')) loadDiagram(subBtns[0]);
+            }
+            function fromHash(scroll) {
+                var id;
+                try { id = decodeURIComponent((location.hash || '').slice(1)); }
+                catch (e) { return; }
+                if (!id) { show('guide'); return; }
+                if (id === 'diagrams') { show('diagrams'); return; }
+                // 先显示锚点所属页签，再滚动；首次深链接也可能落在原本 hidden 的页签内。
+                var target = document.getElementById(id);
+                if (!target) return;
+                panes.forEach(function (pane, index) {
+                    if (!pane.contains(target)) return;
+                    var wasHidden = pane.hidden;
+                    show(tabs[index].id.slice(4));
+                    if (scroll || wasHidden) target.scrollIntoView();
+                });
+            }
+            tabGuide.addEventListener('click', function () { show('guide'); history.replaceState(null, '', location.pathname); });
+            tabDiagrams.addEventListener('click', function () { show('diagrams'); history.replaceState(null, '', '#diagrams'); });
+            tabPrompts.addEventListener('click', function () { show('prompts'); history.replaceState(null, '', '#prompts'); });
+            subBtns.forEach(function (b) { b.addEventListener('click', function () { loadDiagram(b); }); });
+            window.addEventListener('hashchange', function () { fromHash(true); });
+            fromHash(false);
+        })();
+    </script>
+</body>
+</html>

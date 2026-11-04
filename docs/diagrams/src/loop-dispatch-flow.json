@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Loop Engine 调度流程：一张卡从 open 到 done",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "dispatch", "label": "调度器 dispatcher" },
+    { "id": "agent", "label": "角色会话 kimi acp" },
+    { "id": "human", "label": "人工介入与失败", "variant": "exception" },
+    { "id": "finish", "label": "收尾 terminal" }
+  ],
+  "phases": [
+    { "id": "pick", "label": "拉起之前", "fromCol": 0, "toCol": 1 },
+    { "id": "work", "label": "运行与校验", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "close", "label": "合并收尾", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["poll", "prepare", "run", "check", "merge", "done"],
+  "nodes": [
+    { "id": "poll", "lane": "dispatch", "col": 0, "type": "backend", "label": "轮询捞 open", "sublabel": "15s · 静置 ≥1 分钟", "width": 150 },
+    { "id": "prepare", "lane": "dispatch", "col": 1, "type": "backend", "label": "守卫 + 备料", "sublabel": "去重 · worktree · prompt", "width": 150 },
+    { "id": "run", "lane": "agent", "col": 2, "type": "cloud", "label": "角色会话", "sublabel": "按节点角色拉起", "tag": "权限分级", "width": 150 },
+    { "id": "check", "lane": "dispatch", "col": 3, "type": "backend", "label": "校验 result.json", "sublabel": "按节点类型过闸", "width": 150 },
+    { "id": "merge", "lane": "finish", "col": 4, "type": "messagebus", "label": "合并回 main", "sublabel": "--no-ff · 清 worktree", "width": 150 },
+    { "id": "done", "lane": "finish", "col": 5, "type": "frontend", "label": "done", "sublabel": "通知 + 必要时重启", "width": 150 },
+    { "id": "resolve", "lane": "agent", "col": 4, "type": "cloud", "label": "merge_resolve", "sublabel": "冲突 · 最多 2 轮", "width": 150 },
+    { "id": "confirm", "lane": "human", "col": 3, "type": "security", "label": "need_confirm", "sublabel": "飞书 / 网页 y·n", "width": 150 },
+    { "id": "retry", "lane": "human", "col": 4, "type": "security", "label": "失败重试 1 次", "sublabel": "耗尽转 later", "width": 150 }
+  ],
+  "edges": [
+    { "id": "poll-prepare", "from": "poll", "to": "prepare", "label": "置 doing", "variant": "emphasis", "role": "main" },
+    { "id": "prepare-run", "from": "prepare", "to": "run", "label": "起 kimi acp", "variant": "emphasis", "role": "main" },
+    { "id": "run-check", "from": "run", "to": "check", "label": "提交结果", "variant": "emphasis", "role": "main" },
+    { "id": "check-merge", "from": "check", "to": "merge", "label": "末节点通过", "variant": "emphasis", "role": "main" },
+    { "id": "merge-done", "from": "merge", "to": "done", "variant": "emphasis", "role": "main" },
+    { "id": "check-prepare", "from": "check", "to": "prepare", "label": "pass 前进 / reject 打回", "variant": "dashed", "role": "return" },
+    { "id": "check-confirm", "from": "check", "to": "confirm", "label": "需裁决", "variant": "security", "role": "branch" },
+    { "id": "check-retry", "from": "check", "to": "retry", "label": "失败", "variant": "security", "role": "error" },
+    { "id": "merge-resolve", "from": "merge", "to": "resolve", "label": "冲突", "variant": "dashed", "role": "branch" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "节点推进", "items": ["按卡上快照的节点序列推进", "评审 reject 自动打回前驱，第 4 次转人工"] },
+    { "dot": "emerald", "title": "收尾", "items": ["普通项目合并回 main", "branch_only：push f-分支"] },
+    { "dot": "rose", "title": "人工通道", "items": ["飞书 y/n 与网页按钮语义一致", "失败重试耗尽转 later 并标毒会话"] }
+  ]
+}

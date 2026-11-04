@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  日志轮转定时任务：每 30 分钟跑一次 scripts/log-rotate.sh（模板）。
+
+  本文件是模板：安装时由 scripts/install-launchd.sh 把仓库占位符替换成本机路径，渲染出 ~/Library/LaunchAgents/local.automation.log-rotate.plist 后再 bootstrap。
+  手工执行一次：scripts/log-rotate.sh
+  真正停止：launchctl bootout gui/$(id -u)/local.automation.log-rotate
+
+  launchd 只往 StandardOutPath 追加、不轮转，所以需要这个定时任务兜底
+  （看板访问日志曾被 Werkzeug 每请求一行撑到 424MB，2026-09-18）。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.automation.log-rotate</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{REPO}}/scripts/log-rotate.sh</string>
+  </array>
+
+  <!-- 每 30 分钟 -->
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <!-- 不在 bootstrap 时立刻跑一次（首次安装没必要） -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- 输出落 /tmp：不放进 ~/Library/Logs/req-board，避免轮转脚本自身的日志无限增长
+       （该文件不在 log-rotate.sh 的 LOG_FILES 名单里） -->
+  <key>StandardOutPath</key>
+  <string>/tmp/req-board-logrotate.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/req-board-logrotate.err.log</string>
+</dict>
+</plist>

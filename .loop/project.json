@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "commands": {
+    "test": "<主工作区>/.venv/bin/python -m pytest -q -p no:cacheprovider tests",
+    "test_affected": "<主工作区>/.venv/bin/python -m pytest -q -p no:cacheprovider tests/<相关文件，多个按字母序>"
+  },
+  "instance": {
+    "start": "REQ_BOARD_PYTHON=<主工作区>/.venv/bin/python scripts/test_instance.sh start <端口>",
+    "stop": "scripts/test_instance.sh stop <端口>",
+    "status": "scripts/test_instance.sh status <端口>",
+    "healthcheck": "curl http://127.0.0.1:<端口>/",
+    "port_range": [
+      8902,
+      8981
+    ]
+  },
+  "guides": {
+    "instance": {
+      "file": ".loop/guides/instance.md",
+      "roles": [
+        "dev",
+        "accept"
+      ]
+    },
+    "service": {
+      "file": ".loop/guides/service.md",
+      "roles": [
+        "analysis",
+        "tech",
+        "tech_review",
+        "dev",
+        "code_review",
+        "accept"
+      ]
+    }
+  },
+  "skills": {
+    "dev": [
+      "render-assert"
+    ],
+    "accept": [
+      "render-assert"
+    ],
+    "code_review": [
+      "render-assert"
+    ]
+  },
+  "high_risk_paths": [
+    "dispatcher.py",
+    "acp_shared.py",
+    "board.py",
+    "board_modules/",
+    "templates/",
+    "static/",
+    "flows.json",
+    "prompts/",
+    "scripts/",
+    "plists/",
+    "start.sh",
+    "tests/_baseline.py",
+    "tests/conftest.py"
+  ],
+  "agents_md": {
+    "max_lines": 150,
+    "max_chars": 12000
+  }
+}

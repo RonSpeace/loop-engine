@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "commands": {
+    "install": "npm ci",
+    "test": "npm test",
+    "test_affected": "npm test -- <相关文件>",
+    "lint": "npm run lint",
+    "typecheck": "npm run typecheck",
+    "build": "npm run build"
+  },
+  "instance": {
+    "start": "PORT=<端口> npm run dev",
+    "stop": "scripts/stop-dev.sh <端口>",
+    "status": "curl -sf http://127.0.0.1:<端口>/health",
+    "healthcheck": "http://127.0.0.1:<端口>/health",
+    "port_range": [
+      9100,
+      9199
+    ]
+  },
+  "guides": {
+    "instance": {
+      "file": ".loop/guides/instance.md",
+      "roles": [
+        "dev",
+        "accept"
+      ]
+    }
+  },
+  "skills": {
+    "dev": []
+  },
+  "high_risk_paths": [
+    "src/migrations/",
+    "src/auth/"
+  ],
+  "agents_md": {
+    "max_lines": 150,
+    "max_chars": 12000
+  }
+}

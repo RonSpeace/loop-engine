@@ -1,0 +1,4 @@
+interface:
+  display_name: "需求看板建卡"
+  short_description: "按统一约定在任何项目下为当前项目创建需求看板卡片，供所有 AI 工具使用"
+  default_prompt: "Use $req-board-card to create a requirement card on the req-board for the current project."

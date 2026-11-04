@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  自动开发调度器（dispatcher.py）launchd 托管定义（模板）。
+
+  本文件是模板：安装时由 scripts/install-launchd.sh 把仓库/日志占位符替换成本机路径，渲染出 ~/Library/LaunchAgents/local.automation.req-board-dispatcher.plist
+  后再 bootstrap。仓库里不写机器绝对路径。
+  日常重启：scripts/dispatcher-restart.sh <pid> [来源]（写来源标记 + SIGTERM，本 job 的 KeepAlive 拉起）
+  真正停止：launchctl bootout gui/$(id -u)/local.automation.req-board-dispatcher
+
+  Label 是硬契约：board.py 的 REQ_CHAT_DISPATCHER_LABEL 按字面量引用它，
+  网页端「重启调度器」（POST /api/dispatcher/restart）与需求助手 restart_dispatcher 工具都走这个 label。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.automation.req-board-dispatcher</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{REPO}}/scripts/launchd-run.sh</string>
+    <string>dispatcher</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>{{REPO}}</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- #380：done 命中调度器模块改动时自写来源标记 + kill -TERM 自身，靠这条拉起 -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>{{LOG_DIR}}/req-board-dispatcher.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{LOG_DIR}}/req-board-dispatcher.err.log</string>
+</dict>
+</plist>

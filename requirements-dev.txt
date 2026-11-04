@@ -1,0 +1,4 @@
+# 开发与测试
+-r requirements.txt
+-r requirements-feishu.txt
+pytest>=8

@@ -1,0 +1,7 @@
+{
+  "toy-project": {
+    "paths": ["/absolute/path/to/toy-project"],
+    "base_branch": "main",
+    "goal": "一句话说明项目目标（注入需求分析上下文）"
+  }
+}

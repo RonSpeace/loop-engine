@@ -1,0 +1,36 @@
+#!/bin/bash
+# 建卡会话 kimi 启动器（#108）：以 kimi-chat-acp 进程名存活（bash 自改名 exec -a），
+# 把真实 kimi 作为子进程运行（stdin/stdout 直连继承）。
+#
+# 为什么不能直接 `exec kimi`：kimi 二进制（~/.kimi-code/bin/kimi）启动后会自改名成
+# "kimi-code" 并清空 argv（2026-08-07 实测），直接 exec 会丢失 kimi-chat-acp 可辨性，
+# 与 dispatcher agent 的 kimi 无法区分（误杀根因）。
+#
+# 本方案下 ps 可见：`kimi-chat-acp`（wrapper，本进程，pid=ACPSession.proc.pid）
+#   └─ `kimi-code`（chat 会话 kimi 子进程）
+# 与 dispatcher agent（父进程=dispatcher.py 的 kimi-code）及交互式 `kimi` 可辨。
+#
+# 由 board.py 建卡会话（_chat_boot）经 ACPSession(kimi_bin=...) 以 `kimi-chat-acp acp <args>` 调用，
+# 参数原样透传（Popen 已带首个 "acp"）。TERM 转发给 kimi 子进程（close(kill=False) 优雅退出路径）。
+#
+# 模型注入（2026-08-17）：KIMI_CODE_HOME 指向 DeepSeek 专用配置目录（独立 config.toml =
+# deepseek/v4.1-flash = DeepSeek-V4.1-Flash，官方模型名 deepseek-flash；
+# mcp.json/skills/plugins 等软链回 ~/.kimi-code 保持共享），后台 agent
+# （建卡/需求助手/调度器各角色）默认走 DeepSeek，交互终端维持 ~/.kimi-code 主配置。
+# 外部已设 KIMI_CODE_HOME 时不覆盖（保留手动指定能力）。
+KIMI_CODE_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code-deepseek}"
+export KIMI_CODE_HOME
+KIMI_BIN="${KIMI_BIN:-kimi}"
+command -v "$KIMI_BIN" >/dev/null 2>&1 || KIMI_BIN="$HOME/.kimi-code/bin/kimi"
+# 替换为 argv[0]=kimi-chat-acp 的 bash（进程名 kimi-chat-acp、pid 不变、进程组不变），
+# 随后以子进程方式启动 kimi（继承 stdin/stdout/stderr，wait 传递退出码）。
+exec -a kimi-chat-acp /bin/bash -c '
+    set -u
+    KIMI_BIN="$1"; shift
+    KIMI_PID=""
+    trap '\''[ -n "$KIMI_PID" ] && kill -TERM "$KIMI_PID" 2>/dev/null'\'' TERM INT
+    "$KIMI_BIN" "$@" </dev/stdin &
+    KIMI_PID=$!
+    wait "$KIMI_PID"
+    exit $?
+' _ "$KIMI_BIN" "$@"

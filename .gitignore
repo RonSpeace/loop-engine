@@ -1,0 +1,37 @@
+# 数据目录（含 SQLite 数据库，严禁删除）
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 密钥与运行时产物
+.env
+.req-board-result.json
+projects.json
+projects.json.bak
+projects.json.bak*
+projects.json.tmp
+feishu.json
+feishu.json.bak
+feishu.json.tmp
+# 飞书凭据的所有本地备份/迁移变体（如 feishu.json.bak-vision-*、*.pre-cc-connect-*.bak）
+feishu.json.*
+# 本地备份/迁移残留
+*.bak
+.playwright-mcp/
+
+# macOS
+.DS_Store
+
+# 半自动流程产物目录（评审交接物，不入库）
+.req-board/
+
+# flow-probe（#432）运行时产物：只读观察工具的本地输出，不入库
+scripts/flow-probe/out/
+
+# archify 视觉自检产物（截图/报告，本地生成不入库）
+docs/diagrams/*.visual-check.*
+.claude/

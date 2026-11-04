@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  需求看板（board.py）launchd 托管定义（模板）。
+
+  本文件是模板，不是可直接加载的 plist：安装时由 scripts/install-launchd.sh 把仓库/日志占位符替换成本机路径，渲染出
+  ~/Library/LaunchAgents/local.req-board.plist 后再 bootstrap。
+  仓库里不写机器绝对路径，两台机器共用同一份模板。
+  日常重启：./start.sh
+  真正停止：launchctl bootout gui/$(id -u)/local.req-board
+            （裸 kill 无效——KeepAlive 会把进程重新拉起）
+
+  Label 是硬契约：board.py 的 REQ_CHAT_DISPATCHER_LABEL 与 dispatcher.py 的
+  _kickstart_board_if_own 按字面量引用 local.req-board，改名会断掉自动重启链路。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.req-board</string>
+
+  <!-- 经 wrapper 启动：wrapper 负责读取 .env 后再 exec 真正的进程。
+       launchd 不读 .env，把变量写进 plist 会让凭据落到明文件里。 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{REPO}}/scripts/launchd-run.sh</string>
+    <string>board</string>
+  </array>
+
+  <!-- board.py 用相对路径找 data/ 与 flows.json，工作目录必须钉死 -->
+  <key>WorkingDirectory</key>
+  <string>{{REPO}}</string>
+
+  <!-- 登录即启动 -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- 崩溃自拉起（含被 kill） -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- 启动失败时最小重启间隔（秒），避免写错路径时刷屏 -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>{{LOG_DIR}}/req-board.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{LOG_DIR}}/req-board.err.log</string>
+</dict>
+</plist>
