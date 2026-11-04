@@ -308,7 +308,9 @@ def index():
                                   thought_frames_absent=resolve("THOUGHT_FRAMES_ABSENT"),
                                   # #33 外链地址带内容指纹：改一字节重启后地址必变，旧缓存自然失效
                                   board_css_href=_asset_href("board.css"),
-                                  board_js_href=_asset_href("board.js"))
+                                  board_js_href=_asset_href("board.js"),
+                                  i18n_js_href=_asset_href("i18n.js"),
+                                  i18n_dict_href=_asset_href("i18n.en.js"))
     if resolve("FREEZE_TS") is not None:
         # 仅冻结时钟开启时注入（缺省响应逐字节不变）：须在页面任何脚本前执行
         page = page.replace("<head>", "<head>" + resolve("_freeze_time_script")(), 1)

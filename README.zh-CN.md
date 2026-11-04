@@ -67,6 +67,7 @@ flowchart LR
 - 会话实时视图：工具调用、思考、diff、token 用量，按项目统计消耗与打回率
 - 人在回路：agent 的确认提问在看板上答复（可选接飞书机器人）
 - 多项目：一个看板管多个仓库，每个项目并行多个 agent
+- 中英双语界面（跟随浏览器语言，页头可切换）
 
 ## 快速开始
 
@@ -105,7 +106,8 @@ cp projects.example.json projects.json      # 指向你要让 agent 开发的 gi
 ## 路线图
 
 - [ ] 可插拔 agent 运行体：经 ACP 支持 Claude Code、Codex、Gemini CLI
-- [ ] 英文界面与英文提示词
+- [x] 英文界面
+- [ ] 英文提示词
 - [ ] 一条命令安装与 Docker Compose
 - [ ] GitHub Issues 与需求卡双向同步、PR 模式
 - [ ] 可分享的需求回放（从建卡到合并的完整时间线）

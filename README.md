@@ -72,6 +72,7 @@ flowchart LR
 - Live session view: tool calls, thoughts, diffs, token usage, cost and rejection stats per project
 - Human-in-the-loop by design: `need_confirm` questions answered from the board (or Feishu/Lark IM, optional)
 - Multi-project: one board, many repositories, parallel agents per project
+- English and Chinese UI (follows your browser language; toggle in the header)
 
 ## Quick start
 
@@ -112,7 +113,8 @@ and troubleshooting — is in [docs/quickstart.md](docs/quickstart.md) (Chinese)
 ## Roadmap
 
 - [ ] Pluggable agent runtimes: Claude Code, Codex, Gemini CLI over ACP
-- [ ] English UI and prompt set
+- [x] English UI
+- [ ] English prompt set
 - [ ] One-command install and Docker Compose
 - [ ] GitHub Issues ⇄ cards sync, PR mode
 - [ ] Shareable card replays (timeline of a requirement from card to merge)

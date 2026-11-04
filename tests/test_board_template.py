@@ -2,7 +2,7 @@
 """#32 Phase 2：首页内嵌 HTML 迁到 templates/board.html 的等价性锁（T1-T5）。
 
 - T1：兼容导出等价——board.HTML 与模板文件同字节（同源自证，非等价性证明本身）。
-- T2：模板声明变量恰为 6 个（原 4 个 + #33 的 board_css_href/board_js_href），且无 Jinja 语句/注释块残留。
+- T2：模板声明变量恰为 8 个（原 4 个 + #33 的 board_css_href/board_js_href + 中英切换的 i18n_js_href/i18n_dict_href），且无 Jinja 语句/注释块残留。
 - T3：渲染等价——render_template 与 render_template_string 逐字节相同，且 test_client 首页一致。
 - T4：模板路径不依赖 cwd（基于 app.root_path 绝对路径）。
 - T5：模板里不存在连续两个反斜杠（无「粘贴源码文本」导致的转义残留）。
@@ -24,7 +24,9 @@ from tests._frontend_src import frontend_text  # noqa: E402
 
 JINJA_VARS = {"sse_enabled", "agent_stall_sec", "agent_stall_first_sec", "thought_frames_absent",
               # #33 CSS/JS 外置：外链地址（带内容指纹），由 index() 注入
-              "board_css_href", "board_js_href"}
+              "board_css_href", "board_js_href",
+              # 界面中英切换：词典与 DOM 翻译层（static/i18n.en.js / static/i18n.js）
+              "i18n_js_href", "i18n_dict_href"}
 
 
 def _context(sse_enabled):
@@ -36,6 +38,8 @@ def _context(sse_enabled):
         "thought_frames_absent": board.THOUGHT_FRAMES_ABSENT,
         "board_css_href": _asset_href("board.css"),
         "board_js_href": _asset_href("board.js"),
+        "i18n_js_href": _asset_href("i18n.js"),
+        "i18n_dict_href": _asset_href("i18n.en.js"),
     }
 
 

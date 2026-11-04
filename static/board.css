@@ -968,8 +968,12 @@
         .sd-body .sd-roles td:nth-child(4)::before { content: "产物"; }
         .sd-body .sd-roles td:nth-child(5)::before { content: "模型"; }
         .sd-body .sd-roles td:nth-child(6)::before { content: "权限"; }
+        /* 英文界面（static/i18n.js 置 <html lang="en">）：伪元素文案不在 DOM 里，单独给英文 */
+        html:lang(en) .sd-body .sd-roles td:nth-child(4)::before { content: "Artifact"; }
+        html:lang(en) .sd-body .sd-roles td:nth-child(5)::before { content: "Model"; }
+        html:lang(en) .sd-body .sd-roles td:nth-child(6)::before { content: "Access"; }
         .sd-body .sd-roles td:nth-child(n+4)::before {
-            display: inline-block; min-width: 34px; margin-right: 6px; color: var(--text-3); font-size: 11px;
+            display: inline-block; min-width: 50px; margin-right: 6px; color: var(--text-3); font-size: 11px;
         }
         .sd-body .sd-roles td:nth-child(6) { color: var(--text-3); font-size: 11.5px; }
         .sd-body .sd-roles td:nth-child(1) code { white-space: nowrap; }
