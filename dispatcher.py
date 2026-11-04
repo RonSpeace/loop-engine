@@ -6244,14 +6244,16 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
                           f"（{settle}）"))
             if not kept:
                 post_model_events(req, role, session, resolved)
-        ver = kimi_version()
+        runtime_id = getattr(session, "runtime_id", "kimi")
+        ver = kimi_version() if runtime_id == "kimi" else None
+        harness = (f"kimi code {ver}" if ver else None) if runtime_id == "kimi" else runtime_id
         update_session_info(req, key=session_key(req, role), id=session.session_id,
                             model=session.model_name, thinking=session.thinking,
                             model_requested=getattr(session, "model_requested", None),
                             model_source=getattr(session, "model_source", None),
                             model_configured=getattr(session, "model_configured", None),
                             model_reason=getattr(session, "model_reason", None),
-                            harness=f"kimi code {ver}" if ver else None)
+                            harness=harness)
         # #273 人工接管：同步 agent_sessions 注册表（失败仅降级，不阻断会话）
         row_id = sync_agent_session(req, role, session_id=session.session_id, row_id=row_id,
                                     model=session.model_name, thinking=session.thinking,
@@ -6259,7 +6261,7 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
                                     model_source=getattr(session, "model_source", None),
                                     model_configured=getattr(session, "model_configured", None),
                                     model_reason=getattr(session, "model_reason", None),
-                                    harness=f"kimi code {ver}" if ver else None,
+                                    harness=harness,
                                     workdir=str(workdir), status="running")
         # #421：同步失败返回 None 时保留旧 id（心跳继续写已知行，不因一次抖动失聪）
         activity["row_id"] = row_id or activity["row_id"]

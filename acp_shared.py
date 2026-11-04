@@ -43,6 +43,7 @@ import logging
 import os
 import re
 import shutil
+import shlex
 import signal
 import subprocess
 import sys
@@ -59,6 +60,102 @@ log = logging.getLogger("acp_shared")
 # ==================== 配置（dispatcher.py 同款默认值，board 建卡会话共用） ====================
 REPO_DIR = Path(__file__).resolve().parent
 KIMI = os.environ.get("KIMI_BIN") or shutil.which("kimi") or str(Path.home() / ".kimi-code/bin/kimi")
+# 运行体能力单一源；新适配器尚不能证明所有内置工具都经客户端复核，受限角色拒绝启动。
+AGENT_RUNTIMES = {
+    "kimi": {"display_name": "Kimi", "argv": (KIMI, "acp"), "env": {},
+             "protected_process_names": ("kimi",),
+             "supports_model_option": True, "supports_usage_command": True,
+             "supports_permission_mode": True, "supports_authenticate": True, "supports_model_pool": True,
+             "supports_restricted_roles": True, "session_dir_resolver": "kimi"},
+    "claude-code": {"display_name": "Claude Code",
+                    "argv": ("npx", "-y", "@zed-industries/claude-code-acp@0.16.2"), "env": {},
+                    "protected_process_names": ("claude", "claude-code", "claude-code-acp"),
+                    "supports_model_option": False, "supports_usage_command": False,
+                    "supports_permission_mode": False, "supports_authenticate": False, "supports_model_pool": False,
+                    "supports_restricted_roles": False, "session_dir_resolver": None},
+    "codex": {"display_name": "Codex",
+              "argv": ("npx", "-y", "@zed-industries/codex-acp@0.16.0"), "env": {},
+              "protected_process_names": ("codex", "codex-acp"),
+              "supports_model_option": False, "supports_usage_command": False,
+              "supports_permission_mode": False, "supports_authenticate": False, "supports_model_pool": False,
+              "supports_restricted_roles": False, "session_dir_resolver": None},
+}
+_RUNTIME_SKIPS = set()
+
+
+def agent_runtime(runtime_id):
+    """未知运行体必须在创建进程前报错，不能静默回落。"""
+    if not isinstance(runtime_id, str) or runtime_id not in AGENT_RUNTIMES:
+        raise ValueError(f"未知 agent runtime: {runtime_id!r}；合法值：{', '.join(AGENT_RUNTIMES)}")
+    return AGENT_RUNTIMES[runtime_id]
+
+
+def runtime_skip(runtime_id, feature):
+    """缺失能力按运行体/能力各记录一次，避免长驻服务刷屏。"""
+    key = (runtime_id, feature)
+    if key not in _RUNTIME_SKIPS:
+        _RUNTIME_SKIPS.add(key)
+        log.info("运行体 %s 不支持 %s，跳过", runtime_id, feature)
+
+
+def runtime_argv(runtime_id, kimi_bin=None):
+    runtime = agent_runtime(runtime_id)
+    key = "LOOP_AGENT_CMD_" + runtime_id.upper().replace("-", "_")
+    override = os.environ.get(key)
+    if override is not None:
+        argv = shlex.split(override)
+        if not argv:
+            raise ValueError(f"{key} 不能为空")
+        return argv
+    if runtime_id == "kimi":
+        return [kimi_bin or KIMI, "acp"]
+    binary = shutil.which(runtime_id + "-acp")
+    return [binary] if binary else list(runtime["argv"])
+
+
+def normalize_permission_tool(runtime_id, tool_call):
+    """适配器的展示标题不可信；只从完整结构化参数识别命令/写路径。
+
+    Claude 0.16.2 Bash 标题为反引号命令；Codex 0.16.0 exec 审批的
+    rawInput.command 为 argv 数组。未知/缺失输入不猜测、不当作安全工具。
+    """
+    agent_runtime(runtime_id)
+    if runtime_id == "kimi":
+        return tool_call
+    tc = dict(tool_call)
+    tc.pop("writePaths", None)  # 仅允许本函数从结构化参数派生，不能采信远端附加字段
+    raw = tc.get("rawInput")
+    if not isinstance(raw, dict):
+        return dict(tc, title="Unknown", content=[])
+    command = raw.get("command")
+    if isinstance(command, list) and command and all(isinstance(v, str) for v in command):
+        if len(command) == 3 and Path(command[0]).name in ("bash", "sh", "zsh") and command[1] in ("-c", "-lc"):
+            command = command[2]
+        else:
+            command = shlex.join(command)
+    if isinstance(command, str) and command:
+        tc.update(title="Bash", rawInput=dict(raw, command=command),
+                  content=[{"content": {"type": "text", "text": command}}])
+    elif runtime_id == "codex" and isinstance(raw.get("changes"), dict) and raw["changes"]:
+        paths = []
+        for path, change in raw["changes"].items():
+            if not isinstance(path, str) or not isinstance(change, dict):
+                return dict(tc, title="Unknown", content=[])
+            paths.append(path)
+            if change.get("move_path") is not None:
+                if not isinstance(change["move_path"], str):
+                    return dict(tc, title="Unknown", content=[])
+                paths.append(change["move_path"])
+        tc.update(title="Patch", writePaths=paths)
+    elif isinstance(raw.get("file_path"), str) and any(k in raw for k in ("content", "old_string", "edits")):
+        path = raw["file_path"]
+        tc.update(title="Write" if "content" in raw else "Edit",
+                  content=[{"content": {"type": "text", "text": "Writing " + path}}])
+    else:
+        tc["title"] = "Unknown"
+    return tc
+
+
 # 会话固定模型：kimi 升级会重置全局 default_model，会话级 set_config_option 覆盖（dispatcher 同款）
 # 后台 agent 统一走 DeepSeek V4.1 Flash（~/.kimi-code-deepseek/config.toml 同名条目；
 # 官方模型名 deepseek-flash，2026-09-16 由已下线的旧名 v4-flash-vision-exp 切换）
@@ -705,6 +802,47 @@ def _project_role_model(project, role):
     return val.strip() or None
 
 
+def role_runtime_detail(role, project=None):
+    """项目角色 → 项目默认 → 流程角色 → 环境变量 → kimi；显式非法值 fail-closed。"""
+    entry = {}
+    if project:
+        try:
+            raw = json.loads(Path(PROJECTS_FILE).read_text())
+            if not isinstance(raw, dict):
+                raise ValueError("projects.json 必须为对象")
+            entry = raw.get(str(project), {})
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            raise ValueError(f"运行体项目配置读取失败：{exc}") from exc
+    if isinstance(entry, dict):
+        runtimes = entry.get("runtimes", {})
+        if not isinstance(runtimes, dict):
+            raise ValueError("项目 runtimes 必须为对象")
+        if role in runtimes:
+            value, source = runtimes[role], "project_role"
+        elif "runtime" in entry:
+            value, source = entry["runtime"], "project"
+        else:
+            value, source = None, None
+    else:
+        value, source = None, None
+    if source is None:
+        role_entry = ((FLOW_CONFIG or {}).get("roles") or {}).get(role) or {}
+        if "runtime" in role_entry:
+            value, source = role_meta(role, "runtime"), "role"
+        elif "LOOP_AGENT_RUNTIME" in os.environ:
+            value, source = os.environ["LOOP_AGENT_RUNTIME"], "env"
+        else:
+            value, source = "kimi", "global"
+    agent_runtime(value)
+    return value, source
+
+
+def role_runtime(role, project=None):
+    return role_runtime_detail(role, project)[0]
+
+
 def role_model_detail(role, project=None):
     """角色生效模型四层兜底链（唯一判定点，调用方不得自行重排层序）：
     ① projects.json[project]["models"][role] → ② flows.json roles.<id>.model →
@@ -971,6 +1109,10 @@ def resolve_role_model(role, project=None, pool=_POOL_UNSET):
     **边界**：覆盖「不在池」与「在池但不可用」（provider type 非法/缺 protocol，model_alias_usable
     判定）两类；形态不匹配/被拒仍由落定回读判定（ACPSession._apply_model）承担。"""
     configured, configured_source = role_model_detail(role, project)
+    runtime_id = role_runtime(role, project)
+    if not agent_runtime(runtime_id)["supports_model_pool"]:
+        runtime_skip(runtime_id, "harness 模型别名池校验")
+        pool = None
     if pool is _POOL_UNSET:
         pool, _home, warning = model_alias_pool()
         if warning:
@@ -3414,7 +3556,14 @@ class ACPSession:
                  write_roots=None, kimi_bin=None, deny_builtin_write=False, mysql_config=None,
                  allow_git_commit=False, allow_git_merge=False, main_ws_roots=None, model=None,
                  allow_python_safe=False, python_roots=None, python_compile_roots=None,
-                 activity_sink=None, tool_profile=None, output_guard=None):
+                 activity_sink=None, tool_profile=None, output_guard=None, runtime=None):
+        self.runtime_id = runtime if runtime is not None else role_runtime(role, project)
+        self.runtime = agent_runtime(self.runtime_id)
+        if not self.runtime["supports_restricted_roles"] and (
+                readonly or role_capability(role, "readonly")
+                or role_capability(role, "bash") != "allow" or tool_profile
+                or deny_builtin_write or not allow_fs_write):
+            raise ValueError(f"运行体 {self.runtime_id} 尚未验证受限工具等价约束，拒绝启动受限/只读角色 {role}")
         self.req_id = req_id
         self.workdir = Path(workdir)
         self.role = role
@@ -3466,7 +3615,8 @@ class ACPSession:
         self.mysql_config = mysql_config  # 可选的每项目 MySQL 只读查询配置（None = 不暴露 mysql_query）
         self._mcp = None  # 只读角色受限工具 HTTP MCP server（start 时创建，close 时销毁）
         self.proc = subprocess.Popen(
-            [kimi_bin or KIMI, "acp"], cwd=str(self.workdir),
+            runtime_argv(self.runtime_id, kimi_bin), cwd=str(self.workdir),
+            **({"env": dict(os.environ, **self.runtime["env"])} if self.runtime["env"] else {}),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logf,
             start_new_session=True)
         self._next_id = 0
@@ -3890,7 +4040,15 @@ class ACPSession:
         - 全员：进程清理红线（kill/killpg/pkill 命中 kimi 或本会话驱动进程）
         - 写角色（dev/accept）：写主工作区护栏；no_commit 角色另拒提交类命令
         - 只读角色：命令白名单（_readonly_bash_ok 唯一入口，含 kimi 的 cd 前缀剥离）"""
-        hit = kill_redline_hit(script, getattr(getattr(self, "proc", None), "pid", None))
+        redline_script = script
+        if getattr(self, "runtime_id", "kimi") != "kimi":
+            # 复用既有结构解析器的数据/执行区分；新运行体也保护全部已注册 agent 进程名。
+            # 只替换检测副本，实际命令不变，Kimi 默认规则不变。
+            names = {name for runtime in AGENT_RUNTIMES.values()
+                     for name in runtime["protected_process_names"]}
+            pattern = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+            redline_script = re.sub(pattern, "kimi", script, flags=re.I)
+        hit = kill_redline_hit(redline_script, getattr(getattr(self, "proc", None), "pid", None))
         if hit:
             raise PermissionError(f"进程清理红线命令被拦截: {hit}")
         if self._is_readonly():
@@ -4202,6 +4360,17 @@ class ACPSession:
             return f"非 http(s) URL {viol}"
         return None
 
+    def _runtime_write_allowed(self, path):
+        """异构适配器写路径按会话 cwd 解析，包含相对路径、移动源/目标与软链。"""
+        if not isinstance(path, str) or not path or "\x00" in path:
+            return False
+        workdir = Path(self.workdir).resolve()
+        target = Path(path)
+        target = (target if target.is_absolute() else workdir / target).resolve()
+        roots = getattr(self, "write_roots", None) or [workdir, self.artifact_root]
+        return any(target == Path(root).resolve() or Path(root).resolve() in target.parents
+                   for root in roots)
+
     def _auto_approve(self, params):
         """工具审批策略按角色路由：
         dev：全放行（等价原无头行为），但 Bash 写主工作区护栏（#336）例外；readonly
@@ -4212,7 +4381,25 @@ class ACPSession:
         未命中交由 terminal 层完整命令复核拒绝）、Write/Edit 仅限写白名单内（worktree/产物/
         tmp），其余工具一律拒。"""
         options = params.get("options") or []
-        tc = params.get("toolCall") or {}
+        runtime_id = getattr(self, "runtime_id", "kimi")
+        tc = normalize_permission_tool(runtime_id, params.get("toolCall") or {})
+        if runtime_id != "kimi":
+            # 新适配器并不保证 terminal/create 兜底，必须在本次完整审批中复核。
+            if tc.get("title") == "Bash":
+                try:
+                    self._terminal_approve(tc["rawInput"]["command"])
+                except PermissionError:
+                    return {"outcome": {"outcome": "cancelled"}}
+            elif tc.get("title") in ("Write", "Edit", "Patch"):
+                paths = tc.get("writePaths") or [tc["rawInput"]["file_path"]]
+                if not all(self._runtime_write_allowed(path) for path in paths):
+                    return {"outcome": {"outcome": "cancelled"}}
+            else:
+                return {"outcome": {"outcome": "cancelled"}}
+            # 绝不选择 allow_always（Claude 会把权限规则持久化并绕过后续审批）。
+            option = next((o for o in options if o.get("kind") == "allow_once"), None)
+            return ({"outcome": {"outcome": "selected", "optionId": option["optionId"]}}
+                    if option else {"outcome": {"outcome": "cancelled"}})
         title = tc.get("title") or ""
         text = self._toolcall_text(tc)
         # #24 助手 profile 审批层：只放行本会话注入的助手业务 MCP 工具（前缀由 extra_mcp_servers
@@ -4456,6 +4643,24 @@ class ACPSession:
         if isinstance(_u, dict):
             self._note_usage(_u, raw=_u)
         kind = update.get("sessionUpdate")
+        runtime_id = getattr(self, "runtime_id", "kimi")
+        if runtime_id != "kimi" and kind in ("tool_call", "tool_call_update"):
+            normalized = normalize_permission_tool(runtime_id, update)
+            # 未识别的工具只保留展示标题；审批层仍拒绝，不能凭展示名获得授权。
+            if normalized.get("title") != "Unknown":
+                update = normalized
+            raw = normalized.get("rawInput") or {}
+            try:
+                if normalized.get("title") == "Bash":
+                    self._terminal_approve(raw["command"])
+                elif normalized.get("title") in ("Write", "Edit", "Patch"):
+                    paths = normalized.get("writePaths") or [raw["file_path"]]
+                    if not all(self._runtime_write_allowed(path) for path in paths):
+                        raise PermissionError("写路径越出会话白名单")
+            except PermissionError as exc:
+                self._emit("system", f"运行体工具红线被拦截：{exc}", session_id=self.session_id)
+                self.cancel()
+                return
         if kind == "agent_message_chunk":
             content = update.get("content") or {}
             if content.get("type") == "text":
@@ -4606,7 +4811,17 @@ class ACPSession:
             self._check_output_guard(text)
 
     # ---- 会话流程 ----
+    def _runtime_supports(self, capability):
+        runtime_id = getattr(self, "runtime_id", "kimi")
+        supported = agent_runtime(runtime_id)[capability]
+        if not supported:
+            runtime_skip(runtime_id, capability)
+        return supported
+
     def _apply_config(self, result):
+        models = (result or {}).get("models") or {}
+        if models.get("currentModelId"):
+            self.model_name = models["currentModelId"]
         opts = (result or {}).get("configOptions")
         if not isinstance(opts, list):
             return
@@ -4631,6 +4846,8 @@ class ACPSession:
         """只读/受限角色切 mode=default（服务端映射为 manual 审批），使 Bash/Write 走客户端审批。
         注意：Kimi 对 git 工作目录内的内置 Edit/Write 仍有自动放行策略，不会发审批请求；
         建卡会话依赖 ACPSession.deny_builtin_write 在工具调用事件到达时直接取消本轮。"""
+        if not self._runtime_supports("supports_permission_mode"):
+            return
         if not role_capability(self.role, "manual_mode"):
             return
         try:
@@ -4670,6 +4887,8 @@ class ACPSession:
         幂等，新会话与续跑都调用；失败仅警告不阻断会话。
         #11：写后回读 configOptions.currentValue 判定是否落定（_model_settle_of），非 settled
         记 WARNING + 事件留痕（不再静默），仍不阻断会话。"""
+        if not self._runtime_supports("supports_model_option"):
+            return
         model = getattr(self, "model", None) or ACP_MODEL
         try:
             result = self.request("session/set_config_option", {
@@ -4740,7 +4959,7 @@ class ACPSession:
                 "fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False}
         result = self.request("initialize", _init_payload, timeout=120)
         auth_methods = result.get("authMethods") or []
-        if auth_methods:
+        if auth_methods and self._runtime_supports("supports_authenticate"):
             self.request("authenticate", {"methodId": auth_methods[0].get("id", "login")}, timeout=120)
         mcp_servers = self._readonly_mcp_servers(workdir) + list(self._extra_mcp_servers)
         if resume_session_id:
@@ -4769,6 +4988,8 @@ class ACPSession:
         #42：原文片段留存 _usage_raws 供缓存指标的 raw（返回形状不变，建卡会话零影响）；
         /usage 斜杠命令不是真实模型请求，不计入 _llm_turns_done。"""
         self._flush_message()
+        if not self._runtime_supports("supports_usage_command"):
+            return None
         self._capture = []
         try:
             self.request("session/prompt", {
@@ -4901,7 +5122,11 @@ class ACPSession:
             if kill:
                 os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
             else:
-                self.proc.terminate()
+                if getattr(self, "runtime_id", "kimi") == "kimi":
+                    self.proc.terminate()
+                else:
+                    # npx 是启动父进程；只停父进程会留下适配器持有 stdout，关闭管道死锁。
+                    os.killpg(self.proc.pid, signal.SIGTERM)
         except Exception:
             pass
         try:
@@ -4914,6 +5139,12 @@ class ACPSession:
             try:
                 self.proc.wait(timeout=5)
             except Exception:
+                pass
+        if getattr(self, "runtime_id", "kimi") != "kimi":
+            try:
+                # 本会话独立进程组由 Popen(start_new_session=True) 创建，只清理自己的后代。
+                os.killpg(self.proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
                 pass
         # stderr 可能是调用方的日志文件，随管道一起关；调用方再次 close 是空操作
         self._close_proc_pipes(self.proc)

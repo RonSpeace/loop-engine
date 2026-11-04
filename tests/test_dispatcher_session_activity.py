@@ -507,7 +507,7 @@ class L0SignatureSurface(unittest.TestCase):
     按位置传参，顺序变了会静默错配），新增参数只允许在既有位置参数之后追加且默认 None。
     #9 在 model 后新增 thinking（#50 已删除，思考档位统一模型默认）；
     #421 追加 activity_sink（会话活性上报）；#24 追加 tool_profile（助手 ACP 构造档）；
-    #28 追加 output_guard（输出守卫留痕回调），本表随之更新。"""
+    #28 追加 output_guard（输出守卫留痕回调）；运行体接入追加 runtime，本表随之更新。"""
 
     EXISTING_POSITIONAL = [
         "req_id", "workdir", "logf", "role", "artifact_root", "project", "event_sink",
@@ -517,7 +517,7 @@ class L0SignatureSurface(unittest.TestCase):
         "allow_python_safe", "python_roots", "python_compile_roots",
     ]
     # 既有位置参数之后追加的关键字参数（顺序即追加顺序，默认必须为 None）
-    APPENDED_KEYWORDS = ["activity_sink", "tool_profile", "output_guard"]
+    APPENDED_KEYWORDS = ["activity_sink", "tool_profile", "output_guard", "runtime"]
 
     def test_d17_activity_sink_appended_last(self):
         params = list(inspect.signature(ac.ACPSession.__init__).parameters.values())

@@ -13,7 +13,7 @@ import json
 from flask import Blueprint, jsonify, request
 
 
-from acp_shared import pre_role
+from acp_shared import pre_role, AGENT_RUNTIMES
 from board_modules.common import _origin_bucket
 from board_modules.common import _snapshot_node
 from board_modules.common import _status_log_meta
@@ -47,7 +47,11 @@ def api_agent_sessions_list():
         rows = _agent_sessions_with_meta(conn)
     out = []
     for d in rows:
-        d['session_dir'] = resolve_session_dir(d['session_id'])
+        harness = d.get('harness') or ''
+        if harness in AGENT_RUNTIMES and harness != 'kimi':
+            d['session_dir'] = resolve_session_dir(d['session_id'], runtime=harness)
+        else:
+            d['session_dir'] = resolve_session_dir(d['session_id'])
         out.append(d)
     return jsonify(out)
 

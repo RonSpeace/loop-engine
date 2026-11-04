@@ -76,9 +76,7 @@ flowchart LR
 
 ## Quick start
 
-**Requirements:** Python 3.11+, git, and an ACP-capable agent runtime. Today the dispatcher drives the
-kimi-code CLI (`kimi acp`), which can be pointed at any
-OpenAI / Anthropic / Gemini-compatible model. Support for more ACP agents is on the roadmap.
+**Requirements:** Python 3.11+, git, and at least one ACP agent runtime (see below).
 
 ```bash
 git clone https://github.com/RonSpeace/loop-engine.git && cd loop-engine
@@ -93,6 +91,28 @@ Open <http://127.0.0.1:8899>, create a card with status **open**, and watch it m
 
 The full walkthrough — model / API key setup, MCP tools, a toy project for your first end-to-end loop,
 and troubleshooting — is in [docs/quickstart.md](docs/quickstart.md) (Chinese).
+
+### Agent runtimes
+
+Each role runs on an ACP agent runtime, chosen per role and per project:
+
+| Runtime | Roles | Notes |
+|---|---|---|
+| `kimi` (default) | all | kimi-code CLI (`kimi acp`); point it at any OpenAI / Anthropic / Gemini-compatible model |
+| `claude-code` | dev | Claude Code via `@zed-industries/claude-code-acp`; uses your logged-in `claude` CLI |
+| `codex` | dev | Codex via `@zed-industries/codex-acp`; uses your logged-in `codex` CLI |
+
+```json
+{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}
+```
+
+Selection order: `projects.json` `<project>.runtimes.<role>` → `<project>.runtime` → `flows.json`
+`roles.<id>.runtime` → `LOOP_AGENT_RUNTIME` → `kimi`. Unknown runtimes are refused before anything starts.
+
+Claude Code and Codex are limited to the **dev** role for now: Loop Engine re-checks every command and
+file write they ask to run, but it can't yet prove the read-only limits of the reviewer roles hold on
+those runtimes, so it refuses to start them there rather than run them unconstrained.
+Details: [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择).
 
 ## Configuration at a glance
 
@@ -112,7 +132,8 @@ and troubleshooting — is in [docs/quickstart.md](docs/quickstart.md) (Chinese)
 
 ## Roadmap
 
-- [ ] Pluggable agent runtimes: Claude Code, Codex, Gemini CLI over ACP
+- [x] Pluggable agent runtimes: Claude Code and Codex for the dev role
+- [ ] Claude Code / Codex for reviewer roles, Gemini CLI
 - [x] English UI
 - [ ] English prompt set
 - [ ] One-command install and Docker Compose

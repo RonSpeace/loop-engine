@@ -201,3 +201,19 @@ agent 确认裁决（need_confirm/review_gate/confirm_override）双通道，语
 ## 需求助手流程（#302 引入，原「需求对话」详情页底部常驻聊天；#326 改为中间栏置顶入口 + 右栏独立视图）
 
 每张需求卡片会话信息栏顶部固定一行「需求助手」（任何状态含 later/done 可用，未聊过显示「新对话（未开始）」；session_id 由 `/api/requirements` 列表附带 `req_chat_sid` 字段提供），点击在右栏打开独立需求助手视图（头部=需求标题可点回详情 + 状态徽标 + 会话信息，中部=消息流，底部=**状态卡片**+输入框；详情页不再常驻聊天区；#430 起状态卡片与调度器会话同款：绿=思考中（带计时）/ 灰=可继续或已停止 / 红=建立失败 / 蓝=收尾中，可展开三行判定依据，主按钮恒为「发送」，「取消本轮 / 新建对话」在卡片动作位，本轮执行中不显示输入区；需求助手无调度器心跳证据，故不判死、不给「重启调度器」），由 board 进程内直接起 `kimi acp` 子进程（仿 #107，不走调度器），一张卡一个对话（历史 closed 行保留可回看，终态后可新建）。回合制：发一条 → kimi 完整跑一轮 → 事件写 `req_chat_events`；**每轮结束关闭进程**（低频维护场景不保持），session_id 保留，下一轮 `session/resume` 续上下文；board 重启后残留 running/idle 标 interrupted，页面可「继续」恢复；全站最多 3 个对话并行 running（429），单轮 10 分钟超时。安全边界（显式授权写工具——`create_requirement` 建卡（project 绑定本需求项目、status 限 later/open 默认 later、同标题幂等防重复、不同标题可建多张）、`update_requirement`（title/notes/summary，**#434** 起加 status 仅 later/open）、`write_artifact`、**`post_review`（#434：追加评审记录到 `req_reviews`，round/reviewer 服务端填、只追加）**、`tapd_comment` 另见 AGENTS.md、git 白名单、**#355 合并授权**：git merge/checkout/switch/stash 受限形态 + 项目工作目录内冲突文件编辑，解决代码合并冲突用；**#434 写白名单**：项目工作目录 + `/tmp` 与系统 TMPDIR（会话专属子目录 `/tmp/req_board_reqchat_<id>/`），且审批层/fs 落地层与 #303 判定同源（此前两层只认产物目录，评审写 `/tmp` 探针会被拦并**取消整轮**）；**沙箱内没有 curl、不能跑任意脚本**，故 req-board-review skill 的写回走 `post_review` / `update_requirement`，脚本与 curl 写法仅完整 agent 环境可用（skill 已加「运行环境适配」分支）；**#357**：0.37.2 审批文本截断 + terminal 层白名单同源 + /bin/bash -c 剥离三处修复（三处只覆盖 `/bin/bash -c` 脚本还原与两层同源，**未**处理 kimi 的 `cd '<cwd>' && ` 前缀——#423 才恢复只读 Bash 实际可用）；独立于调度器体系）见 AGENTS.md。
+
+## 可插拔 agent 运行体（第一阶段）
+
+运行体由 `acp_shared.AGENT_RUNTIMES` 声明 argv、env 与能力；选择唯一源
+`role_runtime_detail()`，顺序为项目角色 → 项目默认 → 流程角色 → 环境变量 → Kimi。
+`ACPSession` 在 Popen 前校验 ID 与角色约束；非 Kimi 不使用 wrapper、Kimi home、
+模型池、模型固定、权限模式配置、主动 authenticate 或 `/usage`。新适配器读取已有 CLI 登录，
+实际模型尽量从 session/new 响应观测；harness 字段存运行体 ID，目录查询直接返回空。
+受限角色尚未证明工具复核等价时拒绝启动，不能依靠提示词降级放行。
+
+Claude 0.16.2 的 Bash 标题为反引号命令、审批 rawInput 带完整 command；
+Codex 0.16.0 exec 审批 rawInput.command 为 argv 数组，标题由 parsed_cmd 派生。
+审批归一化只信结构化 command/写路径，命令复用 `_terminal_approve`，未知输入拒绝，
+仅选择 allow_once。Claude 的 SDK 权限规则/内置工具、Codex 的 sandbox 自动放行
+不保证所有工具逐次向客户端审批，因此本阶段只允许开发角色使用新运行体。
+详见 [运行体配置](quickstart.md#agent-runtimes运行体选择)。

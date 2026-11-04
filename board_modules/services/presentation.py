@@ -3,7 +3,7 @@
 补丁名单名字与留在 board.py 的名字一律经 runtime.resolve 在调用期读取。
 """
 from acp_shared import ACP_MODEL
-from acp_shared import KIMI
+from acp_shared import KIMI, agent_runtime, role_runtime_detail, role_capability
 from acp_shared import NODE_TYPE_LABELS
 from acp_shared import PLAYWRIGHT_ALLOWED_TOOLS
 from acp_shared import READONLY_TOOL_SERVER
@@ -66,7 +66,15 @@ def _effective_model_label(role, project=None):
     acp_shared.role_model_detail（项目级 projects.json → roles.<id>.model → 环境变量 → 全局）。
     缺省 project（guide/设置抽屉）不评估项目层；命中项目层标注「（项目级 projects.json）」。"""
     model, source = role_model_detail(role, project)
-    return f"{model}{_model_source_label(role, source)}"
+    try:
+        runtime_id, _runtime_source = role_runtime_detail(role, project)
+        runtime_label = agent_runtime(runtime_id)["display_name"] + f" ({runtime_id})"
+        if runtime_id != "kimi":
+            return f"{runtime_label} · 适配器默认模型" + ("（受限角色暂不可用）" if role_capability(role, "readonly")
+                                                         or role_capability(role, "bash") != "allow" else "")
+    except ValueError as exc:
+        return f"运行体配置错误：{exc}"
+    return f"{model}{_model_source_label(role, source)} · {runtime_label}"
 
 
 def _runtime_env_rows():

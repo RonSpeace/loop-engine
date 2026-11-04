@@ -655,13 +655,14 @@ class SessionIsolationAndGuardOff(unittest.TestCase):
 
 
 class G20Signature(unittest.TestCase):
-    """G20：ACPSession.__init__ 追加参数面（output_guard 末位且默认 None）"""
+    """G20：ACPSession.__init__ 追加参数面（output_guard 后仅追加 runtime，两者默认 None）"""
 
     def test_g20_output_guard_appended_last(self):
         params = list(inspect.signature(ac.ACPSession.__init__).parameters.values())
         names = [p.name for p in params]
         self.assertIn("output_guard", names)
-        self.assertEqual(names[-1], "output_guard")
+        self.assertEqual(names[-2:], ["output_guard", "runtime"])
+        self.assertIsNone(params[-2].default)
         self.assertIsNone(params[-1].default)
 
 

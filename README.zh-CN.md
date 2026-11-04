@@ -71,8 +71,7 @@ flowchart LR
 
 ## 快速开始
 
-**依赖**：Python 3.11+、git、支持 ACP 的 agent 运行体。目前调度器驱动 kimi-code CLI（`kimi acp`），
-它可以接任意 OpenAI / Anthropic / Gemini 兼容模型。更多 ACP agent 的支持在路线图上。
+**依赖**：Python 3.11+、git，以及至少一个 ACP agent 运行体（见下文）。
 
 ```bash
 git clone https://github.com/RonSpeace/loop-engine.git && cd loop-engine
@@ -86,6 +85,27 @@ cp projects.example.json projects.json      # 指向你要让 agent 开发的 gi
 打开 <http://127.0.0.1:8899>，建一张状态为「待开发」的卡，看它走完流程。
 
 完整指南（模型与 API KEY 配置、MCP 工具、用玩具项目跑通第一条闭环、排障）见 [docs/quickstart.md](docs/quickstart.md)。
+
+### Agent 运行体
+
+每个角色跑在一个 ACP agent 运行体上，可按角色、按项目选择：
+
+| 运行体 | 可用角色 | 说明 |
+|---|---|---|
+| `kimi`（默认） | 全部 | kimi-code CLI（`kimi acp`），可接任意 OpenAI / Anthropic / Gemini 兼容模型 |
+| `claude-code` | 开发 | 经 `@zed-industries/claude-code-acp` 接 Claude Code，用你已登录的 `claude` CLI |
+| `codex` | 开发 | 经 `@zed-industries/codex-acp` 接 Codex，用你已登录的 `codex` CLI |
+
+```json
+{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}
+```
+
+选择顺序：`projects.json` 的 `<项目>.runtimes.<角色>` → `<项目>.runtime` → `flows.json` 的
+`roles.<id>.runtime` → `LOOP_AGENT_RUNTIME` → `kimi`。未知运行体在启动前就会被拒绝。
+
+Claude Code 和 Codex 目前只开放给**开发**角色：Loop Engine 会复核它们申请执行的每条命令和每次写文件，
+但还不能证明评审类角色的只读限制在这两个运行体上同样生效，所以宁可拒绝启动，也不在没有约束的情况下运行。
+详见 [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择)。
 
 ## 配置一览
 
@@ -105,7 +125,8 @@ cp projects.example.json projects.json      # 指向你要让 agent 开发的 gi
 
 ## 路线图
 
-- [ ] 可插拔 agent 运行体：经 ACP 支持 Claude Code、Codex、Gemini CLI
+- [x] 可插拔 agent 运行体：开发角色支持 Claude Code、Codex
+- [ ] 评审类角色支持 Claude Code / Codex，接入 Gemini CLI
 - [x] 英文界面
 - [ ] 英文提示词
 - [ ] 一条命令安装与 Docker Compose

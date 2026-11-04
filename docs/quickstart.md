@@ -14,7 +14,7 @@
 │    ├─ lark-oapi + certifi          ← 可选：仅接飞书时需要（未安装自动按「不接飞书」运行）
 │    └─ mysql-connector-python       ← 可选（项目配了 mysql 才需要）
 ├─ git                                ← worktree / 合并 / 玩具项目仓库
-├─ kimi-code CLI（kimi 命令）         ← 所有 agent 的运行体（ACP 模式）
+├─ kimi-code CLI（kimi 命令）         ← 默认运行体（ACP；其它运行体见下节）
 │    └─ 查找顺序：$KIMI_BIN → PATH 里的 kimi → ~/.kimi-code/bin/kimi
 ├─ 模型配置（API KEY 在这里，不在本项目代码里）
 │    └─ harness home（默认 ~/.kimi-code-deepseek，可用 KIMI_CODE_HOME 覆盖）
@@ -28,9 +28,41 @@
      └─ ~/.req-board/{artifacts,worktrees}/   ← 产物与 worktree，自动创建
 ```
 
-三条硬规则先记住：
+## Agent runtimes（运行体选择）
 
-1. **所有后台 agent（调度器各角色/建卡对话/需求助手）都经 `scripts/kimi-chat-acp` wrapper 启动**，wrapper 把 `KIMI_CODE_HOME` 默认指到 `~/.kimi-code-deepseek`——你的模型配置和 MCP 配置都放这个目录（不是交互终端用的 `~/.kimi-code`）。
+运行体注册表唯一源为 `acp_shared.AGENT_RUNTIMES`。默认 `kimi` 保持既有
+`scripts/kimi-chat-acp`、`KIMI_CODE_HOME` 与模型配置行为。另内置 `claude-code`
+和 `codex`：先找 PATH 上的 `claude-code-acp` / `codex-acp`，否则启动
+`npx -y @zed-industries/claude-code-acp@0.16.2` /
+`npx -y @zed-industries/codex-acp@0.16.0`。需 Node.js/npm，并先完成对应 CLI 登录。
+
+选择顺序：`projects.json` 的 `<项目>.runtimes.<角色>` → `<项目>.runtime` →
+`flows.json` 的 `roles.<id>.runtime` → `LOOP_AGENT_RUNTIME` → `kimi`。
+未知或空运行体 ID 会拒绝启动并记录错误。推荐只为开发角色切换：
+
+```json
+{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "codex"}}}
+```
+
+也可在 `flows.json` 为 `roles.dev.runtime` 配 `claude-code`。命令覆盖使用
+`LOOP_AGENT_CMD_KIMI`、`LOOP_AGENT_CMD_CLAUDE_CODE`、`LOOP_AGENT_CMD_CODEX`，
+值是完整 argv 的 shell 引号语法（只拆参数，不经 shell 执行；Kimi 需自行带 `acp`）。
+例如 `LOOP_AGENT_CMD_CODEX='/opt/bin/codex-acp'`。
+
+第一阶段 Claude Code/Codex 使用各自适配器默认模型：不读 Kimi 模型别名池、不发送
+Kimi 的模型固定/权限模式配置或 `/usage`，不查 Kimi 的会话记录目录；缺失能力每类只记一次日志。
+审批从结构化 `rawInput.command` 归一化，不凭展示标题授权，不授予永久权限。
+**这两个适配器尚不能证明内置工具都经客户端复核，因此只开放开发角色；
+只读角色、验收、合并冲突角色与助手会话一律在启动前拒绝。**
+请保留这些角色的 `kimi`；全局改成新运行体会使受限阶段停泊，不能完成全流程。
+
+生效方式：合并代码后由调度器重启看板与调度器；修改 `.env` 或 `flows.json` 后，
+由运维人员用 `./start.sh` 与 `scripts/dispatcher-restart.sh <pid> config-change` 重启两者。
+项目级选择在下一次新建会话生效，已有进程仍沿用原运行体。
+
+三条硬规则先记住（以下模型配置仅针对 Kimi）：
+
+1. **默认 Kimi 后台 agent（调度器各角色/建卡对话/需求助手）都经 `scripts/kimi-chat-acp` wrapper 启动**，wrapper 把 `KIMI_CODE_HOME` 默认指到 `~/.kimi-code-deepseek`——你的模型配置和 MCP 配置都放这个目录（不是交互终端用的 `~/.kimi-code`）。
 2. **模型名三处对齐**：harness 的 `config.toml`、环境变量 `KIMI_MODEL`（不设则默认 `deepseek/v4.1-flash`，见 `acp_shared.py:56 ACP_MODEL`）、以及你实际可用的 provider。任何一处对不上，会话会起不来或走错模型。
 3. **飞书是可选通道**：未安装 `lark-oapi` 或设了 `REQ_BOARD_NO_FEISHU=1` 时调度器自动关闭飞书，确认通道走看板网页按钮，功能完整。
 

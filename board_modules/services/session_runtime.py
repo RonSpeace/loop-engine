@@ -89,10 +89,18 @@ def _session_dir_names(sid):
     return [s] if s.startswith('session_') else ['session_' + s, s]
 
 
-def resolve_session_dir(sid):
+def resolve_session_dir(sid, runtime="kimi"):
     """反查 sid 的会话记录目录（绝对路径、无尾斜杠）；解析不到返回 None。
     命中值每次 isdir 复验（目录被清理即时回「未找到」）；未命中走 60s 负缓存，
     稳态下每行只 1 次 stat、零目录扫描。只对注册表内已有的 sid 解析，异常吞掉返回 None。"""
+    from acp_shared import agent_runtime, runtime_skip
+    try:
+        resolver = agent_runtime(runtime)["session_dir_resolver"]
+    except ValueError:
+        return None
+    if resolver is None:
+        runtime_skip(runtime, "会话记录目录解析")
+        return None
     names = _session_dir_names(sid)
     if not names:
         return None
