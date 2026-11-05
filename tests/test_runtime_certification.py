@@ -93,6 +93,14 @@ def test_readonly_shell_readonly_command_allowed(env):
     assert any("README.md" in r for r in _mock_openai.tool_results(server))
 
 
+def test_readonly_disallowed_command_does_not_end_the_turn(env):
+    """真实运行中的失败形态：评审跑了白名单外的命令后还要能写结论（被客户端拒绝会结束整轮）。"""
+    run(env, "code_review", [{"pick": "bash", "args": {"command": "git worktree list", "description": "x"}},
+                             {"pick": "write", "args": {"filePath": str(env["art"] / "result.json"), "content": "{}"}}],
+        readonly=True)
+    assert (env["art"] / "result.json").exists()
+
+
 def test_readonly_no_webfetch_subagent_or_skill(env):
     server = run(env, "code_review", [{"say": "hi"}], readonly=True)
     assert not offered(server) & {"webfetch", "task", "skill"}

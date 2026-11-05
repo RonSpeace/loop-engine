@@ -87,7 +87,10 @@ AGENT_RUNTIMES = {
                  "protected_process_names": ("opencode",),
                  "supports_model_option": False, "supports_usage_command": False,
                  "supports_permission_mode": False, "supports_authenticate": False, "supports_model_pool": False,
-                 "supports_restricted_roles": True, "session_dir_resolver": None},
+                 "supports_restricted_roles": True, "session_dir_resolver": None,
+                 # 认证套件证实：工具执行前必经 request_permission 或客户端终端复核 → 观察到越权工具调用时
+                 # 不预先取消整轮（OpenCode 被取消即结束本轮，评审一条越权命令就交不了结论）
+                 "permission_gate_certified": True},
 }
 # 建卡会话 / 看板助手这类特殊档位（禁内置写、工具档位、禁 fs 写）依赖拒绝内置读等运行体细节，只开放给 kimi
 SPECIAL_PROFILE_RUNTIMES = ("kimi",)
@@ -138,6 +141,15 @@ def opencode_session_config(model=None, *, readonly=False, role=None, project=No
       不写进配置文本），模型名不带「服务商/」前缀时补成 loop/<模型>。"""
     perm = {"edit": "ask", "bash": "ask", "external_directory": "ask", "webfetch": "deny" if readonly else "ask",
             "task": "deny", "skill": "deny"}
+    if readonly:
+        # OpenCode 被客户端拒绝审批后会结束整轮（只读评审一条越权命令就交不了结论，真实运行中出现过）；
+        # 白名单外的命令改由 OpenCode 自身按规则拒绝——模型收到报错可继续。白名单内仍 ask，由 Loop Engine 复核。
+        bash = {"*": "deny"}
+        for cmd in READONLY_CMDS + ("cd", "python", "python3"):
+            bash[cmd] = "ask"
+            bash[cmd + " *"] = "ask"
+        bash["*dbq.py *"] = "ask"
+        perm["bash"] = bash
     cfg = {"$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled", "permission": perm}
     base_url = os.environ.get("LOOP_OPENAI_BASE_URL", "").strip()
     if base_url:
@@ -2529,9 +2541,13 @@ class ACPSession:
                     if not all(self._runtime_write_allowed(path) for path in paths):
                         raise PermissionError("写路径越出会话白名单")
             except PermissionError as exc:
-                self._emit("system", f"运行体工具红线被拦截：{exc}", session_id=self.session_id)
-                self.cancel()
-                return
+                if self.runtime.get("permission_gate_certified"):
+                    # 不预先取消：执行前还要过审批 / 终端复核（已由认证套件证实）；只留痕
+                    self._emit("system", f"运行体工具调用将被拒绝：{exc}", session_id=self.session_id)
+                else:
+                    self._emit("system", f"运行体工具红线被拦截：{exc}", session_id=self.session_id)
+                    self.cancel()
+                    return
         if kind == "agent_message_chunk":
             content = update.get("content") or {}
             if content.get("type") == "text":

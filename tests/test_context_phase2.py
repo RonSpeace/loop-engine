@@ -327,3 +327,13 @@ class MissingRequiredSkillStops(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RedlineHashStable(unittest.TestCase):
+    """红线条目 hash 取模板，不随 PID 变化：否则续跑每次都误判平台策略变化而改开新会话（真实运行中出现过）。"""
+
+    def test_hash_independent_of_pid(self):
+        from dispatcher_modules import context as cx
+        a, b = cx.redline_item(111), cx.redline_item(222)
+        self.assertEqual(a["hash"], b["hash"])
+        self.assertGreater(a["chars"], 0)

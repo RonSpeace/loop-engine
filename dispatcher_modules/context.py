@@ -413,9 +413,11 @@ def write_run_record(req, manifest, sent_text):
 
 
 def redline_item(pid):
+    """红线条目：版本 hash 取模板（PID 每个进程都不同，按渲染文本算 hash 会让续跑每次都误判
+    「平台策略已变化」而改开新会话）；字数按实际发出的渲染文本。"""
     text = D.kill_redline_text(pid) if hasattr(D, "kill_redline_text") else prompt_store.render(
         "system/kill-redline", pid=pid)
-    return _store_item("system/kill-redline", "L0", "每次发送末尾（本进程 PID）", text=text)
+    return _store_item("system/kill-redline", "L0", "每次发送末尾（本进程 PID）", chars=len(text))
 
 
 def context_runtime_item(item_id, text, why):
