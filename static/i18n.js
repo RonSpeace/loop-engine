@@ -18,7 +18,7 @@
         '.ev-item.ev-msg', '.ev-item.ev-user', '.ev-item.ev-tool', '.sd-body pre', 'pre', 'code',
         'textarea', 'script', 'style', '[data-i18n-skip]'
     ].join(',');
-    var FORCE = '.ev-pending-tag, .ev-empty';
+    var FORCE = '.ev-pending-tag, .ev-empty, .sum-stage';
     var EXACT_ONLY = '.nav-item-name, .pb-name, .sess-title, .proc-title';
     var LABEL_ONLY = '.pb-goal, .pb-paths';
     var ATTRS = ['title', 'placeholder', 'aria-label'];

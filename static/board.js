@@ -5987,8 +5987,8 @@ void main() {
             let h = '';
             if (s.preface || s.results.length) {
                 h += '<div class="detail-section-label">结果总结</div><div class="detail-notes sum-results">';
-                if (s.preface) h += renderArtifactMd(s.preface);
-                h += s.results.map(r => `<div class="sum-result">${r.stage ? `<div class="sum-stage">${escapeHtml(r.stage)}</div>` : ''}${renderArtifactMd(r.body)}</div>`).join('');
+                if (s.preface) h += `<div data-i18n-skip>${renderArtifactMd(s.preface)}</div>`;
+                h += s.results.map(r => `<div class="sum-result">${r.stage ? `<div class="sum-stage">${escapeHtml(r.stage)}</div>` : ''}<div data-i18n-skip>${renderArtifactMd(r.body)}</div></div>`).join('');
                 h += '</div>';
             }
             if (s.log.length) {
