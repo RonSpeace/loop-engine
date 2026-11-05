@@ -47,6 +47,10 @@ window.LOOP_I18N_EN = {
    "$1 uncommitted"
   ],
   [
+   "(\\d+)\\s*轮",
+   "$1 rounds"
+  ],
+  [
    "(\\d+)\\s*次",
    "$1×"
   ],
@@ -197,6 +201,7 @@ window.LOOP_I18N_EN = {
   "不拉取": "Don't pull",
   "不指定（占位卡）": "None (placeholder card)",
   "不推送": "Don't push",
+  "不是 git 仓库（无 .git）": "not a git repository (no .git)",
   "不能同时填写新 secret 与勾选清除 secret": "Cannot enter a new secret and clear the secret at the same time",
   "不能同时填写新地址与勾选清除地址": "Cannot enter a new URL and clear the URL at the same time",
   "不适用": "n/a",
@@ -809,6 +814,7 @@ window.LOOP_I18N_EN = {
   "校验通过": "Checks passed",
   "概要": "Overview",
   "模型": "Model",
+  "模型不可用，已回落全局默认": "model unavailable, fell back to the global default",
   "模型列 = 会话启动时记录的显示名；上下文峰值/工具次数按会话关联运行记录求和": "Model = display name recorded when the session started; peak context / tool calls are summed over the session's runs",
   "模型别名": "Model alias",
   "模型回落：": "Model fallback: ",

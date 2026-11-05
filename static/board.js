@@ -7318,7 +7318,7 @@ void main() {
             <div class="detail-pane fill">
                 <div class="proc-head">
                     <div class="proc-session-info">
-                        <span class="proc-role">调度器：</span><span class="proc-sid">需求 #${i.id} · ${escapeHtml(i.title)}</span>
+                        <span class="proc-role">调度器：</span><span class="proc-sid">需求 #${i.id} · <span data-i18n-skip>${escapeHtml(i.title)}</span></span>
                     </div>
                 </div>
                 <div class="proc-title disp-titlebar">

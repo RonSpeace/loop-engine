@@ -89,3 +89,32 @@ jobs:
           npm install -g opencode-ai@1.19.5
       - name: Certify OpenCode against the scripted fake model
         run: python -m pytest -q -p no:cacheprovider tests/test_runtime_certification.py
+
+  english-ui:
+    name: English UI has no Chinese (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      # 种子测试实例（假数据、隔离目录）+ 真实 Chrome，以英文逐个进入主要视图检查可见中文
+      - name: Start seeded test instance
+        run: |
+          REQ_BOARD_PYTHON=python scripts/test_instance.sh start 8931 --seed > /tmp/instance.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:8931/ && exit 0; sleep 1; done
+          cat /tmp/instance.log; exit 1
+      - name: Check English UI
+        env:
+          VISUAL_GATE_START_TIMEOUT: "60"
+        run: python scripts/i18n_browser_check.py --url http://127.0.0.1:8931/
+      - name: Stop test instance
+        if: always()
+        run: scripts/test_instance.sh stop 8931 || true

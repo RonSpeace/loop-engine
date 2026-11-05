@@ -22,6 +22,8 @@
     var EXACT_ONLY = '.nav-item-name, .pb-name, .sess-title, .proc-title';
     var LABEL_ONLY = '.pb-goal, .pb-paths';
     var ATTRS = ['title', 'placeholder', 'aria-label'];
+    // 供 scripts/i18n_browser_check.py 复用同一套「用户数据区」口径（不另抄一份，防漂移）
+    window.LOOP_I18N_ZONES = {skip: SKIP, force: FORCE, exactOnly: EXACT_ONLY, labelOnly: LABEL_ONLY, attrs: ATTRS};
 
     function storedLang() {
         try { return localStorage.getItem(KEY); } catch (e) { return null; }
