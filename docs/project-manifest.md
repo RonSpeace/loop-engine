@@ -14,7 +14,7 @@
 |:--|:--|:--|
 | 1 固定段 | 角色职责、通用协议、输出风格 | `prompts/<角色>.md` 的固定段 + `COMMON_TAIL` |
 | 2 项目约定 | 常用命令、测试实例、按角色过滤的项目指引、AGENTS.md 指路；缺项显式写「未配置」 | `<仓库>/.loop/project.json`（`project_conventions_text`） |
-| 3 场景技能 | 按角色点名的技能片段 | 项目 `.loop/skills/<名>.md` 优先，其次全局 `prompts/skills/<名>.md`（`scenario_skills_text`） |
+| 3 场景技能 | 按角色挂载的技能正文 | 项目 `.loop/skills/` 优先，其次本机覆盖 `prompts.local/skills/`，最后全局 `prompts/skills/`（`scenario_skills_text`；规则见下文「技能」） |
 | 4 卡片输入 | title、notes、summary、上游产物指路、仓库/分支/产物路径、预算、extra 等 | 角色模板的 `{card_inputs}` 标记之后，由调度器填充 |
 | 5 前置契约 | 推荐流程与仓库识别的输出要求，仅前置阶段追加 | `PRE_SLOT_CONTRACT` |
 | 6 进程安全 | 当前真实 PID 对应的进程安全红线，新会话和续跑均追加 | `append_kill_redline` |
@@ -43,11 +43,31 @@
 
 ## 技能
 
-- 新增全局技能：放 `prompts/skills/<名>.md`，在 `flows.json` 的 `roles.<角色>.skills` 里点名（加载期校验文件存在；改 `flows.json` 需重启两个进程）。
-- 新增项目技能：放 `<仓库>/.loop/skills/<名>.md`，在清单 `skills.<角色>` 里点名（下次完整构建 Prompt 时现读）。
-- 技能名：小写字母、数字、连字符。项目技能与全局技能同名时整份采用项目的，不做内容合并；多仓库同名时按登记顺序取首个匹配。
-- 单个技能文件同样最多内联 4000 字符；缺文件目前记录日志后跳过，首次接入须核对挂载。
-- 都不需要改 Python。
+技能是自带元数据的目录 `<名>/SKILL.md`（格式对齐 Anthropic Agent Skills，可附 `references/`、`scripts/` 等文件）；发现、解析、选择、校验在 `acp_modules/skills.py`。
+
+```markdown
+---
+name: browser-verify            # 与目录名一致；小写字母、数字、连字符
+description: 什么时候用这个技能   # 必填，≤200 字，进技能目录
+roles: [dev]                    # 自声明挂载的角色，与点名取并集
+activation: always              # always | auto | on_demand | manual
+paths: ["static/**"]            # auto：改动路径 glob
+keywords: [页面, 样式]           # auto：标题 / notes 关键词
+required: false                 # true = 缺失或解析失败时停线
+owner: frontend
+status: active                  # draft | active | deprecated
+---
+正文
+```
+
+- 作用域：项目 `<仓库>/.loop/skills/` > 本机覆盖 `prompts.local/skills/`（本机数据，不入库；环境变量 `REQ_BOARD_PROMPTS_LOCAL` 改根目录）> 全局 `prompts/skills/`。同名整份覆盖、不合并；多仓库同名取登记顺序首个；同一作用域内目录形态优先于平铺。
+- 旧平铺 `<名>.md` 继续有效：视为 `activation: always`、`status: active`，角色只取点名处。
+- 挂载：`flows.json` 的 `roles.<角色>.skills` 点名 ∪ 清单 `skills.<角色>` 点名 ∪ 技能自身 `roles`。卡片 notes 写 `skills: a, b` 强制加载（含 manual；技能声明了 roles 时只对这些角色生效），`-skills: x` 排除。
+- 激活方式：`always` 内联正文；`auto` 改动路径或关键词命中才内联；`on_demand` 只进技能目录（名称 + 描述 + 路径），agent 自己读；`manual` 只在 notes 点名时加载。
+- 草稿只在注入预览里可用，不进真实会话；废弃技能照常加载但告警。
+- 缺失：角色或清单点名的技能找不到 → 记日志跳过；notes 点名的技能找不到、或 `required: true` 的技能解析失败 → 记为必需缺失。
+- 单个技能正文最多内联 4000 字符，超出截断并留全文路径。技能文件每次构建 Prompt 时现读；在 `flows.json` 点名时加载期校验文件存在，改 `flows.json` 需重启两个进程。
+- 看板技能库接口（`/api/skills`，见 [api.md](api.md)）只写本机覆盖目录，项目技能在看板上只读。`scripts/doctor.py` 的「技能库」一节逐个校验（名字、description、正文长度、附属文件、全局技能不写单个项目的路径），只告警。
 
 ## AGENTS.md
 

@@ -4,9 +4,9 @@
 ==================
 后端共享层在 board_modules/（runtime 兼容桥 / db / common / sse）；本文件是 Flask 应用入口与
 兼容 facade，路由全部在 board_modules/blueprints/（requirements / projects / chats / settings /
-assistant / sessions / meta 七个资源蓝图，按 blueprints.ALL 注册）。跨项目的待开发需求管理：
+assistant / sessions / meta / skills 八个资源蓝图，按 blueprints.ALL 注册）。跨项目的待开发需求管理：
 记录、状态流转（待开发/进行中/已完成）、按项目分组。
-服务层在 board_modules/services/（model_pool / harness_config / projects / requirements / session_runtime / presentation / dispatcher_ops / chat_runtime / mcp_servers / reqchat_runtime / assistant_card / assistant_runtime / assistant_mcp / project_git）。
+服务层在 board_modules/services/（model_pool / harness_config / projects / requirements / session_runtime / presentation / dispatcher_ops / chat_runtime / mcp_servers / reqchat_runtime / assistant_card / assistant_runtime / assistant_mcp / project_git / skill_library）。
 默认只监听 127.0.0.1，本机使用，无鉴权（REQ_BOARD_HOST 可显式改监听地址，见 README 的 Docker 一节）。
 
 运行: ./start.sh

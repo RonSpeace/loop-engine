@@ -536,6 +536,36 @@
       ]
     ],
     [
+      "/api/skills",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/skills",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/api/skills/<name>",
+      [
+        "DELETE"
+      ]
+    ],
+    [
+      "/api/skills/<name>",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/skills/<name>",
+      [
+        "PUT"
+      ]
+    ],
+    [
       "/api/sse-stats",
       [
         "GET"
@@ -578,5 +608,5 @@
       ]
     ]
   ],
-  "count": 96
+  "count": 101
 }

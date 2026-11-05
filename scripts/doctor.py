@@ -291,6 +291,47 @@ def check_flow_config():
         fail(f"flows.json 校验失败：{e}")
 
 
+def check_skills():
+    """技能 v2：全局 / 本机覆盖 / 各项目技能逐个 lint（只告警，不计硬失败）；
+    flows.json 与项目清单点名却找不到的技能一并提示。"""
+    sys.path.insert(0, str(REPO))
+    try:
+        import acp_shared
+    except Exception as e:
+        warn(f"技能校验跳过：{e}")
+        return
+    try:
+        raw = json.loads((REPO / "projects.json").read_text())
+    except Exception:
+        raw = {}
+    groups = [("全局", [])]
+    for name, cfg in (raw or {}).items():
+        paths = [cfg] if isinstance(cfg, str) else (
+            (cfg.get("paths") or ([cfg["path"]] if "path" in cfg else [])) if isinstance(cfg, dict) else [])
+        groups.append((f"项目 {name}", [str(p) for p in paths if Path(str(p)).is_dir()]))
+    roles = set(((acp_shared.FLOW_CONFIG or {}).get("roles") or {}))
+    seen, n_ok = set(), 0
+    for label, repos in groups:
+        for sk in acp_shared.discover(repos):
+            if (sk.scope != "project" and label != "全局") or sk.path in seen:
+                continue
+            seen.add(sk.path)
+            items = acp_shared.skill_lint(sk, known_roles=roles or None)
+            bad = [i for i in items if i["level"] in ("error", "warn")]
+            for i in bad:
+                warn(f"技能 {sk.name}（{label} · {sk.rel_path}）{'✕' if i['level'] == 'error' else '!'} {i['message']}")
+            if not bad:
+                n_ok += 1
+        for role in sorted(roles):
+            names = list((acp_shared.role_meta(role, "skills") or [])) if label == "全局" else []
+            for repo in repos:
+                names += acp_shared.load_project_manifest(repo)["skills"].get(role) or []
+            for n in dict.fromkeys(names):
+                if acp_shared.find_skill(n, repos) is None:
+                    warn(f"技能 {n}（{label} 点名给 {role}）找不到文件，运行时会跳过")
+    ok(f"技能校验：{n_ok} 个技能无告警（本机覆盖目录 {acp_shared.local_skills_dir()}）")
+
+
 def main():
     print(f"== req-board doctor：{REPO} ==\n")
     print("-- 基础 --");         check_python(); check_venv(); check_repo_files(); check_deps(); check_git()
@@ -299,6 +340,7 @@ def main():
     print("\n-- 项目接入 --");    check_projects(); check_project_conventions()
     print("\n-- 渠道与本地 --");  check_env_feishu(); check_dirs_and_port()
     print("\n-- 流程配置 --");    check_flow_config()
+    print("\n-- 技能库 --");      check_skills()
     print()
     if HARD_FAIL:
         print(f"共 {len(HARD_FAIL)} 项硬失败，处理后再启动（docs/quickstart.md 有对应步骤）")

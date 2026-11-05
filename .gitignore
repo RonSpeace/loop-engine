@@ -42,3 +42,6 @@ docs/diagrams/*.visual-check.*
 # docker compose 本地挂载目录（projects.json / feishu.json / agent 产物）
 /config/
 /state/
+
+# 本机提示词 / 技能覆盖目录（看板「提示词」「技能库」保存处，本机数据不入库）
+prompts.local/
