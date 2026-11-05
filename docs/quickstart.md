@@ -145,7 +145,7 @@ KIMI_CODE_HOME=~/.kimi-code-deepseek kimi      # 可选：交互问一句，确�
 - Claude Code / Codex 使用各自适配器的默认模型，不读 kimi 的模型别名。
 - 只读和受限角色只能跑在通过**运行体约束认证**（`tests/test_runtime_certification.py`）的运行体上：
   用真实客户端驱动真实运行体，假模型按脚本逐条越权，每次尝试都必须被拦下。OpenCode 已通过；Claude Code / Codex
-  通过前只开放给开发角色（分析、评审、验收、冲突解决在它们上面会拒绝启动）。聊天建卡和助手会话只用 kimi。
+  通过前只开放给开发角色（分析、评审、验收、冲突解决在它们上面会拒绝启动）。聊天建卡、需求对话和助手会话支持 Kimi 与 OpenCode。
 
 ### 用 OpenCode 接任意模型
 

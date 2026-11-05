@@ -148,7 +148,7 @@ refused before anything starts.
 - Read-only and restricted roles only run on runtimes that pass the **runtime certification suite**
   (`tests/test_runtime_certification.py`): the real client drives the real runtime while a scripted fake model attempts
   every violation, and each attempt must be stopped. OpenCode passes; Claude Code and Codex stay dev-only until they do
-  (analysis, review, acceptance and conflict resolution refuse to start on them). Card-creation and assistant sessions use kimi.
+  (analysis, review, acceptance and conflict resolution refuse to start on them). Card-creation, requirement chat and assistant sessions support Kimi and OpenCode.
 
 ### Any model via OpenCode
 

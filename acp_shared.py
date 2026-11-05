@@ -92,8 +92,8 @@ AGENT_RUNTIMES = {
                  # 不预先取消整轮（OpenCode 被取消即结束本轮，评审一条越权命令就交不了结论）
                  "permission_gate_certified": True},
 }
-# 建卡会话 / 看板助手这类特殊档位（禁内置写、工具档位、禁 fs 写）依赖拒绝内置读等运行体细节，只开放给 kimi
-SPECIAL_PROFILE_RUNTIMES = ("kimi",)
+# 建卡会话 / 看板助手这类特殊档位（禁内置写、工具档位、禁 fs 写）依赖拒绝内置读等运行体细节，由真实运行体认证套件锁定
+SPECIAL_PROFILE_RUNTIMES = ("kimi", "opencode")
 _RUNTIME_SKIPS = set()
 
 
@@ -130,7 +130,9 @@ def runtime_argv(runtime_id, kimi_bin=None):
 OPENCODE_PROVIDER_ID = "loop"
 
 
-def opencode_session_config(model=None, *, readonly=False, role=None, project=None):
+def opencode_session_config(model=None, *, readonly=False, role=None, project=None,
+                            deny_builtin_write=False, allow_fs_write=True, tool_profile=None,
+                            extra_mcp_servers=()):
     """OpenCode 每会话配置（经 OPENCODE_CONFIG_CONTENT 注入，与用户本机 opencode 配置合并）。
 
     权限：写/改、命令、外部目录一律 ask（由 Loop Engine 审批按角色裁决）；子 agent 与自带 skill
@@ -141,7 +143,10 @@ def opencode_session_config(model=None, *, readonly=False, role=None, project=No
       不写进配置文本），模型名不带「服务商/」前缀时补成 loop/<模型>。"""
     perm = {"edit": "ask", "bash": "ask", "external_directory": "ask", "webfetch": "deny" if readonly else "ask",
             "task": "deny", "skill": "deny"}
-    if readonly:
+    no_write = bool(deny_builtin_write or not allow_fs_write or tool_profile)
+    if no_write:
+        perm.update(edit="deny", write="deny", patch="deny", multiedit="deny", webfetch="deny")
+    if readonly or no_write:
         # OpenCode 被客户端拒绝审批后会结束整轮（只读评审一条越权命令就交不了结论，真实运行中出现过）；
         # 白名单外的命令改由 OpenCode 自身按规则拒绝——模型收到报错可继续。白名单内仍 ask，由 Loop Engine 复核。
         bash = {"*": "deny"}
@@ -150,6 +155,13 @@ def opencode_session_config(model=None, *, readonly=False, role=None, project=No
             bash[cmd + " *"] = "ask"
         bash["*dbq.py *"] = "ask"
         perm["bash"] = bash
+    if tool_profile:
+        # 助手仅开放调用方声明的业务 MCP；默认拒绝也覆盖本机配置和将来新增的内置工具。
+        perm = {"*": "deny"}
+        for server in extra_mcp_servers:
+            name = server.get("name") if isinstance(server, dict) else None
+            if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_-]+", name):
+                perm[name + "_*"] = "allow"
     cfg = {"$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled", "permission": perm}
     base_url = os.environ.get("LOOP_OPENAI_BASE_URL", "").strip()
     if base_url:
@@ -1474,7 +1486,9 @@ class ACPSession:
         spawn_env = dict(self.runtime["env"])
         if self.runtime_id == "opencode":
             spawn_env["OPENCODE_CONFIG_CONTENT"] = json.dumps(
-                opencode_session_config(readonly=self._is_readonly(), role=role, project=project),
+                opencode_session_config(readonly=self._is_readonly(), role=role, project=project,
+                                        deny_builtin_write=deny_builtin_write, allow_fs_write=allow_fs_write,
+                                        tool_profile=tool_profile, extra_mcp_servers=self._extra_mcp_servers),
                 ensure_ascii=False)
         self.proc = subprocess.Popen(
             runtime_argv(self.runtime_id, kimi_bin), cwd=str(self.workdir),
@@ -2236,6 +2250,9 @@ class ACPSession:
         """异构适配器写路径按会话 cwd 解析，包含相对路径、移动源/目标与软链。"""
         if not isinstance(path, str) or not path or "\x00" in path:
             return False
+        if (getattr(self, "deny_builtin_write", False) or not getattr(self, "allow_fs_write", True)
+                or self._is_assistant_profile()):
+            return False
         workdir = Path(self.workdir).resolve()
         target = Path(path)
         target = (target if target.is_absolute() else workdir / target).resolve()
@@ -2578,7 +2595,8 @@ class ACPSession:
             self._flush_message()
             tid = update.get("toolCallId")
             title = update.get("title") or update.get("kind") or "工具调用"
-            if getattr(self, "deny_builtin_write", False) and title in ("Edit", "Write"):
+            if (getattr(self, "deny_builtin_write", False) and title in ("Edit", "Write")
+                    and not getattr(self, "runtime", {}).get("permission_gate_certified")):
                 # 建卡会话硬性只读：Kimi 对 git 工作目录内的 Edit/Write 有自动放行策略，
                 # 不会发 session/request_permission；只能在工具调用事件到达时立即取消本轮。
                 self._emit("system", f"建卡会话禁止文件写入（{title}），本轮已取消",
@@ -2614,7 +2632,8 @@ class ACPSession:
                 return
             if raw:
                 self._flush_message()
-                if getattr(self, "deny_builtin_write", False):
+                if (getattr(self, "deny_builtin_write", False)
+                        and not getattr(self, "runtime", {}).get("permission_gate_certified")):
                     title = self._tool_calls.get(tid) or update.get("title") or ""
                     if title in ("Edit", "Write"):
                         # 兜底：tool_call 事件丢失/延迟时，rawInput 到达仍要拦截，避免写入落地

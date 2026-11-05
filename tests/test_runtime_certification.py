@@ -6,6 +6,7 @@
 新增运行体或想把受限角色开放给某个运行体时，先让它通过本文件同样的场景。
 """
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -40,7 +41,7 @@ def env(tmp_path):
     return {"repo": repo, "art": art, "outside": outside, "tmp": tmp_path}
 
 
-def run(env, role, script, *, readonly):
+def run(env, role, script, *, readonly, **profile):
     server = _mock_openai.start(script)
     events = []
     logf = open(env["tmp"] / f"{role}.log", "w")
@@ -49,7 +50,7 @@ def run(env, role, script, *, readonly):
                                           "LOOP_OPENCODE_MODEL": "m"}):
             s = ac.ACPSession(1, env["repo"], logf, role, env["art"], readonly=readonly,
                               readonly_roots=[env["repo"]], write_roots=[env["repo"], env["art"]],
-                              event_sink=lambda *a, **k: events.append(a), runtime="opencode")
+                              event_sink=lambda *a, **k: events.append(a), runtime="opencode", **profile)
             try:
                 s.start(env["repo"])
                 s.prompt("按脚本执行。", timeout=90)
@@ -141,3 +142,49 @@ def test_dev_shell_cannot_kill_agent_processes(env):
 def test_dev_no_subagent(env):
     server = run(env, "dev", [{"say": "hi"}], readonly=False)
     assert "task" not in offered(server)
+
+
+# ---------------- 聊天与助手特殊档位 ----------------
+
+@pytest.mark.parametrize("target", ["repo", "outside", "art"])
+@pytest.mark.parametrize("flag", ["deny_builtin_write", "allow_fs_write"])
+def test_chat_cannot_write(env, target, flag):
+    path = env[target] / "chat-write.txt"
+    server = run(env, "analysis", [{"pick": "write", "args": {"filePath": str(path), "content": "x"}}],
+                 readonly=True, **{flag: flag == "deny_builtin_write"})
+    assert not path.exists()
+    assert "write" not in offered(server)
+
+
+def test_chat_shell_write_blocked_and_turn_continues(env):
+    server = run(env, "analysis", [
+        {"pick": "bash", "args": {"command": "touch chat-shell.txt", "description": "write"}},
+        {"say": "continued-after-denial"}], readonly=True, deny_builtin_write=True, allow_fs_write=False)
+    assert not (env["repo"] / "chat-shell.txt").exists()
+    assert any(r["tool_results"] >= 1 for r in server.requests)
+
+
+@pytest.mark.parametrize("assistant", [False, True])
+def test_special_profile_mcp_callable(env, assistant):
+    from board_modules.services.mcp_servers import CreateRequirementMcpServer, CREATE_TOOL_SERVER
+    calls = []
+    mcp = CreateRequirementMcpServer(1, "cert")
+    mcp.tool_create_requirement = lambda args: calls.append(args) or '{"created": true}'
+    args = {"title": "认证建卡", "project": "cert", "notes": "保留参数", "status": "later"}
+    # 本机预配 MCP 不属于本会话的声明，助手档位也不能暴露它。
+    local_config = env["tmp"] / "opencode.json"
+    local_config.write_text(json.dumps({"mcp": {"rogue": {"type": "remote", "url": mcp.url}},
+                                       "permission": {"read": "allow", "bash": "allow", "edit": "allow", "rogue_*": "allow"}}))
+    try:
+        with mock.patch.dict(os.environ, {"OPENCODE_CONFIG": str(local_config)} if assistant else {}):
+            server = run(env, "analysis", [{"pick": "*create_requirement", "args": args}], readonly=True,
+                         deny_builtin_write=True, allow_fs_write=False,
+                         tool_profile="feishu_assistant" if assistant else None,
+                         extra_allow_prefixes=[f"mcp__{CREATE_TOOL_SERVER}__"],
+                         extra_mcp_servers=[{"type": "http", "name": CREATE_TOOL_SERVER, "url": mcp.url, "headers": []}])
+        assert calls == [args]
+        assert any("created" in r for r in _mock_openai.tool_results(server))
+        if assistant:
+            assert offered(server) == {next(t for t in offered(server) if t.endswith("create_requirement"))}
+    finally:
+        mcp.close()
