@@ -294,7 +294,8 @@ def api_status_log(req_id):
 def api_runs_add(req_id):
     """写入一条 ACP 会话运行记录。body: {role, session_id, started_at, ended_at, status,
     tool_count, context_pct, context_tokens, max_tokens,
-    cached_tokens?, input_tokens?, cache_state?, usage_raw?}；缺失字段存 NULL，只增不删。
+    cached_tokens?, input_tokens?, cache_state?, usage_raw?, manifest_path?, prompt_hash?, prefix_hash?}；
+    缺失字段存 NULL，只增不删。
     #42 校验：cached/input 需非负整数或省略（负数/非整数 400）；cache_state 枚举
     hit/unknown/na 外 400；usage_raw 截 2048。na 的 token 由调用方传 NULL，接口不代填 0"""
     data = request.get_json(silent=True) or {}
@@ -318,12 +319,21 @@ def api_runs_add(req_id):
         return jsonify({'error': 'cache_state 需为 hit/unknown/na'}), 400
     usage_raw = data.get('usage_raw')
     usage_raw = str(usage_raw)[:2048] if usage_raw is not None else None
+
+    def _short_text(key, limit):
+        v = data.get(key)
+        return str(v)[:limit] if v not in (None, '') else None
+    # 上下文编译器执行档案（可选）：manifest 路径 + prompt/prefix hash
+    manifest_path = _short_text('manifest_path', 1024)
+    prompt_hash = _short_text('prompt_hash', 64)
+    prefix_hash = _short_text('prefix_hash', 64)
     with resolve("get_db")() as conn:
         conn.execute(
             "INSERT INTO agent_runs (req_id, role, session_id, started_at, ended_at, status,"
             " tool_count, context_pct, context_tokens, max_tokens,"
-            " cached_tokens, input_tokens, cache_state, usage_raw)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " cached_tokens, input_tokens, cache_state, usage_raw,"
+            " manifest_path, prompt_hash, prefix_hash)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (req_id,
              str(data.get('role') or '')[:20] or None,
              str(data.get('session_id') or '')[:64] or None,
@@ -331,7 +341,8 @@ def api_runs_add(req_id):
              str(data.get('status') or '')[:20] or None,
              data.get('tool_count'), data.get('context_pct'),
              data.get('context_tokens'), data.get('max_tokens'),
-             cached_tokens, input_tokens, cache_state, usage_raw))
+             cached_tokens, input_tokens, cache_state, usage_raw,
+             manifest_path, prompt_hash, prefix_hash))
         conn.commit()
     return jsonify({'success': True}), 201
 

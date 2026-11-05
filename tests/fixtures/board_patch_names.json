@@ -38,11 +38,13 @@
     "_auto_projects_config",
     "_chat_boot",
     "_chat_current_branch",
+    "_context_preview_run",
     "_dispatcher_kimi_agents",
     "_dispatcher_pid_heartbeat",
     "_harness_cfg_splice",
     "_kimi_code_version",
     "_model_alias_pool_entries",
+    "_projects_config",
     "_reqchat_dispatcher_health",
     "_reqchat_heartbeat_ts",
     "_reqchat_log_allowed",
@@ -58,5 +60,5 @@
     "session_homes",
     "subprocess"
   ],
-  "count": 57
+  "count": 59
 }

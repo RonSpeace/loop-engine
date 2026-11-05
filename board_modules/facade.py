@@ -493,6 +493,35 @@ from board_modules.blueprints.meta import (  # noqa: F401 #32 Phase 6 兼容导�
     _guide_lang,
 )
 
+from board_modules.services.context_preview import (  # noqa: F401 注入预览服务
+    PREVIEW_SCRIPT,
+    PREVIEW_TIMEOUT_SEC,
+    _context_preview_run,
+)
+
+from board_modules.blueprints.context import (  # noqa: F401 上下文编译器入口（执行档案/注入预览/提示词）
+    RUN_KEY_RE,
+    _req_row,
+    _runs_dirs,
+    _load_manifests,
+    _run_statuses,
+    _status_of,
+    _summary,
+    manifest_diff,
+    api_context_runs,
+    _manifest_or_404,
+    api_context_run,
+    api_context_run_prompt,
+    api_context_preview,
+    _write_guard,
+    _project_prompt_items,
+    _project_item_detail,
+    api_prompts,
+    api_prompt_get,
+    api_prompt_put,
+    api_prompt_delete,
+)
+
 
 __all__ = [
     "_AGENT_SESSION_FIELDS",
@@ -915,4 +944,27 @@ __all__ = [
     "_feishu_health_payload",
     "_freeze_time_script",
     "_guide_lang",
+    "RUN_KEY_RE",
+    "_req_row",
+    "_runs_dirs",
+    "_load_manifests",
+    "_run_statuses",
+    "_status_of",
+    "_summary",
+    "manifest_diff",
+    "api_context_runs",
+    "_manifest_or_404",
+    "api_context_run",
+    "api_context_run_prompt",
+    "api_context_preview",
+    "_write_guard",
+    "_project_prompt_items",
+    "_project_item_detail",
+    "api_prompts",
+    "api_prompt_get",
+    "api_prompt_put",
+    "api_prompt_delete",
+    "PREVIEW_SCRIPT",
+    "PREVIEW_TIMEOUT_SEC",
+    "_context_preview_run",
 ]

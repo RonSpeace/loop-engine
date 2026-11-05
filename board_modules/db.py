@@ -178,8 +178,10 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_runs_req ON agent_runs(req_id, id)")
         # #42：存量库幂等加列（只 ALTER ADD COLUMN，不删表重建；存量行保持 NULL，不回填 0）
         ar_cols = {r[1] for r in conn.execute("PRAGMA table_info(agent_runs)")}
+        # 上下文编译器执行档案三列（manifest 路径 + 实发全文 hash + 稳定前缀 hash；存量行 NULL）
         for col, decl in (("cached_tokens", "INTEGER"), ("input_tokens", "INTEGER"),
-                          ("cache_state", "TEXT"), ("usage_raw", "TEXT")):
+                          ("cache_state", "TEXT"), ("usage_raw", "TEXT"),
+                          ("manifest_path", "TEXT"), ("prompt_hash", "TEXT"), ("prefix_hash", "TEXT")):
             if col not in ar_cols:
                 conn.execute(f"ALTER TABLE agent_runs ADD COLUMN {col} {decl}")
         # 调度器 ACP 会话注册表（#273 人工接管）：每条 kimi 会话一行（含空会话/毒会话），

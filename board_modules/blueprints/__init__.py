@@ -7,6 +7,7 @@ from board_modules.blueprints import (  # noqa: F401
     assistant,
     sessions,
     meta,
+    context,
 )
 
-ALL = (requirements, projects, chats, settings, assistant, sessions, meta, )
+ALL = (requirements, projects, chats, settings, assistant, sessions, meta, context, )

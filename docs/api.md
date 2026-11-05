@@ -64,7 +64,15 @@
 | GET | `/api/stream?req=<需求id>&session=<会话sid>` | #416 页面事件流（SSE，poke-only）：`data:` 帧 `{topic: init/proc/sessions/chat/reqchat, ...}` 通知「有变更」，前端收到后仍走既有 GET 增量接口拉取渲染；`req` 决定 proc/reqchat 的订阅过滤，`session` 当前不参与过滤（#418 起收口为「URL 形态保留、服务端忽略」，订阅只记 req）；每 15s `: ping` 心跳注释行；客户端断开后由 fd 级探测（`select`+`MSG_PEEK`，不写流）在 ≤0.3s 内释放槽位（#417；探测节拍 `_SSE_PROBE_SEC=0.25s`），15s 心跳与既有降级语义不变；`503` = 服务端开关关闭（`REQ_BOARD_SSE=0`）或连接数超上限 16，前端据此降级为 1 秒轮询 |
 | GET | `/api/sse-stats` | #417 SSE 订阅状态只读快照（验收/排障，不占槽、不写 DB、无鉴权同全站约定）：`{enabled, subs, max, heartbeat_sec, probe_sec, seq, opened, released, rejected, released_by_probe, subs_by_req}`；计数为进程内累计（重启清零） |
 | PATCH | `/api/requirements/<id>/dispatcher-events/<event_id>` | 回填调度器事件 session_id `{session_id}`（调度器会话建立后调用，幂等；不存在/跨需求返回 404） |
-| POST | `/api/requirements/<id>/runs` | 写入一条 ACP 会话运行记录 `{role, session_id, started_at, ended_at, status, tool_count, context_pct, context_tokens, max_tokens, cached_tokens?, input_tokens?, cache_state?, usage_raw?}`（调度器收尾专用，只增不删，缺失字段存 NULL；#42 缓存四字段——cached/input 需非负整数否则 400、cache_state 枚举 hit/unknown/na 外 400、usage_raw 截 2048；峰值三字段是上下文峰值口径，永不冒充缓存命中） |
+| POST | `/api/requirements/<id>/runs` | 写入一条 ACP 会话运行记录 `{role, session_id, started_at, ended_at, status, tool_count, context_pct, context_tokens, max_tokens, cached_tokens?, input_tokens?, cache_state?, usage_raw?, manifest_path?, prompt_hash?, prefix_hash?}`（执行档案三字段：本轮 `runs/<run_key>/manifest.json` 路径与实发全文/稳定前缀的 sha256 前 12 位，缺省 NULL；调度器收尾专用，只增不删，缺失字段存 NULL；#42 缓存四字段——cached/input 需非负整数否则 400、cache_state 枚举 hit/unknown/na 外 400、usage_raw 截 2048；峰值三字段是上下文峰值口径，永不冒充缓存命中） |
+| GET | `/api/requirements/<id>/context/runs` | 上下文执行档案列表（新→旧）：读产物目录 `runs/*/manifest.json` → `{runs:[{run_key, role, kind(new/resume/followup), created_at, status, chars, prompt_hash, prefix_hash, warnings(条数), model, runtime, node_index, flow, context_update}]}`；`status` 按 `agent_runs.manifest_path` 关联（续接轮跟随父档案 `parent_run_key`），无运行记录 = `running`；需求不存在 404 |
+| GET | `/api/requirements/<id>/context/runs/<run_key>` | 单份注入清单（manifest 全量：`items[{id, layer, title, src, origin, hash, chars, why, truncated}]`、`skipped`、`warnings`、`context_update` 等）+ `status` + `prev_run_key`（同角色上一份）+ `diff:{changed, added, removed}`（按条目 id 比 hash）；run_key 形态非法 400、不存在 404 |
+| GET | `/api/requirements/<id>/context/runs/<run_key>/prompt` | 该轮实际发出的提示词全文（`text/plain`，含进程红线与续跑文案） |
+| GET | `/api/context/preview?project=&role=&req=` | 注入预览：看板以子进程运行 `scripts/context_preview.py`，用调度器同一编译器 dry 编译（不拉会话、不建 worktree、不写 diff.patch、不改状态，超时 20s → 504）；返回与 manifest 同结构（无 run_key，`kind="preview"`）外加 `prompt`、`placeholder_card`；`req` 缺省用占位卡（前置角色 = 前置阶段，其它角色放进含该角色的启用流程）；给了 `req` 未给 `project` 时取卡片项目；项目/角色未知 400、卡片不属于该项目 400、卡片不存在 404 |
+| GET | `/api/prompts` | 提示词条目：`{items:[{id, file, layer, title, placeholders, required, locked, used_by, when, kind(system/fragment/role/project), status(default/override/stale/project), readonly}], local_dir}`；引擎文案来自 `prompts/registry.json`，角色模板 `role/<id>` 由 flows.json 推导；外加只读的项目约定条目 `project/<项目>/<仓库>/manifest`、`project/<项目>/<仓库>/guide/<名>` |
+| GET | `/api/prompts/<id>` | 单条目：`{default_text, override_text, text(生效文本), status, base_text(仅 stale：覆盖保存时的旧默认), placeholders, required, locked, used_by, when, readonly}`；未知 404 |
+| PUT | `/api/prompts/<id>` | 保存本机覆盖 `{text, rebase?}` → 写 `prompts.local/<file>`（首次保存或 `rebase=true` 时把当前默认写进 `<file>.base`）；校验失败 400 `{errors:[{code, message}]}`（code：unknown_placeholder / missing_required / locked_removed / too_long / format_error / card_placeholder_in_fixed）；项目约定条目 403（只读）；写操作经蓝图 `_write_guard()`（单一守卫入口，当前放行）；改完下一次编译即生效，无需重启 |
+| DELETE | `/api/prompts/<id>` | 恢复默认（删除覆盖文件与 `.base`），返回条目详情 + `removed`；写操作经 `_write_guard()` |
 | GET | `/api/chat` | 最近建卡会话列表（含状态；可传 `project` 精确筛选、`channel` 分流——**缺省只返回 `channel='web'`**（fail-closed，飞书建卡会话对网页端不可见），显式 `channel=feishu` 只返回飞书会话、`channel=all` 双通道；#22 另支持 `limit`（单独带 `limit` 即进入分页分支，`before_id` 游标续拉，越界 clamp 50）） |
 | POST | `/api/chat` | 新建建卡会话 `{project, channel?}`（`channel` 枚举 `web`/`feishu`，缺省 `web`、非法 400；同项目**同通道**活跃会话存在时 409 返回现有——飞书与网页互不占名额；全站 3 个 running 并行上限跨通道共用，超出 429） |
 | GET | `/api/chat/<id>` | 建卡会话状态（含 draft_title/draft_notes/req_id/model） |
@@ -115,6 +123,7 @@
 | `board_modules/blueprints/assistant.py` | `/api/assistant/*` |
 | `board_modules/blueprints/sessions.py` | `/api/sessions*`、`/api/agent-sessions*`、`/api/manual-commands*`、`/api/requirements/<id>/sessions*` |
 | `board_modules/blueprints/meta.py` | `/api/meta`、`/api/dispatcher-health`、`/api/dispatcher/restart`、`/api/artifacts*`、`/api/stream`、`/api/sse-stats`、`/`、`/guide` |
+| `board_modules/blueprints/context.py` | `/api/requirements/<id>/context/runs*`、`/api/context/preview`（子进程见 `services/context_preview.py`）、`/api/prompts*` |
 
 ### 时间约定
 

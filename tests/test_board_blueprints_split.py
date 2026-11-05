@@ -17,10 +17,10 @@ sys.path.insert(0, str(REPO))
 import board as b  # noqa: E402
 
 BP_DIR = REPO / "board_modules" / "blueprints"
-REPO_MODS = ("requirements", "projects", "chats", "settings", "assistant", "sessions", "meta")
+REPO_MODS = ("requirements", "projects", "chats", "settings", "assistant", "sessions", "meta", "context")
 # 设计 §3 的路线分组（口径以 board_routes_baseline.json 裁决，见 test_board_split_contract.py）
 ROUTE_COUNTS = {"requirements": 21, "projects": 16, "chats": 22, "settings": 10,
-                "assistant": 7, "sessions": 10, "meta": 9}
+                "assistant": 7, "sessions": 10, "meta": 9, "context": 8}
 PATCHED = set(json.loads((REPO / "tests/fixtures/board_patch_names.json").read_text(encoding="utf-8"))["names"])
 
 
@@ -63,7 +63,7 @@ class StaticContract(unittest.TestCase):
             self.assertLessEqual(m, 1500, f"{p.relative_to(REPO)} {m} 行")
 
     def test_b2_blueprint_package_shape(self):
-        """7 个蓝图模块 + __init__.ALL（注册顺序）齐备；每个模块自建同名 Blueprint 对象。"""
+        """8 个蓝图模块 + __init__.ALL（注册顺序）齐备；每个模块自建同名 Blueprint 对象。"""
         for m in REPO_MODS:
             p = BP_DIR / f"{m}.py"
             self.assertTrue(p.exists(), f"缺 {p.name}")

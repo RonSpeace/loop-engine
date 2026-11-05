@@ -16,7 +16,7 @@ import board as b  # noqa: E402
 SVC = REPO / "board_modules" / "services"
 MODS = ("presentation", "model_pool", "harness_config", "projects", "requirements", "session_runtime",
         "dispatcher_ops", "chat_runtime", "mcp_servers", "reqchat_runtime",
-        "assistant_card", "assistant_runtime", "assistant_mcp", "project_git")
+        "assistant_card", "assistant_runtime", "assistant_mcp", "project_git", "context_preview")
 PATCHED = set(json.loads((REPO / "tests/fixtures/board_patch_names.json").read_text(encoding="utf-8"))["names"])
 
 

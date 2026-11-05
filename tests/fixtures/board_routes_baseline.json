@@ -169,6 +169,12 @@
       ]
     ],
     [
+      "/api/context/preview",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/api/dispatcher-health",
       [
         "GET"
@@ -338,6 +344,30 @@
       ]
     ],
     [
+      "/api/prompts",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/prompts/<path:item_id>",
+      [
+        "DELETE"
+      ]
+    ],
+    [
+      "/api/prompts/<path:item_id>",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/prompts/<path:item_id>",
+      [
+        "PUT"
+      ]
+    ],
+    [
       "/api/requirements",
       [
         "GET"
@@ -419,6 +449,24 @@
       "/api/requirements/<int:req_id>/confirmations",
       [
         "POST"
+      ]
+    ],
+    [
+      "/api/requirements/<int:req_id>/context/runs",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/requirements/<int:req_id>/context/runs/<run_key>",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/api/requirements/<int:req_id>/context/runs/<run_key>/prompt",
+      [
+        "GET"
       ]
     ],
     [
@@ -578,5 +626,5 @@
       ]
     ]
   ],
-  "count": 96
+  "count": 104
 }
