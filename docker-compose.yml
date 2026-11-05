@@ -24,6 +24,7 @@ services:
     restart: unless-stopped
     environment:
       REQ_BOARD_HOST: 0.0.0.0       # 显式开启容器内全接口监听（仅配合下方回环端口映射使用）
+      REQ_BOARD_TRUST_FORWARDED_WRITES: "1"  # 请求经端口映射从桥接网络进来；允许改提示词/技能（端口只发布在宿主机回环）
       REQ_BOARD_DATA: /app/data
       # 可选：时区 / 模型 / 运行体等，见 .env.example
       # REQ_BOARD_TZ: Asia/Shanghai

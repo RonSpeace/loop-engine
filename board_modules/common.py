@@ -11,7 +11,7 @@ import urllib.parse
 from storage_time import format_storage_time, parse_storage_time
 from pathlib import Path
 
-from flask import request
+from flask import jsonify, request
 
 from board_modules.runtime import resolve
 
@@ -215,3 +215,17 @@ def resolve_artifact(project, req_id, filename):
         if target.exists():
             return root_r, target, source
     return None, fallback, None
+
+
+_LOOPBACK_ADDRS = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def write_guard():
+    """提示词 / 技能库等「改配置文件」接口的统一写守卫：返回 None = 放行，否则 (响应, 403)。
+    默认只放行本机回环来源；Docker 部署时请求经端口映射从桥接网络进来（看板端口只发布在宿主机回环上），
+    由 compose 设置 REQ_BOARD_TRUST_FORWARDED_WRITES=1 放行。看板本身无鉴权，这一层只防误暴露后被远端改写。"""
+    if (request.remote_addr or "") in _LOOPBACK_ADDRS:
+        return None
+    if os.environ.get("REQ_BOARD_TRUST_FORWARDED_WRITES") == "1":
+        return None
+    return jsonify({"error": "写操作只允许本机访问（Docker 部署请设置 REQ_BOARD_TRUST_FORWARDED_WRITES=1）"}), 403

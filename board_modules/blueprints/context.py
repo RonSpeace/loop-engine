@@ -188,9 +188,9 @@ def api_context_preview():
 # ==================== 提示词 ====================
 
 def _write_guard():
-    """写操作守卫（单一入口）：返回 None = 放行，否则返回 (响应, 状态码)。
-    当前放行全部来源（看板本就只监听本机；Docker 下请求来自桥接 IP），全站统一写守卫时替换此处。"""
-    return None
+    """写操作守卫（单一入口）：统一走 board_modules.common.write_guard。返回 None = 放行，否则 (响应, 状态码)。"""
+    from board_modules.common import write_guard
+    return write_guard()
 
 
 def _project_prompt_items():

@@ -520,6 +520,16 @@ class BoardApiTest(TempDirs):
         self.assertEqual(self.client.delete("/api/skills/gs", environ_base=env).status_code, 403)
         self.assertFalse(self.l.joinpath("gs").exists())
 
+    def test_forwarded_writes_allowed_when_trusted(self):
+        """Docker 部署：请求经端口映射从桥接网络进来，REQ_BOARD_TRUST_FORWARDED_WRITES=1 时放行；提示词接口同一守卫。"""
+        env = {"REMOTE_ADDR": "172.17.0.1"}
+        self.assertEqual(self.client.put("/api/prompts/system/common", json={"text": "x"},
+                                         environ_base=env).status_code, 403)
+        with mock.patch.dict(os.environ, {"REQ_BOARD_TRUST_FORWARDED_WRITES": "1"}):
+            r = self.client.post("/api/skills", json={"name": "fwd", "description": "x", "body": "y"},
+                                 environ_base=env)
+            self.assertEqual(r.status_code, 201, r.get_json())
+
 
 if __name__ == "__main__":
     unittest.main()

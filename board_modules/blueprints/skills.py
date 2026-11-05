@@ -16,17 +16,14 @@ from board_modules.services.skill_library import list_skills
 from board_modules.services.skill_library import put_skill
 
 
+from board_modules.common import write_guard  # noqa: E402
+
 bp = Blueprint("skills", __name__)
 
 
-_LOOPBACK_ADDRS = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
-
-
 def _skills_write_forbidden():
-    """写操作来源校验：非回环地址 → 403 响应；放行返回 None。"""
-    if (request.remote_addr or "") in _LOOPBACK_ADDRS:
-        return None
-    return jsonify({"error": "技能库写操作只允许本机（127.0.0.1）访问"}), 403
+    """写操作来源校验：统一走 board_modules.common.write_guard（放行返回 None）。"""
+    return write_guard()
 
 
 def _skills_reject(e):
