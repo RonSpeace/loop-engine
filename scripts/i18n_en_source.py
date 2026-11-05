@@ -17,6 +17,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 PHRASES = {
+    "该项目还没有需求，在右侧和 Agent 聊完即可建卡": "No requirements in this project yet — chat with the agent on the right to create one",
     # ---- 页头 / 导航 / 通用 ----
     "浅色皮肤": "Light theme", "深色皮肤": "Dark theme", "切换皮肤": "Switch theme",
     "切换浅色皮肤": "Switch to light theme", "切换深色皮肤": "Switch to dark theme",

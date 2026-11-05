@@ -945,6 +945,7 @@ window.LOOP_I18N_EN = {
   "该项目存在进行中的卡，处理完后再移除。": "This project has cards in progress; finish them before disconnecting.",
   "该项目已有活跃会话，已切换展示": "This project already has an active session; showing it",
   "该项目暂无需求，点击项目名右侧的 + 进入聊天建卡": "No requirements in this project yet. Click + next to the project name to create one via chat.",
+  "该项目还没有需求，在右侧和 Agent 聊完即可建卡": "No requirements in this project yet — chat with the agent on the right to create one",
   "详情分页": "Detail tabs",
   "请先填写至少一条仓库绝对路径": "Enter at least one absolute repository path first",
   "请先手工修复或删除该文件后再保存": "fix or delete the file by hand, then save again",

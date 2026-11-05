@@ -238,7 +238,11 @@
         function renderList() {
             const list = document.getElementById('list');
             const ws = document.querySelector('.workspace');
-            const html = (autoProjects.length ? visibleItems() : []).map(i => cardHtml(i)).join('');
+            const cards = (autoProjects.length ? visibleItems() : []).map(i => cardHtml(i)).join('');
+            // 聊天建卡页固定在右栏、列表留在中间（与看板一贯布局一致）：列表为空时也保留列表列，放一句提示；
+            // 只有不在建卡页且列表为空时才收起列表列、让右栏空态占满
+            const html = cards || (addMode && autoProjects.length
+                ? '<div class="empty list-empty-hint">该项目还没有需求，在右侧和 Agent 聊完即可建卡</div>' : '');
             // empty-main 与 innerHTML 解耦：class 维护幂等（DOMTokenList 对已存在/不存在的 token 不改属性）、
             // 不重建节点，故在签名短路早退之前执行
             if (html) ws.classList.remove('empty-main'); else ws.classList.add('empty-main');
