@@ -2211,3 +2211,7 @@
 .sum-log li.sum-bad { color: var(--err-fg); }
 .sum-log li.sum-bad::before { background: var(--danger); }
 .sum-log li.sum-human::before { background: var(--accent); }
+@media (max-width: 720px) {
+    /* 手机：卡片上的删除入口收起（详情页底部仍有「删除」），把宽度还给标题 */
+    #list > .card .card-del { display: none; }
+}
