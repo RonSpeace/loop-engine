@@ -1,0 +1,395 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Loop Engine application architecture",
+  "locale": "en",
+  "output": "app-architecture.html",
+  "quality_profile": "showcase",
+  "repository": {
+   "url": "https://github.com/RonSpeace/loop-engine.git",
+   "provider": "github",
+   "link_mode": "local-only",
+   "revision": "0754a497ba9be6801f072f4f731f39b515352186"
+  }
+ },
+ "components": [
+  {
+   "id": "sqlite",
+   "type": "database",
+   "label": "SQLite",
+   "sublabel": "data/board.db",
+   "pos": [
+    320,
+    40
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "board_modules/db.py",
+     "line": 16,
+     "end_line": 17,
+     "label": "get_db"
+    },
+    {
+     "path": "board.py",
+     "line": 59,
+     "label": "DB_PATH"
+    }
+   ]
+  },
+  {
+   "id": "user",
+   "type": "external",
+   "label": "You",
+   "sublabel": "browser · phone",
+   "pos": [
+    40,
+    190
+   ],
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "board",
+   "type": "frontend",
+   "label": "Board",
+   "sublabel": "board.py · Flask :8899",
+   "tag": "9 blueprints + services",
+   "pos": [
+    320,
+    190
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "board.py",
+     "line": 111,
+     "label": "Flask app"
+    },
+    {
+     "path": "board_modules/blueprints/__init__.py",
+     "line": 1,
+     "end_line": 14,
+     "label": "blueprints"
+    }
+   ]
+  },
+  {
+   "id": "notifiers",
+   "type": "messagebus",
+   "label": "Notifiers",
+   "sublabel": "Feishu · Webhook · Slack",
+   "pos": [
+    40,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher_modules/notify.py",
+     "line": 406,
+     "end_line": 410,
+     "label": "notify_req_card"
+    },
+    {
+     "path": "notifiers/__init__.py",
+     "line": 365,
+     "label": "NotifierRegistry"
+    }
+   ]
+  },
+  {
+   "id": "dispatcher",
+   "type": "backend",
+   "label": "Dispatcher",
+   "sublabel": "dispatcher.py · 15 s loop",
+   "tag": "flows · gates · merge",
+   "pos": [
+    320,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher.py",
+     "line": 558,
+     "end_line": 643,
+     "label": "_main_loop_tick"
+    },
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 525,
+     "end_line": 560,
+     "label": "handle_result"
+    }
+   ]
+  },
+  {
+   "id": "acp",
+   "type": "security",
+   "label": "ACP client",
+   "sublabel": "acp_shared + acp_modules",
+   "tag": "per-role approval",
+   "pos": [
+    600,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 1413,
+     "end_line": 1435,
+     "label": "ACPSession"
+    },
+    {
+     "path": "acp_shared.py",
+     "line": 2269,
+     "end_line": 2280,
+     "label": "_auto_approve"
+    }
+   ]
+  },
+  {
+   "id": "runtime",
+   "type": "external",
+   "label": "Agent runtime",
+   "sublabel": "kimi · claude-code · codex · opencode",
+   "tag": "subprocess",
+   "pos": [
+    880,
+    340
+   ],
+   "size": [
+    200,
+    64
+   ],
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 64,
+     "end_line": 96,
+     "label": "AGENT_RUNTIMES"
+    }
+   ]
+  },
+  {
+   "id": "config",
+   "type": "database",
+   "label": "Config & prompts",
+   "sublabel": "flows.json · prompts/ · .loop/",
+   "pos": [
+    40,
+    490
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 403,
+     "end_line": 410,
+     "label": "flows.json + prompts"
+    },
+    {
+     "path": "acp_modules/skills.py",
+     "line": 41,
+     "end_line": 44,
+     "label": "prompts.local"
+    }
+   ]
+  },
+  {
+   "id": "compiler",
+   "type": "backend",
+   "label": "Context compiler",
+   "sublabel": "prompt layers · skills",
+   "pos": [
+    320,
+    490
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher_modules/context.py",
+     "line": 256,
+     "end_line": 291,
+     "label": "compile_context"
+    },
+    {
+     "path": "dispatcher_modules/flow_engine.py",
+     "line": 484,
+     "label": "build_prompt_parts"
+    }
+   ]
+  },
+  {
+   "id": "workspace",
+   "type": "database",
+   "label": "Worktrees & artifacts",
+   "sublabel": "~/.req-board/ · result.json",
+   "pos": [
+    880,
+    490
+   ],
+   "size": [
+    200,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 404,
+     "end_line": 406,
+     "label": "ensure_dev_worktrees"
+    },
+    {
+     "path": "dispatcher_modules/workspace.py",
+     "line": 22,
+     "end_line": 28,
+     "label": "artifact_dir"
+    },
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 565,
+     "end_line": 577,
+     "label": "merge_dev_branches"
+    }
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "user-board",
+   "from": "user",
+   "to": "board",
+   "label": "cards · chat",
+   "variant": "emphasis"
+  },
+  {
+   "id": "board-sqlite",
+   "from": "board",
+   "to": "sqlite",
+   "label": "SQL"
+  },
+  {
+   "id": "dispatcher-board",
+   "from": "dispatcher",
+   "to": "board",
+   "label": "REST API"
+  },
+  {
+   "id": "board-acp",
+   "from": "board",
+   "to": "acp",
+   "label": "chat · assistant",
+   "fromSide": "right",
+   "toSide": "top"
+  },
+  {
+   "id": "dispatcher-acp",
+   "from": "dispatcher",
+   "to": "acp",
+   "label": "spawn role",
+   "variant": "emphasis"
+  },
+  {
+   "id": "acp-runtime",
+   "from": "acp",
+   "to": "runtime",
+   "label": "ACP · stdio",
+   "variant": "emphasis"
+  },
+  {
+   "id": "dispatcher-compiler",
+   "from": "dispatcher",
+   "to": "compiler",
+   "label": "build prompt"
+  },
+  {
+   "id": "config-compiler",
+   "from": "config",
+   "to": "compiler",
+   "label": "layers"
+  },
+  {
+   "id": "runtime-workspace",
+   "from": "runtime",
+   "to": "workspace",
+   "label": "code · result.json"
+  },
+  {
+   "id": "dispatcher-workspace",
+   "from": "dispatcher",
+   "to": "workspace",
+   "label": "worktree · merge",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "left"
+  },
+  {
+   "id": "dispatcher-notifiers",
+   "from": "dispatcher",
+   "to": "notifiers",
+   "label": "card events"
+  },
+  {
+   "id": "notifiers-user",
+   "from": "notifiers",
+   "to": "user",
+   "label": "push",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Two processes",
+   "items": [
+    "Board: cards, chat, live sessions, settings",
+    "Dispatcher: polls open cards, runs the flow, merges",
+    "They talk over the board's REST API"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Gates",
+   "items": [
+    "Every tool call is approved per role",
+    "Reviewers are read-only and can reject",
+    "Missing verdict or failed exit check stops the line"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "Runtimes",
+   "items": [
+    "kimi and opencode: every role, chat and assistant",
+    "claude-code and codex: dev role only"
+   ]
+  }
+ ]
+}

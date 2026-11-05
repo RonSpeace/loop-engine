@@ -1,0 +1,461 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Loop Engine call chain: one card from chat to merge",
+  "locale": "en",
+  "output": "call-chain.html",
+  "quality_profile": "showcase",
+  "repository": {
+   "url": "https://github.com/RonSpeace/loop-engine.git",
+   "provider": "github",
+   "link_mode": "local-only",
+   "revision": "0754a497ba9be6801f072f4f731f39b515352186"
+  },
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "You / board"
+    },
+    "backend": {
+     "label": "Engine step"
+    },
+    "database": {
+     "label": "Artifact file"
+    },
+    "security": {
+     "label": "Gate"
+    },
+    "messagebus": {
+     "label": "Notification"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "you",
+   "label": "You · Board"
+  },
+  {
+   "id": "disp",
+   "label": "Dispatcher"
+  },
+  {
+   "id": "agent",
+   "label": "Agent session"
+  },
+  {
+   "id": "gate",
+   "label": "Gates & hand-off",
+   "variant": "exception"
+  }
+ ],
+ "phases": [
+  {
+   "id": "intake",
+   "label": "Card",
+   "fromCol": 0,
+   "toCol": 1
+  },
+  {
+   "id": "work",
+   "label": "Flow nodes",
+   "fromCol": 2,
+   "toCol": 4,
+   "variant": "emphasis"
+  },
+  {
+   "id": "finish",
+   "label": "Finish",
+   "fromCol": 5,
+   "toCol": 5
+  }
+ ],
+ "mainPath": [
+  "chat",
+  "pickup",
+  "analysis",
+  "spawn",
+  "session",
+  "result",
+  "check",
+  "verdict",
+  "merge",
+  "notify"
+ ],
+ "nodes": [
+  {
+   "id": "chat",
+   "lane": "you",
+   "col": 0,
+   "type": "frontend",
+   "label": "Chat or form",
+   "sublabel": "card: later / open",
+   "sources": [
+    {
+     "path": "board_modules/blueprints/chats.py",
+     "line": 344,
+     "label": "chat confirm"
+    }
+   ]
+  },
+  {
+   "id": "decide",
+   "lane": "you",
+   "col": 4,
+   "type": "frontend",
+   "label": "Waiting for you",
+   "sublabel": "inbox · y / n",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 745,
+     "label": "_register_need_confirm"
+    }
+   ]
+  },
+  {
+   "id": "notify",
+   "lane": "you",
+   "col": 5,
+   "type": "messagebus",
+   "label": "Notified",
+   "sublabel": "Feishu · Webhook · Slack",
+   "sources": [
+    {
+     "path": "dispatcher_modules/notify.py",
+     "line": 406,
+     "end_line": 410,
+     "label": "notify_req_card"
+    }
+   ]
+  },
+  {
+   "id": "pickup",
+   "lane": "disp",
+   "col": 1,
+   "type": "backend",
+   "label": "Pick up card",
+   "sublabel": "open · 15 s poll",
+   "sources": [
+    {
+     "path": "dispatcher.py",
+     "line": 606,
+     "end_line": 640,
+     "label": "main loop"
+    }
+   ]
+  },
+  {
+   "id": "spawn",
+   "lane": "disp",
+   "col": 2,
+   "type": "backend",
+   "label": "Build prompt",
+   "sublabel": "context compiler",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 44,
+     "label": "spawn_agent"
+    },
+    {
+     "path": "dispatcher_modules/context.py",
+     "line": 256,
+     "label": "compile_context"
+    }
+   ]
+  },
+  {
+   "id": "check",
+   "lane": "disp",
+   "col": 3,
+   "type": "backend",
+   "label": "Exit check",
+   "sublabel": "diff or artifact",
+   "tag": "fail-closed",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 568,
+     "end_line": 588,
+     "label": "done gate"
+    }
+   ]
+  },
+  {
+   "id": "verdict",
+   "lane": "disp",
+   "col": 4,
+   "type": "backend",
+   "label": "Review verdict",
+   "sublabel": "pass or reject",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 349,
+     "end_line": 393,
+     "label": "_review_node_done"
+    }
+   ]
+  },
+  {
+   "id": "analysis",
+   "lane": "agent",
+   "col": 1,
+   "type": "backend",
+   "label": "Analysis",
+   "sublabel": "picks flow + repos",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 64,
+     "end_line": 75,
+     "label": "_pre_stage_done"
+    }
+   ]
+  },
+  {
+   "id": "session",
+   "lane": "agent",
+   "col": 2,
+   "type": "backend",
+   "label": "Role session",
+   "sublabel": "tech · dev · review · accept",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 252,
+     "label": "run_agent"
+    },
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 346,
+     "label": "ACPSession"
+    }
+   ]
+  },
+  {
+   "id": "result",
+   "lane": "agent",
+   "col": 3,
+   "type": "database",
+   "label": "result.json",
+   "sublabel": "done · blocked · need_confirm",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 525,
+     "end_line": 557,
+     "label": "handle_result"
+    }
+   ]
+  },
+  {
+   "id": "approve",
+   "lane": "gate",
+   "col": 2,
+   "type": "security",
+   "label": "Tool approval",
+   "sublabel": "per-role policy",
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 1804,
+     "end_line": 1805,
+     "label": "request_permission"
+    },
+    {
+     "path": "acp_shared.py",
+     "line": 2269,
+     "end_line": 2280,
+     "label": "_auto_approve"
+    }
+   ]
+  },
+  {
+   "id": "retry",
+   "lane": "gate",
+   "col": 3,
+   "type": "security",
+   "label": "Auto retry",
+   "sublabel": "crash · timeout · bad JSON",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 733,
+     "end_line": 740,
+     "label": "retries"
+    }
+   ]
+  },
+  {
+   "id": "escalate",
+   "lane": "gate",
+   "col": 4,
+   "type": "security",
+   "label": "4th reject",
+   "sublabel": "hand to a human",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 393,
+     "end_line": 400,
+     "label": "rounds limit"
+    }
+   ]
+  },
+  {
+   "id": "merge",
+   "lane": "disp",
+   "col": 5,
+   "type": "backend",
+   "label": "Merge",
+   "sublabel": "--no-ff · or push branch",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 221,
+     "end_line": 232,
+     "label": "_run_terminal"
+    },
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 565,
+     "end_line": 577,
+     "label": "merge_dev_branches"
+    }
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-chat-pickup",
+   "from": "chat",
+   "to": "pickup",
+   "label": "open",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-pickup-analysis",
+   "from": "pickup",
+   "to": "analysis",
+   "label": "first run"
+  },
+  {
+   "id": "e-analysis-spawn",
+   "from": "analysis",
+   "to": "spawn",
+   "label": "adopt flow"
+  },
+  {
+   "id": "e-spawn-session",
+   "from": "spawn",
+   "to": "session",
+   "label": "spawn",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-session-approve",
+   "from": "session",
+   "to": "approve",
+   "label": "each tool call",
+   "variant": "security",
+   "role": "branch"
+  },
+  {
+   "id": "e-session-result",
+   "from": "session",
+   "to": "result",
+   "label": "writes",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-result-check",
+   "from": "result",
+   "to": "check",
+   "label": "read"
+  },
+  {
+   "id": "e-check-retry",
+   "from": "check",
+   "to": "retry",
+   "label": "failed run",
+   "variant": "security",
+   "role": "error"
+  },
+  {
+   "id": "e-check-verdict",
+   "from": "check",
+   "to": "verdict",
+   "label": "passed",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-verdict-session",
+   "from": "verdict",
+   "to": "session",
+   "label": "reject: redo",
+   "variant": "dashed",
+   "role": "return"
+  },
+  {
+   "id": "e-verdict-escalate",
+   "from": "verdict",
+   "to": "escalate",
+   "label": "4th reject",
+   "variant": "security",
+   "role": "error"
+  },
+  {
+   "id": "e-escalate-decide",
+   "from": "escalate",
+   "to": "decide",
+   "label": "need_confirm",
+   "variant": "dashed",
+   "role": "branch"
+  },
+  {
+   "id": "e-verdict-merge",
+   "from": "verdict",
+   "to": "merge",
+   "label": "last node",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-merge-notify",
+   "from": "merge",
+   "to": "notify",
+   "label": "done"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "Flows",
+   "items": [
+    "quick: dev → finish",
+    "standard: dev → code review → accept → finish",
+    "heavy: tech → tech review → dev → code review → accept → finish"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Gates",
+   "items": [
+    "Rejects 1–3 redo automatically; the 3rd can switch to a stronger model",
+    "need_confirm, blocked and waivers all land in your inbox",
+    "A failed run retries once, then the card pauses as later"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "Finish",
+   "items": [
+    "Merge conflict: a merge_resolve agent tries first",
+    "Optional restart recipe after merge"
+   ]
+  }
+ ]
+}

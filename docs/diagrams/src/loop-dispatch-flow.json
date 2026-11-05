@@ -1,48 +1,461 @@
 {
-  "schema_version": 2,
-  "diagram_type": "workflow",
-  "meta": {
-    "title": "Loop Engine 调度流程：一张卡从 open 到 done",
-    "locale": "zh-CN",
-    "quality_profile": "showcase"
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "Loop Engine 调用链路：一张卡从建卡到合并",
+  "locale": "zh-CN",
+  "output": "loop-dispatch-flow.html",
+  "quality_profile": "showcase",
+  "repository": {
+   "url": "https://github.com/RonSpeace/loop-engine.git",
+   "provider": "github",
+   "link_mode": "local-only",
+   "revision": "0754a497ba9be6801f072f4f731f39b515352186"
   },
-  "lanes": [
-    { "id": "dispatch", "label": "调度器 dispatcher" },
-    { "id": "agent", "label": "角色会话 kimi acp" },
-    { "id": "human", "label": "人工介入与失败", "variant": "exception" },
-    { "id": "finish", "label": "收尾 terminal" }
-  ],
-  "phases": [
-    { "id": "pick", "label": "拉起之前", "fromCol": 0, "toCol": 1 },
-    { "id": "work", "label": "运行与校验", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "close", "label": "合并收尾", "fromCol": 4, "toCol": 5, "variant": "dashed" }
-  ],
-  "mainPath": ["poll", "prepare", "run", "check", "merge", "done"],
-  "nodes": [
-    { "id": "poll", "lane": "dispatch", "col": 0, "type": "backend", "label": "轮询捞 open", "sublabel": "15s · 静置 ≥1 分钟", "width": 150 },
-    { "id": "prepare", "lane": "dispatch", "col": 1, "type": "backend", "label": "守卫 + 备料", "sublabel": "去重 · worktree · prompt", "width": 150 },
-    { "id": "run", "lane": "agent", "col": 2, "type": "cloud", "label": "角色会话", "sublabel": "按节点角色拉起", "tag": "权限分级", "width": 150 },
-    { "id": "check", "lane": "dispatch", "col": 3, "type": "backend", "label": "校验 result.json", "sublabel": "按节点类型过闸", "width": 150 },
-    { "id": "merge", "lane": "finish", "col": 4, "type": "messagebus", "label": "合并回 main", "sublabel": "--no-ff · 清 worktree", "width": 150 },
-    { "id": "done", "lane": "finish", "col": 5, "type": "frontend", "label": "done", "sublabel": "通知 + 必要时重启", "width": 150 },
-    { "id": "resolve", "lane": "agent", "col": 4, "type": "cloud", "label": "merge_resolve", "sublabel": "冲突 · 最多 2 轮", "width": 150 },
-    { "id": "confirm", "lane": "human", "col": 3, "type": "security", "label": "need_confirm", "sublabel": "飞书 / 网页 y·n", "width": 150 },
-    { "id": "retry", "lane": "human", "col": 4, "type": "security", "label": "失败重试 1 次", "sublabel": "耗尽转 later", "width": 150 }
-  ],
-  "edges": [
-    { "id": "poll-prepare", "from": "poll", "to": "prepare", "label": "置 doing", "variant": "emphasis", "role": "main" },
-    { "id": "prepare-run", "from": "prepare", "to": "run", "label": "起 kimi acp", "variant": "emphasis", "role": "main" },
-    { "id": "run-check", "from": "run", "to": "check", "label": "提交结果", "variant": "emphasis", "role": "main" },
-    { "id": "check-merge", "from": "check", "to": "merge", "label": "末节点通过", "variant": "emphasis", "role": "main" },
-    { "id": "merge-done", "from": "merge", "to": "done", "variant": "emphasis", "role": "main" },
-    { "id": "check-prepare", "from": "check", "to": "prepare", "label": "pass 前进 / reject 打回", "variant": "dashed", "role": "return" },
-    { "id": "check-confirm", "from": "check", "to": "confirm", "label": "需裁决", "variant": "security", "role": "branch" },
-    { "id": "check-retry", "from": "check", "to": "retry", "label": "失败", "variant": "security", "role": "error" },
-    { "id": "merge-resolve", "from": "merge", "to": "resolve", "label": "冲突", "variant": "dashed", "role": "branch" }
-  ],
-  "cards": [
-    { "dot": "cyan", "title": "节点推进", "items": ["按卡上快照的节点序列推进", "评审 reject 自动打回前驱，第 4 次转人工"] },
-    { "dot": "emerald", "title": "收尾", "items": ["普通项目合并回 main", "branch_only：push f-分支"] },
-    { "dot": "rose", "title": "人工通道", "items": ["飞书 y/n 与网页按钮语义一致", "失败重试耗尽转 later 并标毒会话"] }
-  ]
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "你 / 看板"
+    },
+    "backend": {
+     "label": "引擎步骤"
+    },
+    "database": {
+     "label": "产物文件"
+    },
+    "security": {
+     "label": "闸门"
+    },
+    "messagebus": {
+     "label": "通知"
+    }
+   }
+  }
+ },
+ "lanes": [
+  {
+   "id": "you",
+   "label": "你 · 看板"
+  },
+  {
+   "id": "disp",
+   "label": "调度器"
+  },
+  {
+   "id": "agent",
+   "label": "Agent 会话"
+  },
+  {
+   "id": "gate",
+   "label": "闸门与转人工",
+   "variant": "exception"
+  }
+ ],
+ "phases": [
+  {
+   "id": "intake",
+   "label": "建卡",
+   "fromCol": 0,
+   "toCol": 1
+  },
+  {
+   "id": "work",
+   "label": "流程节点",
+   "fromCol": 2,
+   "toCol": 4,
+   "variant": "emphasis"
+  },
+  {
+   "id": "finish",
+   "label": "收尾",
+   "fromCol": 5,
+   "toCol": 5
+  }
+ ],
+ "mainPath": [
+  "chat",
+  "pickup",
+  "analysis",
+  "spawn",
+  "session",
+  "result",
+  "check",
+  "verdict",
+  "merge",
+  "notify"
+ ],
+ "nodes": [
+  {
+   "id": "chat",
+   "lane": "you",
+   "col": 0,
+   "type": "frontend",
+   "label": "聊天或表单",
+   "sublabel": "卡片：暂缓 / 待开发",
+   "sources": [
+    {
+     "path": "board_modules/blueprints/chats.py",
+     "line": 344,
+     "label": "chat confirm"
+    }
+   ]
+  },
+  {
+   "id": "decide",
+   "lane": "you",
+   "col": 4,
+   "type": "frontend",
+   "label": "等你处理",
+   "sublabel": "收件箱 · y / n",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 745,
+     "label": "_register_need_confirm"
+    }
+   ]
+  },
+  {
+   "id": "notify",
+   "lane": "you",
+   "col": 5,
+   "type": "messagebus",
+   "label": "通知",
+   "sublabel": "飞书 · Webhook · Slack",
+   "sources": [
+    {
+     "path": "dispatcher_modules/notify.py",
+     "line": 406,
+     "end_line": 410,
+     "label": "notify_req_card"
+    }
+   ]
+  },
+  {
+   "id": "pickup",
+   "lane": "disp",
+   "col": 1,
+   "type": "backend",
+   "label": "捞卡",
+   "sublabel": "待开发 · 15 秒轮询",
+   "sources": [
+    {
+     "path": "dispatcher.py",
+     "line": 606,
+     "end_line": 640,
+     "label": "main loop"
+    }
+   ]
+  },
+  {
+   "id": "spawn",
+   "lane": "disp",
+   "col": 2,
+   "type": "backend",
+   "label": "编译提示词",
+   "sublabel": "上下文编译器",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 44,
+     "label": "spawn_agent"
+    },
+    {
+     "path": "dispatcher_modules/context.py",
+     "line": 256,
+     "label": "compile_context"
+    }
+   ]
+  },
+  {
+   "id": "check",
+   "lane": "disp",
+   "col": 3,
+   "type": "backend",
+   "label": "收尾校验",
+   "sublabel": "代码变更或产物",
+   "tag": "fail-closed",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 568,
+     "end_line": 588,
+     "label": "done gate"
+    }
+   ]
+  },
+  {
+   "id": "verdict",
+   "lane": "disp",
+   "col": 4,
+   "type": "backend",
+   "label": "评审结论",
+   "sublabel": "pass 或 reject",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 349,
+     "end_line": 393,
+     "label": "_review_node_done"
+    }
+   ]
+  },
+  {
+   "id": "analysis",
+   "lane": "agent",
+   "col": 1,
+   "type": "backend",
+   "label": "需求分析",
+   "sublabel": "推荐流程 + 仓库",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 64,
+     "end_line": 75,
+     "label": "_pre_stage_done"
+    }
+   ]
+  },
+  {
+   "id": "session",
+   "lane": "agent",
+   "col": 2,
+   "type": "backend",
+   "label": "角色会话",
+   "sublabel": "方案 · 开发 · 评审 · 验收",
+   "sources": [
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 252,
+     "label": "run_agent"
+    },
+    {
+     "path": "dispatcher_modules/agent_run.py",
+     "line": 346,
+     "label": "ACPSession"
+    }
+   ]
+  },
+  {
+   "id": "result",
+   "lane": "agent",
+   "col": 3,
+   "type": "database",
+   "label": "result.json",
+   "sublabel": "done · blocked · need_confirm",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 525,
+     "end_line": 557,
+     "label": "handle_result"
+    }
+   ]
+  },
+  {
+   "id": "approve",
+   "lane": "gate",
+   "col": 2,
+   "type": "security",
+   "label": "工具审批",
+   "sublabel": "按角色策略",
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 1804,
+     "end_line": 1805,
+     "label": "request_permission"
+    },
+    {
+     "path": "acp_shared.py",
+     "line": 2269,
+     "end_line": 2280,
+     "label": "_auto_approve"
+    }
+   ]
+  },
+  {
+   "id": "retry",
+   "lane": "gate",
+   "col": 3,
+   "type": "security",
+   "label": "自动重试",
+   "sublabel": "崩溃 · 超时 · 非法 JSON",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 733,
+     "end_line": 740,
+     "label": "retries"
+    }
+   ]
+  },
+  {
+   "id": "escalate",
+   "lane": "gate",
+   "col": 4,
+   "type": "security",
+   "label": "第 4 次打回",
+   "sublabel": "转人工裁决",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 393,
+     "end_line": 400,
+     "label": "rounds limit"
+    }
+   ]
+  },
+  {
+   "id": "merge",
+   "lane": "disp",
+   "col": 5,
+   "type": "backend",
+   "label": "合并",
+   "sublabel": "--no-ff · 或只推分支",
+   "sources": [
+    {
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 221,
+     "end_line": 232,
+     "label": "_run_terminal"
+    },
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 565,
+     "end_line": 577,
+     "label": "merge_dev_branches"
+    }
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-chat-pickup",
+   "from": "chat",
+   "to": "pickup",
+   "label": "待开发",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-pickup-analysis",
+   "from": "pickup",
+   "to": "analysis",
+   "label": "首次"
+  },
+  {
+   "id": "e-analysis-spawn",
+   "from": "analysis",
+   "to": "spawn",
+   "label": "采纳流程"
+  },
+  {
+   "id": "e-spawn-session",
+   "from": "spawn",
+   "to": "session",
+   "label": "拉起",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-session-approve",
+   "from": "session",
+   "to": "approve",
+   "label": "每次工具调用",
+   "variant": "security",
+   "role": "branch"
+  },
+  {
+   "id": "e-session-result",
+   "from": "session",
+   "to": "result",
+   "label": "写入",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-result-check",
+   "from": "result",
+   "to": "check",
+   "label": "读取"
+  },
+  {
+   "id": "e-check-retry",
+   "from": "check",
+   "to": "retry",
+   "label": "运行失败",
+   "variant": "security",
+   "role": "error"
+  },
+  {
+   "id": "e-check-verdict",
+   "from": "check",
+   "to": "verdict",
+   "label": "通过",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-verdict-session",
+   "from": "verdict",
+   "to": "session",
+   "label": "reject：重做",
+   "variant": "dashed",
+   "role": "return"
+  },
+  {
+   "id": "e-verdict-escalate",
+   "from": "verdict",
+   "to": "escalate",
+   "label": "第 4 次打回",
+   "variant": "security",
+   "role": "error"
+  },
+  {
+   "id": "e-escalate-decide",
+   "from": "escalate",
+   "to": "decide",
+   "label": "need_confirm",
+   "variant": "dashed",
+   "role": "branch"
+  },
+  {
+   "id": "e-verdict-merge",
+   "from": "verdict",
+   "to": "merge",
+   "label": "最后一个节点",
+   "variant": "emphasis"
+  },
+  {
+   "id": "e-merge-notify",
+   "from": "merge",
+   "to": "notify",
+   "label": "完成"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "流程",
+   "items": [
+    "快速：开发 → 收尾",
+    "标准：开发 → 代码审查 → 验收 → 收尾",
+    "复杂：技术方案 → 方案评审 → 开发 → 代码审查 → 验收 → 收尾"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "闸门",
+   "items": [
+    "第 1–3 次打回自动重做，第 3 次可换更强模型",
+    "need_confirm、blocked、豁免申请都进「待你处理」",
+    "运行失败自动重试 1 次，仍失败转暂缓"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "收尾",
+   "items": [
+    "合并冲突先由 merge_resolve 角色尝试解决",
+    "合并后可按项目配方自动重启服务"
+   ]
+  }
+ ]
 }

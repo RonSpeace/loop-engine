@@ -1,280 +1,395 @@
 {
-  "schema_version": 1,
-  "diagram_type": "architecture",
-  "meta": {
-    "title": "Loop Engine 系统应用架构",
-    "locale": "zh-CN",
-    "quality_profile": "showcase"
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Loop Engine 应用架构",
+  "locale": "zh-CN",
+  "output": "loop-architecture.html",
+  "quality_profile": "showcase",
+  "repository": {
+   "url": "https://github.com/RonSpeace/loop-engine.git",
+   "provider": "github",
+   "link_mode": "local-only",
+   "revision": "0754a497ba9be6801f072f4f731f39b515352186"
+  }
+ },
+ "components": [
+  {
+   "id": "sqlite",
+   "type": "database",
+   "label": "SQLite",
+   "sublabel": "data/board.db",
+   "pos": [
+    320,
+    40
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "board_modules/db.py",
+     "line": 16,
+     "end_line": 17,
+     "label": "get_db"
+    },
+    {
+     "path": "board.py",
+     "line": 59,
+     "label": "DB_PATH"
+    }
+   ]
   },
-  "components": [
+  {
+   "id": "user",
+   "type": "external",
+   "label": "你",
+   "sublabel": "浏览器 · 手机",
+   "pos": [
+    40,
+    190
+   ],
+   "size": [
+    180,
+    64
+   ]
+  },
+  {
+   "id": "board",
+   "type": "frontend",
+   "label": "看板",
+   "sublabel": "board.py · Flask :8899",
+   "tag": "9 个蓝图 + 服务层",
+   "pos": [
+    320,
+    190
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
     {
-      "id": "human",
-      "type": "external",
-      "label": "你",
-      "sublabel": "浏览器 / 飞书",
-      "pos": [
-        40,
-        300
-      ],
-      "size": [
-        150,
-        64
-      ]
+     "path": "board.py",
+     "line": 111,
+     "label": "Flask app"
     },
     {
-      "id": "board",
-      "type": "frontend",
-      "label": "看板 board.py",
-      "sublabel": "Flask 蓝图 · SSE · 建卡对话",
-      "pos": [
-        270,
-        300
-      ],
-      "size": [
-        170,
-        64
-      ],
-      "tag": ":8899"
-    },
-    {
-      "id": "db",
-      "type": "database",
-      "label": "board.db",
-      "sublabel": "SQLite · 需求/事件/会话",
-      "pos": [
-        520,
-        130
-      ],
-      "size": [
-        160,
-        64
-      ]
-    },
-    {
-      "id": "dispatcher",
-      "type": "backend",
-      "label": "调度器 dispatcher.py",
-      "sublabel": "15s 轮询 · 看门狗 · 重启对账",
-      "pos": [
-        520,
-        300
-      ],
-      "size": [
-        170,
-        64
-      ]
-    },
-    {
-      "id": "feishu",
-      "type": "external",
-      "label": "飞书机器人",
-      "sublabel": "WebSocket · y/n 裁决",
-      "pos": [
-        520,
-        470
-      ],
-      "size": [
-        160,
-        64
-      ]
-    },
-    {
-      "id": "shared",
-      "type": "security",
-      "label": "acp_shared.py",
-      "sublabel": "ACPSession · 权限引擎",
-      "pos": [
-        780,
-        300
-      ],
-      "size": [
-        160,
-        64
-      ]
-    },
-    {
-      "id": "cfg",
-      "type": "database",
-      "label": "流程与约定配置",
-      "sublabel": "flows.json · prompts · .loop",
-      "pos": [
-        780,
-        470
-      ],
-      "size": [
-        160,
-        64
-      ],
-      "tag": "无热加载"
-    },
-    {
-      "id": "agents",
-      "type": "cloud",
-      "label": "kimi acp × N",
-      "sublabel": "角色会话 · 每项目并行 ≤3",
-      "pos": [
-        1030,
-        300
-      ],
-      "size": [
-        160,
-        64
-      ]
-    },
-    {
-      "id": "ext",
-      "type": "external",
-      "label": "TAPD / MySQL",
-      "sublabel": "只读 MCP 工具",
-      "pos": [
-        1030,
-        130
-      ],
-      "size": [
-        160,
-        64
-      ]
-    },
-    {
-      "id": "artifacts",
-      "type": "database",
-      "label": "产物 + worktree",
-      "sublabel": "~/.req-board",
-      "pos": [
-        1030,
-        470
-      ],
-      "size": [
-        160,
-        64
-      ]
+     "path": "board_modules/blueprints/__init__.py",
+     "line": 1,
+     "end_line": 14,
+     "label": "blueprints"
     }
-  ],
-  "connections": [
+   ]
+  },
+  {
+   "id": "notifiers",
+   "type": "messagebus",
+   "label": "通知渠道",
+   "sublabel": "飞书 · Webhook · Slack",
+   "pos": [
+    40,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
     {
-      "id": "human-board",
-      "from": "human",
-      "to": "board",
-      "label": "HTTP / SSE",
-      "variant": "emphasis"
+     "path": "dispatcher_modules/notify.py",
+     "line": 406,
+     "end_line": 410,
+     "label": "notify_req_card"
     },
     {
-      "id": "board-db",
-      "from": "board",
-      "to": "db",
-      "label": "读写",
-      "fromSide": "top",
-      "toSide": "left"
-    },
-    {
-      "id": "board-dispatcher",
-      "from": "board",
-      "to": "dispatcher",
-      "label": "续跑队列",
-      "variant": "dashed"
-    },
-    {
-      "id": "dispatcher-db",
-      "from": "dispatcher",
-      "to": "db",
-      "label": "状态/事件",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "feishu-dispatcher",
-      "from": "feishu",
-      "to": "dispatcher",
-      "label": "通知 / 回复",
-      "variant": "dashed",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "dispatcher-shared",
-      "from": "dispatcher",
-      "to": "shared",
-      "label": "拉起会话"
-    },
-    {
-      "id": "cfg-shared",
-      "from": "cfg",
-      "to": "shared",
-      "label": "加载校验"
-    },
-    {
-      "id": "shared-agents",
-      "from": "shared",
-      "to": "agents",
-      "label": "ACP stdio"
-    },
-    {
-      "id": "agents-ext",
-      "from": "agents",
-      "to": "ext",
-      "label": "只读 MCP",
-      "variant": "dashed",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "agents-artifacts",
-      "from": "agents",
-      "to": "artifacts",
-      "label": "result.json",
-      "labelDy": 58,
-      "fromSide": "bottom",
-      "toSide": "top"
+     "path": "notifiers/__init__.py",
+     "line": 365,
+     "label": "NotifierRegistry"
     }
-  ],
-  "boundaries": [
+   ]
+  },
+  {
+   "id": "dispatcher",
+   "type": "backend",
+   "label": "调度器",
+   "sublabel": "dispatcher.py · 15 秒一轮",
+   "tag": "流程 · 闸门 · 合并",
+   "pos": [
+    320,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
     {
-      "kind": "region",
-      "label": "本机 · launchd / run_local.sh",
-      "wraps": [
-        "board",
-        "db",
-        "dispatcher",
-        "shared",
-        "cfg",
-        "agents",
-        "artifacts"
-      ]
+     "path": "dispatcher.py",
+     "line": 558,
+     "end_line": 643,
+     "label": "_main_loop_tick"
     },
     {
-      "kind": "security-group",
-      "label": "角色权限闸门 + worktree 隔离",
-      "wraps": [
-        "shared",
-        "agents"
-      ]
+     "path": "dispatcher_modules/flow_advance.py",
+     "line": 525,
+     "end_line": 560,
+     "label": "handle_result"
     }
-  ],
-  "cards": [
+   ]
+  },
+  {
+   "id": "acp",
+   "type": "security",
+   "label": "ACP 客户端",
+   "sublabel": "acp_shared + acp_modules",
+   "tag": "按角色审批",
+   "pos": [
+    600,
+    340
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
     {
-      "dot": "cyan",
-      "title": "入口",
-      "items": [
-        "看板 Web UI + 83 条 REST",
-        "飞书只做通知与 y/n 裁决"
-      ]
+     "path": "acp_shared.py",
+     "line": 1413,
+     "end_line": 1435,
+     "label": "ACPSession"
     },
     {
-      "dot": "emerald",
-      "title": "调度",
-      "items": [
-        "15s 轮询 open 需求",
-        "按卡上快照推进节点",
-        "看板与调度器靠 SQLite 通信"
-      ]
-    },
-    {
-      "dot": "rose",
-      "title": "安全",
-      "items": [
-        "8 角色能力档位 fail-closed",
-        "dev 仅写 per-requirement worktree"
-      ]
+     "path": "acp_shared.py",
+     "line": 2269,
+     "end_line": 2280,
+     "label": "_auto_approve"
     }
-  ]
+   ]
+  },
+  {
+   "id": "runtime",
+   "type": "external",
+   "label": "Agent 运行体",
+   "sublabel": "kimi · claude-code · codex · opencode",
+   "tag": "子进程",
+   "pos": [
+    880,
+    340
+   ],
+   "size": [
+    200,
+    64
+   ],
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 64,
+     "end_line": 96,
+     "label": "AGENT_RUNTIMES"
+    }
+   ]
+  },
+  {
+   "id": "config",
+   "type": "database",
+   "label": "配置与提示词",
+   "sublabel": "flows.json · prompts/ · .loop/",
+   "pos": [
+    40,
+    490
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "acp_shared.py",
+     "line": 403,
+     "end_line": 410,
+     "label": "flows.json + prompts"
+    },
+    {
+     "path": "acp_modules/skills.py",
+     "line": 41,
+     "end_line": 44,
+     "label": "prompts.local"
+    }
+   ]
+  },
+  {
+   "id": "compiler",
+   "type": "backend",
+   "label": "上下文编译器",
+   "sublabel": "提示词分层 · 技能",
+   "pos": [
+    320,
+    490
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher_modules/context.py",
+     "line": 256,
+     "end_line": 291,
+     "label": "compile_context"
+    },
+    {
+     "path": "dispatcher_modules/flow_engine.py",
+     "line": 484,
+     "label": "build_prompt_parts"
+    }
+   ]
+  },
+  {
+   "id": "workspace",
+   "type": "database",
+   "label": "worktree 与产物",
+   "sublabel": "~/.req-board/ · result.json",
+   "pos": [
+    880,
+    490
+   ],
+   "size": [
+    200,
+    64
+   ],
+   "sources": [
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 404,
+     "end_line": 406,
+     "label": "ensure_dev_worktrees"
+    },
+    {
+     "path": "dispatcher_modules/workspace.py",
+     "line": 22,
+     "end_line": 28,
+     "label": "artifact_dir"
+    },
+    {
+     "path": "dispatcher_modules/git_sync.py",
+     "line": 565,
+     "end_line": 577,
+     "label": "merge_dev_branches"
+    }
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "user-board",
+   "from": "user",
+   "to": "board",
+   "label": "建卡 · 聊天",
+   "variant": "emphasis"
+  },
+  {
+   "id": "board-sqlite",
+   "from": "board",
+   "to": "sqlite",
+   "label": "SQL"
+  },
+  {
+   "id": "dispatcher-board",
+   "from": "dispatcher",
+   "to": "board",
+   "label": "REST API"
+  },
+  {
+   "id": "board-acp",
+   "from": "board",
+   "to": "acp",
+   "label": "建卡 · 助手会话",
+   "fromSide": "right",
+   "toSide": "top"
+  },
+  {
+   "id": "dispatcher-acp",
+   "from": "dispatcher",
+   "to": "acp",
+   "label": "拉起角色",
+   "variant": "emphasis"
+  },
+  {
+   "id": "acp-runtime",
+   "from": "acp",
+   "to": "runtime",
+   "label": "ACP · stdio",
+   "variant": "emphasis"
+  },
+  {
+   "id": "dispatcher-compiler",
+   "from": "dispatcher",
+   "to": "compiler",
+   "label": "编译提示词"
+  },
+  {
+   "id": "config-compiler",
+   "from": "config",
+   "to": "compiler",
+   "label": "分层"
+  },
+  {
+   "id": "runtime-workspace",
+   "from": "runtime",
+   "to": "workspace",
+   "label": "代码 · result.json"
+  },
+  {
+   "id": "dispatcher-workspace",
+   "from": "dispatcher",
+   "to": "workspace",
+   "label": "建 worktree · 合并",
+   "variant": "dashed",
+   "fromSide": "bottom",
+   "toSide": "left"
+  },
+  {
+   "id": "dispatcher-notifiers",
+   "from": "dispatcher",
+   "to": "notifiers",
+   "label": "卡片事件"
+  },
+  {
+   "id": "notifiers-user",
+   "from": "notifiers",
+   "to": "user",
+   "label": "推送",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "两个进程",
+   "items": [
+    "看板：需求卡、聊天、实时会话、设置",
+    "调度器：捞待开发的卡、按流程推进、合并",
+    "两者经看板 REST API 通信"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "闸门",
+   "items": [
+    "每次工具调用都按角色审批",
+    "评审角色只读，可以打回",
+    "缺评审结论或收尾校验不过就停线"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "运行体",
+   "items": [
+    "kimi、opencode：全部角色及建卡/助手会话",
+    "claude-code、codex：仅开发角色"
+   ]
+  }
+ ]
 }
