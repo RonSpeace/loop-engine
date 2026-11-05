@@ -434,6 +434,7 @@
             persistViewState();
             renderList();
             renderDetailPane();
+            if (typeof interactionSync === 'function') interactionSync();
             refreshProjectBar();  // #3 项目信息条（非 await：不阻塞主渲染链路）
         }
 

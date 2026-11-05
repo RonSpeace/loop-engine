@@ -249,6 +249,7 @@
             if (html === listHtmlSig) return;
             listHtmlSig = html;
             list.innerHTML = html;
+            if (typeof interactionSync === 'function') interactionSync();
         }
 
         // 右栏：添加表单 / 需求详情视图 / 会话执行过程视图 / 会话产物详情视图；

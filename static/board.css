@@ -2049,3 +2049,85 @@
             .cx-detail { padding-left: 12px; }
             .cx-tabs { align-self: stretch; }
         }
+
+/* ==== interaction ==== */
+.interaction-toolbar {display:flex; gap:8px; align-items:center; padding:8px 0; flex:none; min-width:0}
+.interaction-toolbar input {flex:1; min-width:0; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); padding:10px 12px}
+.interaction-toolbar button, .interaction-toolbar input, #interactionInboxButton {min-height:40px}
+.interaction-inbox-wrap {position:relative}
+#interactionInboxButton {display:flex; align-items:center; gap:6px; color:var(--muted)}
+#interactionInboxButton.has-items {color:var(--text)}
+#interactionInboxButton.has-items #interactionInboxCount {color:var(--orange); background:var(--surface)}
+#interactionInboxCount {font:12px var(--mono); border:1px solid var(--border); border-radius:12px; padding:2px 6px}
+.interaction-inbox {position:absolute; right:0; top:calc(100% + 8px); width:440px; max-width:calc(100vw - 32px); max-height:65vh; overflow:auto; z-index:90; padding:8px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text)}
+.interaction-inbox-row {display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); padding:6px}
+.interaction-inbox-item {flex:1; min-width:0; text-align:left; border:0; padding:6px; background:var(--surface); color:var(--text); cursor:pointer}
+.interaction-inbox-item span {display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.interaction-inbox-item small {display:block; color:var(--muted); margin-top:4px; line-height:1.5}
+.interaction-inbox p {padding:12px; color:var(--muted)}
+#list > .card[hidden], .interaction-inbox[hidden], .interaction-help[hidden] {display:none!important}
+#list > .card:focus-visible {outline:2px solid var(--accent); outline-offset:-2px}
+.interaction-toolbar :focus-visible, .interaction-quick :focus-visible, .interaction-inbox :focus-visible, .interaction-help :focus-visible {outline:2px solid var(--accent); outline-offset:2px}
+.interaction-quick {flex:none; padding:12px 16px; border-bottom:1px solid var(--border); max-height:65vh; overflow:auto}
+.interaction-chat-unavailable .chat-input-row, .interaction-chat-unavailable .chat-history {display:none}
+.interaction-chat-unavailable .interaction-quick {max-height:none; overflow:visible}
+.interaction-chat-unavailable {overflow:auto}
+.interaction-quick summary {cursor:pointer; color:var(--muted); min-height:40px; align-content:center}
+.interaction-quick form {display:grid; gap:8px}
+.interaction-quick label {font-size:12px; color:var(--muted)}
+.interaction-quick input, .interaction-quick select, .interaction-quick textarea {width:100%; box-sizing:border-box; min-height:40px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); padding:8px; font:inherit}
+.interaction-quick p {font-size:12px; color:var(--muted); line-height:1.5; margin:4px 0}
+.interaction-help {position:fixed; inset:0; z-index:250; background:var(--mask); display:grid; place-items:center; padding:16px}
+.interaction-help-panel {width:360px; max-width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:12px; padding:24px; background:var(--surface); color:var(--text)}
+.interaction-help-panel h2 {font-size:18px; margin:0 0 20px}
+.interaction-help-panel p {display:flex; gap:24px; align-items:center; font-size:13px}
+.interaction-help-panel kbd {min-width:64px; color:var(--muted); font-family:var(--mono)}
+.interaction-help-panel button {min-height:40px; margin-top:12px}
+.interaction-back, .interaction-menu, .interaction-status-tabs {display:none}
+@media (max-width:720px) {
+    html, body {width:100%; max-width:100%; overflow-x:hidden}
+    body .page {width:100%; min-width:0; box-sizing:border-box; padding:16px; height:100dvh; overflow:hidden}
+    .page-head {flex:none; gap:8px; position:relative}
+    .page-head h1 {font-size:20px; white-space:nowrap}
+    .head-right {gap:8px; min-width:0}
+    .head-right > :not(.interaction-inbox-wrap):not(.interaction-menu) {display:none}
+    .interaction-menu {display:inline-flex; min-width:40px; min-height:40px; align-items:center; justify-content:center}
+    #interactionInboxLabel {display:none}
+    .interaction-inbox {position:fixed; top:72px; left:16px; right:16px; width:auto; max-width:none}
+    .workspace, .workspace.nav-collapsed {display:flex; width:100%; min-width:0; flex:1; min-height:0; gap:0; overflow:hidden}
+    .workspace > .nav-col, .col-resizer {display:none!important}
+    .main-col, .main-row {width:100%!important; min-width:0!important; flex:1; gap:0!important; min-height:0}
+    .main-col {overflow:hidden}
+    .main-row {display:flex; overflow:hidden}
+    .workspace .main-row .list-col {display:block!important; flex:1; width:100%!important; min-width:0!important; max-width:100%; overflow:auto; padding:0 0 16px; box-sizing:border-box}
+    .workspace .main-row .detail-col {display:none!important}
+    .interaction-detail-open .workspace .main-row .detail-col {display:flex!important; flex-direction:column; position:fixed; inset:0; width:100%!important; min-width:0!important; max-width:100%; height:100dvh; z-index:100; border-radius:0; background:var(--surface); padding:16px; box-sizing:border-box; overflow:auto}
+    .interaction-back {display:block; flex:none; min-height:40px; align-self:flex-start; margin-bottom:8px}
+    .interaction-menu-open .workspace > .nav-col {display:flex!important; position:fixed; top:76px; bottom:16px; left:16px; right:16px; width:auto!important; z-index:95; background:var(--surface); border:1px solid var(--border); border-radius:10px}
+    .interaction-menu-open .nav-col .nav-item-name, .interaction-menu-open .nav-col .nav-gear-text {display:initial!important}
+    .interaction-menu-open .head-right > .skin-toggle, .interaction-menu-open .head-right > .guide-link {display:flex; position:fixed; bottom:28px; z-index:96; min-height:40px; background:var(--surface)}
+    .interaction-menu-open #skinToggle {left:28px}
+    .interaction-menu-open #langToggle {left:150px}
+    .interaction-menu-open .guide-link {right:28px; min-width:40px; align-items:center; justify-content:center}
+    .interaction-status-tabs {display:flex; gap:6px; overflow-x:auto; flex:none; padding-bottom:8px}
+    .interaction-status-tabs button {flex:none; white-space:nowrap; min-height:40px}
+    .interaction-status-tabs [aria-pressed="true"] {border-color:var(--accent); color:var(--text); background:var(--sel-bg)}
+    .project-bar, .project-git-bar {max-width:100%; min-width:0; overflow:auto; flex:none}
+    .card {max-width:100%; box-sizing:border-box}
+    .card-body, .card-title, .detail-pane, .chat-pane {min-width:0; max-width:100%}
+    .detail-pane {width:100%; box-sizing:border-box}
+    .chat-head {flex-wrap:wrap; gap:8px}
+    .chat-head .add-pane-tabs {max-width:100%; overflow-x:auto}
+    .chat-input-row {min-width:0}
+    .interaction-chat-unavailable {height:auto!important; flex:1 0 auto}
+    .interaction-quick {max-height:60dvh; padding:8px 0}
+    .interaction-quick input, .interaction-quick select, .interaction-quick textarea, #chatInput {font-size:16px}
+    .btn, button, .nav-item, .nav-gear, .card-collapse, .card-del, .status-opt, .add-pane-chip, .card-title {min-height:40px; box-sizing:border-box}
+    .card-collapse, .card-del {min-width:40px; display:flex; align-items:center; justify-content:center}
+    .card-title {padding-top:6px}
+    .card-del {opacity:1}
+    .session-row, .sf-disp-link, .nav-add-project {min-height:40px}
+    .nav-add-project {min-width:40px}
+    .sf-disp-link {display:inline-flex; align-items:center}
+    .settings-drawer, .robot-drawer {width:100%!important; max-width:100%!important}
+}
