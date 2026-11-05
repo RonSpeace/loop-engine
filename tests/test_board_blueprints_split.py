@@ -17,10 +17,11 @@ sys.path.insert(0, str(REPO))
 import board as b  # noqa: E402
 
 BP_DIR = REPO / "board_modules" / "blueprints"
-REPO_MODS = ("requirements", "projects", "chats", "settings", "assistant", "sessions", "meta", "context")
+REPO_MODS = ("requirements", "projects", "chats", "settings", "assistant", "sessions", "meta", "skills",
+             "context")
 # 设计 §3 的路线分组（口径以 board_routes_baseline.json 裁决，见 test_board_split_contract.py）
 ROUTE_COUNTS = {"requirements": 21, "projects": 16, "chats": 22, "settings": 10,
-                "assistant": 7, "sessions": 10, "meta": 9, "context": 8}
+                "assistant": 7, "sessions": 10, "meta": 9, "skills": 5, "context": 8}
 PATCHED = set(json.loads((REPO / "tests/fixtures/board_patch_names.json").read_text(encoding="utf-8"))["names"])
 
 
@@ -101,7 +102,7 @@ class StaticContract(unittest.TestCase):
                 self.assertNotIn(f"blueprints.{other}", src, f"{m} → {other}")
 
     def test_b5_route_functions_live_in_exactly_one_blueprint(self):
-        """86 条路由按设计分组各归一个蓝图，且分组计数与基线一致。"""
+        """全部路由按设计分组各归一个蓝图，且分组计数与基线一致。"""
         seen: dict = {}
         for m in REPO_MODS:
             names = _route_names(_tree(BP_DIR / f"{m}.py"))

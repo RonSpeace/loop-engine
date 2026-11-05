@@ -523,6 +523,18 @@ from board_modules.blueprints.context import (  # noqa: F401 上下文编译器�
 )
 
 
+from board_modules.blueprints.skills import (  # noqa: F401 技能 v2 兼容导出
+    api_skill_delete,
+    api_skill_get,
+    api_skill_put,
+    api_skills_create,
+    api_skills_list,
+    _LOOPBACK_ADDRS,
+    _skills_reject,
+    _skills_write_forbidden,
+)
+
+
 __all__ = [
     "_AGENT_SESSION_FIELDS",
     "_ARTIFACT_FILES_DEFAULT",
@@ -944,6 +956,14 @@ __all__ = [
     "_feishu_health_payload",
     "_freeze_time_script",
     "_guide_lang",
+    "api_skill_delete",
+    "api_skill_get",
+    "api_skill_put",
+    "api_skills_create",
+    "api_skills_list",
+    "_LOOPBACK_ADDRS",
+    "_skills_reject",
+    "_skills_write_forbidden",
     "RUN_KEY_RE",
     "_req_row",
     "_runs_dirs",

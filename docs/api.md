@@ -102,6 +102,11 @@
 | POST | `/api/requirements/<id>/chat/cancel` | 取消进行中的一轮（杀进程，标 interrupted 可继续） |
 | POST | `/api/requirements/<id>/chat/resume` | 恢复中断对话（session/resume 续上下文，可带 `{text}` 排队消息） |
 | POST | `/api/requirements/<id>/chat/close` | 明确放弃对话（杀进程，终态 closed；事件历史保留，可再新建） |
+| GET | `/api/skills` | 技能库列表（技能 v2）：`{skills:[…], roles:[{id, display}], projects:[…], local_dir}`。全局层每个技能名一条（本机覆盖 `prompts.local/skills/` 优先于全局 `prompts/skills/`），外加每个项目的项目技能（`project` 为项目名）。每条含 `name/scope(global\|local\|project)/path/rel_path/legacy/description/roles/activation/paths/keywords/required/owner/status/chars/hash`、`override_of`（覆盖了哪个作用域）、`shadowed`、`editable`、`lint:[{level: ok\|warn\|error, message}]`、`lint_level`、`mounted:[{role, source: flows.json\|project:<名>}]`、`effective_roles`、`uses_30d`（近 30 天加载次数：产物根 `*/req-*/runs/*/manifest.json` 里 id 为 `skill:<名>` 的条目，按 manifest 计数） |
+| GET | `/api/skills/<name>` | 技能详情（可带 `?project=<名>`）：列表字段 + `body`、`meta`（frontmatter）、`raw`（文件全文）、`default_body`（全局默认正文，供恢复默认对比）、`versions`（各作用域版本）；带 project 时按该项目作用域链取（项目技能优先）。不存在 404，名字非法 400 |
+| PUT | `/api/skills/<name>` | 保存本机覆盖 `prompts.local/skills/<name>/SKILL.md`：请求体为表单字段 `{description?, roles?, activation?, paths?, keywords?, required?, owner?, status?, body?}`（缺省沿用当前版本）或 `{text}`（SKILL.md 全文）。校验不过 400 `{errors:[…]}`；项目技能只读 403；全局与本机都没有 404。覆盖全局目录技能时附属文件一并复制。矩阵编辑 = 只改 `roles` / `activation`。仅限 127.0.0.1 |
+| POST | `/api/skills` | 新建技能草稿 `{name, description, body, …}` 到本机覆盖目录（status 缺省 `draft`、activation 缺省 `on_demand`；草稿不进真实会话），201；同名已存在 409。仅限 127.0.0.1 |
+| DELETE | `/api/skills/<name>` | 删除本机覆盖 / 草稿（恢复默认）；没有本机版本时：有全局默认 403、不存在 404。仅限 127.0.0.1 |
 
 ## 历史产物兼容与回填（#53）
 
@@ -123,6 +128,7 @@
 | `board_modules/blueprints/assistant.py` | `/api/assistant/*` |
 | `board_modules/blueprints/sessions.py` | `/api/sessions*`、`/api/agent-sessions*`、`/api/manual-commands*`、`/api/requirements/<id>/sessions*` |
 | `board_modules/blueprints/meta.py` | `/api/meta`、`/api/dispatcher-health`、`/api/dispatcher/restart`、`/api/artifacts*`、`/api/stream`、`/api/sse-stats`、`/`、`/guide` |
+| `board_modules/blueprints/skills.py` | `/api/skills*`（技能库；视图拼装在 `board_modules/services/skill_library.py`，发现/解析/校验在 `acp_modules/skills.py`） |
 | `board_modules/blueprints/context.py` | `/api/requirements/<id>/context/runs*`、`/api/context/preview`（子进程见 `services/context_preview.py`）、`/api/prompts*` |
 
 ### 时间约定

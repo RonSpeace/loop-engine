@@ -390,8 +390,10 @@ def _flow_cfg_errors(cfg, base_dir, out=None):
                 for n in skills:
                     if not re.match(r"^[a-z0-9][a-z0-9-]{0,39}$", n):
                         errs.append(f"roles.{role}.skills 含非法技能名 {n!r}")
-                    elif not (Path(base_dir) / "prompts" / "skills" / f"{n}.md").is_file():
-                        errs.append(f"roles.{role}.skills 的全局技能 {n} 不存在（prompts/skills/{n}.md）")
+                    elif not ((Path(base_dir) / "prompts" / "skills" / n / "SKILL.md").is_file()
+                              or (Path(base_dir) / "prompts" / "skills" / f"{n}.md").is_file()):
+                        errs.append(f"roles.{role}.skills 的全局技能 {n} 不存在"
+                                    f"（prompts/skills/{n}/SKILL.md 或 prompts/skills/{n}.md）")
         pf = entry.get("prompt_file")
         if not str(pf or "").strip():
             errs.append(f"roles.{role}.prompt_file 缺失")
@@ -604,8 +606,7 @@ MANIFEST_REL = Path(".loop") / "project.json"
 MANIFEST_COMMAND_KEYS = ("install", "test", "test_affected", "lint", "typecheck", "build")
 MANIFEST_INSTANCE_KEYS = ("start", "stop", "status", "healthcheck")
 MANIFEST_GUIDE_MAX_CHARS = 4000      # 单个指引/技能文件进 prompt 的字符上限
-GLOBAL_SKILLS_DIR = REPO_DIR / "prompts" / "skills"
-_SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+# GLOBAL_SKILLS_DIR / _SKILL_NAME_RE 定义在 acp_modules/skills.py（技能 v2），文末回挂
 
 
 def _read_capped(path, limit=MANIFEST_GUIDE_MAX_CHARS):
@@ -756,19 +757,22 @@ def agents_md_problems(repo, manifest=None):
 
 
 def skill_text(name, repos=()):
-    """技能片段正文：项目技能 <repo>/.loop/skills/<name>.md 优先，其次全局 prompts/skills/<name>.md；
-    名字非法或找不到 → None。新增技能 = 放一个 md 文件并在 flows.json 角色或项目清单里点名，不改 Python。"""
+    """技能片段正文（技能 v2 发现规则，见 acp_modules/skills.py）：项目 <repo>/.loop/skills/ 优先，
+    其次本机覆盖 prompts.local/skills/，最后全局 prompts/skills/；每个作用域 <名>/SKILL.md 优先于平铺 <名>.md，
+    SKILL.md 只取 frontmatter 之后的正文。草稿不进真实会话；名字非法、找不到或不可用（读取/解析失败）→ None。
+    全局目录取本模块的 GLOBAL_SKILLS_DIR（测试可在 acp_shared 上替换）。"""
     if not isinstance(name, str) or not _SKILL_NAME_RE.match(name):
         return None
-    candidates = [_repo_rel_file(repo, Path(".loop") / "skills" / f"{name}.md")[0] for repo in repos]
-    candidates.append(GLOBAL_SKILLS_DIR / f"{name}.md")
-    for f in candidates:
-        try:
-            if f is not None and f.is_file():
-                return _read_capped(f)
-        except Exception as e:      # 读不了就当没有：绝不因技能文件把建 prompt 打断
-            log.warning(f"技能 {name} 读取失败（{f}）: {e}")
-    return None
+    try:
+        sk = find_skill(name, repos, global_dir=GLOBAL_SKILLS_DIR)
+    except Exception as e:      # 读不了就当没有：绝不因技能文件把建 prompt 打断
+        log.warning(f"技能 {name} 读取失败: {e}")
+        return None
+    if sk is None or sk.errors:
+        if sk is not None:
+            log.warning(f"技能 {name} 不可用（{sk.path}）: {'；'.join(sk.errors)}")
+        return None
+    return sk.text
 
 
 def role_meta(role, key):
@@ -1270,6 +1274,14 @@ from acp_modules.command_policy import (  # noqa: F401,E402
     _git_config_safe, _git_add_safe, _git_commit_safe, git_cmd_safe,
     _git_single_safe, _git_merge_safe, _git_checkout_safe, _git_switch_safe,
     _git_stash_safe,
+)
+from acp_modules.skills import (  # noqa: F401,E402
+    GLOBAL_SKILLS_DIR, SKILL_FILE, SKILL_MAX_CHARS, SKILL_DESC_MAX, _SKILL_NAME_RE,
+    SKILL_ACTIVATIONS, SKILL_STATUSES, SKILL_SCOPES, SKILL_META_KEYS, Skill, Selection,
+    prompts_local_dir, local_skills_dir, valid_skill_name, parse_frontmatter, render_frontmatter,
+    compose_skill_file, load_skill, skill_chain, find_skill, discover, parse_notes_skills,
+    glob_match, paths_from_text, auto_hit, select_skills, skills_block, catalog_block,
+    lint as skill_lint, lint_level as skill_lint_level, materialize_for_claude,
 )
 from acp_modules.readonly_tools import (  # noqa: F401,E402
     READONLY_TOOL_GUIDE, SENSITIVE_ENV_RE, SENSITIVE_SSH_KEY_RE, SENSITIVE_SUFFIXES,

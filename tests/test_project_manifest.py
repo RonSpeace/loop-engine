@@ -126,7 +126,9 @@ class LoadManifest(unittest.TestCase):
         self.assertEqual(m["guides"], {})
         self.assertEqual(len([e for e in m["errors"] if e.startswith("guides.")]), 2)
         self.assertEqual(ac.load_project_manifest("/no/such/repo")["path"], None)
-        with mock.patch.object(ac, "_read_capped", side_effect=PermissionError("denied")):
+        # 指引读取走 acp_shared._read_capped；技能读取走定义所在模块 acp_modules.skills._read_raw
+        with mock.patch.object(ac, "_read_capped", side_effect=PermissionError("denied")), \
+                mock.patch("acp_modules.skills._read_raw", side_effect=PermissionError("denied")):
             r2 = self.repo({"guides": {"g": ".loop/g.md"}}, {".loop/g.md": "x", ".loop/skills/s.md": "y"})
             m2 = ac.load_project_manifest(r2)
             self.assertEqual(m2["guides"], {})
@@ -245,7 +247,8 @@ class RoleSkillsConfig(unittest.TestCase):
     def test_declared_global_skills_exist(self):
         for role in ac.ROLE_CAPABILITIES:
             for name in d.role_skill_names(role):
-                self.assertTrue((ac.GLOBAL_SKILLS_DIR / f"{name}.md").is_file(), f"{role}: {name}")
+                self.assertTrue((ac.GLOBAL_SKILLS_DIR / name / "SKILL.md").is_file()
+                                or (ac.GLOBAL_SKILLS_DIR / f"{name}.md").is_file(), f"{role}: {name}")
 
 
 class AgentsMdLimit(unittest.TestCase):

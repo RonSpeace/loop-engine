@@ -1,3 +1,15 @@
+---
+name: browser-verify
+description: 改了 HTML/JS/CSS、请求头、表单交互或页面渲染时使用：浏览器级验证的做法，以及自测报告「浏览器验证」小节与呈现断言的写法。
+roles: [dev]
+activation: always
+paths: ["static/**", "templates/**", "**/*.html", "**/*.css", "**/*.js"]
+keywords: [页面, 样式, 浏览器, 前端]
+required: false
+owner: loop-engine
+status: active
+---
+
 浏览器验证（自测报告必须单列「浏览器验证」小节）：
 浏览器端改动（diff 涉及内嵌 HTML/JS/CSS、fetch/HTTP 请求头、表单交互、页面渲染逻辑等影响浏览器行为的改动）必须单列「浏览器验证」小节：单元测试、curl 端到端、JS 语法检查都不构成浏览器级验证，不得声称「已浏览器验证」——
 先确认本会话工具列表里是否真有浏览器工具（mcp__playwright__browser_*，放行清单内）。有则必须真开浏览器走主路径：起测试实例（http://127.0.0.1:<测试端口>）→ browser_navigate 打开页面 → 关键交互（browser_click/browser_type/browser_fill_form 等按场景）→ browser_console_messages 确认 console 无报错 → 把测试实例地址/操作步骤/结果写进该小节；没有（前缀已放行但本机未注入 MCP 服务）时改用项目自带浏览器驱动（项目 Playwright/Chrome headless、CDP 脚本等）完成同样的主路径验证，并在小节写明驱动、版本与命令。`file://` 参考页不能用浏览器工具打开（审批仅放行 http(s)），参考页用脚本渲染或读源码对照。

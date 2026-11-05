@@ -7,7 +7,7 @@
 ## 架构概览
 
 - 后端 Flask + SQLite，看板入口 `board.py`（后端共享层在 `board_modules/`，前端页面在 `templates/board.html`，CSS 在 `static/board.css`；JS 源码分片在 `static/board/*.js`，由 `scripts/build_board_js.py` 拼成实际加载的 `static/board.js`——改分片后必须重新生成），只监听 `127.0.0.1:8899`，无鉴权。
-- 调度器 `dispatcher.py` 只留配置、状态与主循环，各功能段拆在 `dispatcher_modules/`（经 `runtime.D` 晚绑定读写 dispatcher 上的状态与可补丁名，测试照旧改写 `dispatcher.X`；契约见 `tests/test_dispatcher_split_contract.py`）。调度器作为 ACP 客户端驱动 agent 子进程（默认 `kimi acp`，运行体注册表 `acp_shared.AGENT_RUNTIMES`）；`acp_shared.py` 是会话、角色能力的共享层，审批策略与只读工具拆在 `acp_modules/`（`limits` / `command_policy` / `readonly_tools`），名字经 `acp_shared` 显式回挂——测试替换实现要改定义所在模块。
+- 调度器 `dispatcher.py` 只留配置、状态与主循环，各功能段拆在 `dispatcher_modules/`（经 `runtime.D` 晚绑定读写 dispatcher 上的状态与可补丁名，测试照旧改写 `dispatcher.X`；契约见 `tests/test_dispatcher_split_contract.py`）。调度器作为 ACP 客户端驱动 agent 子进程（默认 `kimi acp`，运行体注册表 `acp_shared.AGENT_RUNTIMES`）；`acp_shared.py` 是会话、角色能力的共享层，审批策略与只读工具拆在 `acp_modules/`（`limits` / `command_policy` / `readonly_tools` / `skills`），名字经 `acp_shared` 显式回挂——测试替换实现要改定义所在模块。
 - 流程是配置：`flows.json`（前置环节 + 流程节点 + 角色展示/模型/技能）+ `prompts/*.md`；项目清单 `projects.json`（本地数据，不进 git）。
 - 两个进程都由 launchd 托管（plist 模板在 `plists/*.plist.tmpl`，`scripts/install-launchd.sh` 按本机路径渲染到 `~/Library/LaunchAgents/`；入口 `scripts/launchd-run.sh`，日志在 `~/Library/Logs/req-board/`）。
 - 表结构见 [docs/data-model.md](docs/data-model.md)，REST 端点见 [docs/api.md](docs/api.md)，调度细节见 [docs/dispatcher.md](docs/dispatcher.md)，项目清单与提示词三层见 [docs/project-manifest.md](docs/project-manifest.md)。
@@ -17,7 +17,7 @@
 - `prompts/`：角色提示词模板；`prompts/skills/`：全局场景技能片段。全局模板不写任何单个项目的专有内容。
 - `.loop/`：本项目自己的清单、指引、技能。
 - `scripts/`：运维脚本（`doctor.py`、`test_instance.sh`、`dispatcher-restart.sh` 等）；`tests/`：测试；`docs/`：文档与模板。
-- `board_modules/`：看板后端共享层（`runtime.py` 兼容桥、`db.py`、`common.py`、`sse.py`），路由蓝图在 `board_modules/blueprints/`（`requirements` / `projects` / `chats` / `settings` / `assistant` / `sessions` / `meta` / `context` 八个资源蓝图，`board.py` 只按 `ALL` 注册），服务层在 `board_modules/services/`（`model_pool` / `harness_config` / `projects` / `requirements` / `session_runtime` / `presentation` / `dispatcher_ops` / `chat_runtime` / `mcp_servers` / `reqchat_runtime` / `assistant_card` / `assistant_runtime` / `assistant_mcp` / `project_git` / `context_preview`）；入口 `board.py` 经晚绑定兼容桥消费——测试在 `board` 模块上改写的名字必须仍有效。
+- `board_modules/`：看板后端共享层（`runtime.py` 兼容桥、`db.py`、`common.py`、`sse.py`），路由蓝图在 `board_modules/blueprints/`（`requirements` / `projects` / `chats` / `settings` / `assistant` / `sessions` / `meta` / `skills` / `context` 九个资源蓝图，`board.py` 只按 `ALL` 注册），服务层在 `board_modules/services/`（`model_pool` / `harness_config` / `projects` / `requirements` / `session_runtime` / `presentation` / `dispatcher_ops` / `chat_runtime` / `mcp_servers` / `reqchat_runtime` / `assistant_card` / `assistant_runtime` / `assistant_mcp` / `project_git` / `skill_library` / `context_preview`）；入口 `board.py` 经晚绑定兼容桥消费——测试在 `board` 模块上改写的名字必须仍有效。
 - `data/`、`projects.json`、`feishu.json`、`.env` 是本地数据，已 gitignore，不提交。
 - agent 产物统一在 `~/.req-board/artifacts/<项目>/req-<id>/`，worktree 在 `~/.req-board/worktrees/`。
 
