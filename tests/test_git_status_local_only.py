@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tests import _baseline  # noqa: E402,F401
+import board  # noqa: E402,F401  （兼容桥 resolve() 依赖 board 模块已加载）
 from board_modules.blueprints import projects as bp  # noqa: E402
 
 
