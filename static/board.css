@@ -91,6 +91,10 @@
             --card-sel-border: var(--cyan);
             --card-sel-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18), 0 0 14px rgba(34, 211, 238, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.06);
             --card-title-fg: #dcecff;
+            /* 卡片顶部流程进度条：已完成段共用一条横跨整条的渐变，阻塞段只用橙色（=需要你决定） */
+            --progress-grad: linear-gradient(90deg, #3b82f6, #22d3ee 55%, #26d69a);
+            --progress-track: rgba(141, 203, 255, 0.12);
+            --progress-blocked: #f97316;
             /* 会话行 / 内容框 */
             --sf-role-fg: #a9bed1;
             --sf-guid-fg: #63b6ff;
@@ -249,6 +253,9 @@
             --card-sel-border: #2563eb;
             --card-sel-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
             --card-title-fg: #111827;
+            --progress-grad: linear-gradient(90deg, #2563eb, #0ea5e9 55%, #10b981);
+            --progress-track: #e5e7eb;
+            --progress-blocked: #f97316;
             --sf-role-fg: #9ca3af;
             --sf-guid-fg: #2563eb;
             --sf-guid-active-fg: #2563eb;
@@ -435,6 +442,27 @@
         /* #10 hover 只增强边框与阴影，不含 padding/margin/width/height/border-width/transform → 位置尺寸不动 */
         .card:hover { background: var(--card-bg-hover); border-color: var(--card-border-hover); box-shadow: var(--card-shadow-hover); }
         .card.done .card-title { color: var(--text-3); }
+        /* 流程进度条：贴卡片上沿的 2px 细线，按卡上流程快照分段（需求分析 + 各节点）；
+           每段取整条渐变的对应切片（--i/--n 定位），未到达段只显轨道色，当前段运行中轻呼吸，阻塞时转橙 */
+        .card-progress {
+            position: absolute; top: -1px; left: 14px; right: 14px; height: 2px;
+            display: flex; gap: 3px; pointer-events: none;
+        }
+        .card-progress .seg {
+            flex: 1; border-radius: 0 0 2px 2px; background: var(--progress-track);
+            transition: background .3s;
+        }
+        .card-progress .seg.done,
+        .card-progress .seg.cur {
+            background: var(--progress-grad);
+            background-size: calc(var(--n) * 100% + (var(--n) - 1) * 3px) 100%;
+            background-position: calc(var(--i) / max(var(--n) - 1, 1) * 100%) 0;
+        }
+        .card-progress .seg.cur { animation: seg-breath 2.4s ease-in-out infinite; }
+        .card-progress .seg.blocked { background: var(--progress-blocked); animation: none; }
+        .card.done .card-progress { opacity: .4; }
+        @keyframes seg-breath { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+        @media (prefers-reduced-motion: reduce) { .card-progress .seg.cur { animation: none; } }
         .badge {
             flex-shrink: 0; margin-top: 3px; display: inline-flex; align-items: center; gap: 5px;
             font-size: 12px; user-select: none; white-space: nowrap;
@@ -1038,7 +1066,6 @@
            取 --sel-bg-2（比整卡选中 --sel-bg 深一档）；行内元素背景只包住文字。
            标题是块级 div，需包一层 span（.pill）才能只包文字；active 条件从右栏选中状态派生，
            .sf-id-link 限定 .session-footer 作用域，避免右栏调度回放事件流共用类受影响 */
-        .card-title .pill.active,
         .session-footer .sf-id-link.active,
         .session-footer .sa-link.active,
         .sf-disp-link.active {

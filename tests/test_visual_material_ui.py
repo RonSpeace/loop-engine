@@ -232,7 +232,7 @@ class VisualMaterialTest(unittest.TestCase):
 
     # ---- T11 无新增动画 ----
     def test_T11_no_new_animation(self):
-        self.assertEqual(SRC.count("animation:"), 6, "基线 6 处 animation 声明不得增减（#20 页头 headline-sweep + reduced-motion 关闭各 +1）")
+        self.assertEqual(SRC.count("animation:"), 9, "基线 9 处 animation 声明不得增减（#20 页头 headline-sweep + reduced-motion 关闭各 +1；卡片流程进度条当前段呼吸 + 阻塞段关闭 + reduced-motion 关闭 +3）")
         self.assertEqual(SRC.count("will-change"), 0)
         for sel in (".nav-col", ".list-col", ".project-bar", ".detail-pane", ".card",
                     ".card.selected",

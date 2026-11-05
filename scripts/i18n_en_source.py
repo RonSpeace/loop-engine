@@ -641,6 +641,8 @@ PHRASES = {
     "已移除": "Removed",
     "相比：": "— ",
     "加载": "Loaded",
+    # ---- 卡片流程进度条 ----
+    "当前": "Now", "需要你处理": "needs you",
 }
 
 PATTERNS = [

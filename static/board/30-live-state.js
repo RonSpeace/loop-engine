@@ -77,6 +77,49 @@
             if (n.name) return n.name;
             return n.role ? roleLabel(n.role) : '';
         }
+        // 卡片顶部流程进度条（纯函数）：段 = 需求分析 + 快照里的非收尾节点；分析阶段（尚无快照）只亮第一段。
+        // 阻塞 = 有待确认/合并冲突，或流程已开跑后被停成暂缓（评审打满转人工、外部角色等）→ 当前段橙色。
+        // 已完成卡全亮；未开跑的待开发/暂缓卡不渲染（避免满屏空轨道）。
+        function cardProgressModel(i, blocked) {
+            if (!i || i.status === 'dropped') return null;
+            let nodes = null;
+            if (i.nodes_json) { try { nodes = JSON.parse(i.nodes_json); } catch (e) { nodes = null; } }
+            const steps = [{label: roleLabel('analysis') || '需求分析'}];
+            if (Array.isArray(nodes)) {
+                for (const n of nodes) {
+                    if (!n || typeof n !== 'object' || n.node_type === 'terminal') continue;
+                    steps.push({label: n.name || (n.role ? roleLabel(n.role) : '')});
+                }
+            }
+            if (steps.length < 2 && i.status !== 'doing') return null;
+            const total = steps.length;
+            let cur;
+            if (i.status === 'done') cur = total;
+            else if (!Array.isArray(nodes) || i.node_index === null || i.node_index === undefined) cur = 0;
+            else {
+                let k = 0;
+                for (let j = 0; j < nodes.length && j < i.node_index; j++) {
+                    if (nodes[j] && nodes[j].node_type !== 'terminal') k++;
+                }
+                cur = Math.min(k + 1, total);
+                if (nodes[i.node_index] && nodes[i.node_index].node_type === 'terminal') cur = total;
+            }
+            const started = i.status === 'doing' || i.status === 'done' || (i.dispatcher_count || 0) > 0;
+            if (!started) return null;
+            return {steps, cur, blocked: !!blocked && i.status !== 'done'};
+        }
+        function cardProgressHtml(i, blocked) {
+            const m = cardProgressModel(i, blocked);
+            if (!m) return '';
+            const n = m.steps.length;
+            const segs = m.steps.map((s, k) => {
+                const cls = k < m.cur ? 'done' : k === m.cur ? (m.blocked ? 'cur blocked' : (i.status === 'doing' ? 'cur' : '')) : '';
+                return `<span class="seg ${cls}" style="--i:${k}"></span>`;
+            }).join('');
+            const now = m.cur >= n ? '已完成' : m.steps[m.cur].label;
+            const title = m.steps.map(s => s.label).join(' → ') + ' · 当前：' + now + (m.blocked ? '（需要你处理）' : '');
+            return `<div class="card-progress" style="--n:${n}" title="${escapeAttr(title)}">${segs}</div>`;
+        }
         // #431：草稿态合成行的展示角色 = 卡上快照当前节点 role；未入流程/无快照/脏 JSON/terminal → null
         // （调用方兜底 PRE_ROLE）。只读卡面数据，与后端 _first_message_allowed_role 同源同口径；
         // 但角色裁决权在服务端（前端不传 role），此处仅用于草稿视图的角色标签。
@@ -389,8 +432,12 @@
             const dispRow = i.dispatcher_count > 0
                 ? `<div class="dispatcher-footer"><div class="session-block"><div class="session-row"><span class="badge session">调度器</span><div class="sf-body"><span class="sf-disp-link${dispActive ? ' active' : ''}" title="回放调度器对此需求的全部操作" onclick="selectDispatcher(${i.id})">调度历史回放</span></div></div></div></div>`
                 : '';
+            const conf = confirmations[i.id];
+            const blocked = !!(conf && conf.kind !== 'route' && conf.kind !== 'review') || !!mergeConflicts[i.id]
+                || (i.status === 'later' && (i.dispatcher_count || 0) > 0);
             return `
             <div class="card ${i.status}${selected ? ' selected' : ''}${i.id === flashId ? ' flash' : ''}${collapsed ? ' collapsed' : ''}">
+                ${cardProgressHtml(i, blocked)}
                 ${statusBadgeHtml(i)}
                 <div class="card-body">
                     <div class="card-title" onclick="selectReq(${i.id})"><span class="pill${titleActive ? ' active' : ''}">${escapeHtml(i.title)}</span></div>
