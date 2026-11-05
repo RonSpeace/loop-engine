@@ -11,6 +11,7 @@ import threading
 import time
 
 from board_modules.runtime import resolve
+from acp_modules.session_errors import chat_session_error
 from board_modules.services.chat_runtime import CHAT_USAGE_TIMEOUT, REQ_NOTES_FMT_HINT, _chat_roots, _chat_workdir, _project_mysql_env
 from board_modules.services.mcp_servers import MaintainMcpServer
 
@@ -265,6 +266,7 @@ def _reqchat_boot_sync(req_chat_id, req_id, resume_session_id=None):
                            else "对话已恢复（上下文延续）")
         return {"session": session, "logf": logf, "mcp": mcp}
     except Exception as e:
+        message = chat_session_error(e, project)
         if session is not None:
             try:
                 session.close(kill=True)
@@ -275,8 +277,8 @@ def _reqchat_boot_sync(req_chat_id, req_id, resume_session_id=None):
         with resolve("get_db")() as conn:
             cur = conn.execute("SELECT status FROM req_chats WHERE id = ?", (req_chat_id,)).fetchone()
         if cur and cur["status"] not in ("interrupted", "closed"):
-            _reqchat_add_event(req_chat_id, "system", f"对话建立失败: {e}")
-            _reqchat_set(req_chat_id, status="failed", error=str(e)[:500])
+            _reqchat_add_event(req_chat_id, "system", message)
+            _reqchat_set(req_chat_id, status="failed", error=message)
         try:
             mcp.close()
         except Exception:

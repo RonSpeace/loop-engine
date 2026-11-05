@@ -685,6 +685,19 @@ PHRASES = {
     "open": "Ready",
     "全部状态": "All statuses",
     "筛选状态": "Filter by status",
+    # ---- 聊天运行体错误 ----
+    "当前运行体 kimi 未安装，请去 设置→模型 配置可用运行体": "Runtime kimi is not installed. Go to Settings → Models to configure an available runtime.",
+    "当前运行体 kimi 不支持聊天会话，请去 设置→模型 配置可用运行体": "Runtime kimi does not support chat sessions. Go to Settings → Models to configure an available runtime.",
+    "聊天会话启动失败，请检查 设置→模型 的运行体和模型配置（kimi）": "Chat could not start. Check the runtime and model configuration in Settings → Models (kimi).",
+    "当前运行体 opencode 未安装，请去 设置→模型 配置可用运行体": "Runtime opencode is not installed. Go to Settings → Models to configure an available runtime.",
+    "当前运行体 opencode 不支持聊天会话，请去 设置→模型 配置可用运行体": "Runtime opencode does not support chat sessions. Go to Settings → Models to configure an available runtime.",
+    "聊天会话启动失败，请检查 设置→模型 的运行体和模型配置（opencode）": "Chat could not start. Check the runtime and model configuration in Settings → Models (opencode).",
+    "当前运行体 codex 未安装，请去 设置→模型 配置可用运行体": "Runtime codex is not installed. Go to Settings → Models to configure an available runtime.",
+    "当前运行体 codex 不支持聊天会话，请去 设置→模型 配置可用运行体": "Runtime codex does not support chat sessions. Go to Settings → Models to configure an available runtime.",
+    "聊天会话启动失败，请检查 设置→模型 的运行体和模型配置（codex）": "Chat could not start. Check the runtime and model configuration in Settings → Models (codex).",
+    "当前运行体 claude-code 未安装，请去 设置→模型 配置可用运行体": "Runtime claude-code is not installed. Go to Settings → Models to configure an available runtime.",
+    "当前运行体 claude-code 不支持聊天会话，请去 设置→模型 配置可用运行体": "Runtime claude-code does not support chat sessions. Go to Settings → Models to configure an available runtime.",
+    "聊天会话启动失败，请检查 设置→模型 的运行体和模型配置（claude-code）": "Chat could not start. Check the runtime and model configuration in Settings → Models (claude-code).",
 }
 
 PATTERNS = [

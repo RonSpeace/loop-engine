@@ -13,6 +13,7 @@ import threading
 import time
 
 from board_modules.runtime import resolve
+from acp_modules.session_errors import chat_session_error
 from board_modules.services.chat_runtime import CHAT_PARALLEL_LIMIT, _chat_running_count
 from board_modules.services.assistant_card import ASSISTANT_CARD_PAGE_MAX
 
@@ -407,6 +408,7 @@ def _assistant_boot(sid, turn_id):
                              f"会话已建立（模型 {session.model_name or row['model'] or '默认'}）")
         return assistant_runtime.get(sid)
     except Exception as e:
+        message = chat_session_error(e)
         try:
             if session:
                 session.close(kill=True)
@@ -416,10 +418,10 @@ def _assistant_boot(sid, turn_id):
             assistant_runtime.pop(sid, None)
         cur = _assistant_row(sid)
         if cur is not None and cur["turn_id"] == turn_id:
-            resolve("_assistant_set")(sid, status="failed", error=str(e)[:500])
-            _assistant_add_event(sid, "system", f"会话建立失败: {e}")
+            resolve("_assistant_set")(sid, status="failed", error=message)
+            _assistant_add_event(sid, "system", message)
         else:
-            _assistant_add_event(sid, "system", f"会话建立失败: {e}")
+            _assistant_add_event(sid, "system", message)
         mcp.close()
         return None
     finally:

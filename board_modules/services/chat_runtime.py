@@ -2,6 +2,7 @@
 
 补丁名单名字与留在 board.py 的名字一律经 runtime.resolve 在调用期读取。
 """
+from acp_modules.session_errors import chat_session_error
 from acp_shared import KIMI
 from acp_shared import PLAYWRIGHT_TOOL_PREFIX
 from acp_shared import TAPD_TOOL_PREFIX
@@ -644,6 +645,7 @@ def _chat_boot(chat_id, project, resume_session_id=None):
                         f"会话已建立（项目 {project}，模型 {session.model_name or '默认'}）"
                         if not resumed else f"会话已恢复（项目 {project}）")
     except Exception as e:
+        message = chat_session_error(e, project)
         try:
             if session:
                 session.close(kill=True)
@@ -654,8 +656,8 @@ def _chat_boot(chat_id, project, resume_session_id=None):
                 "SELECT status FROM chat_sessions WHERE id = ?", (chat_id,)
             ).fetchone()
         if row and row["status"] not in ("suspended", "closed"):
-            _chat_add_event(chat_id, "system", f"会话建立失败: {e}")
-            _chat_set(chat_id, status="failed", error=str(e)[:500])
+            _chat_add_event(chat_id, "system", message)
+            _chat_set(chat_id, status="failed", error=message)
     finally:
         with chat_lock:
             chat_booting.discard(chat_id)
