@@ -28,7 +28,6 @@ sys.path.insert(0, str(REPO))
 os.environ.setdefault("REQ_BOARD_API", "http://127.0.0.1:1/api/requirements")  # 缺省不可达，防测试误连生产 8899（#343）
 
 from tests import _baseline  # noqa: E402
-from tests._dispatcher_src import dispatcher_source  # noqa: E402
 
 _baseline.pin()
 
@@ -152,9 +151,11 @@ class ResumeStyleReminderTest(unittest.TestCase):
             self.assertIn(kw, d.RESUME_STYLE_REMINDER, kw)
 
     def test_both_resume_branches_inject_reminder(self):
-        src = dispatcher_source()
-        # user_text 续接与无结果 resumed 两条分支均拼接 RESUME_STYLE_REMINDER
-        self.assertGreaterEqual(src.count("RESUME_STYLE_REMINDER"), 3)  # 定义 1 + 注入 2
+        # user_text 续接与无结果 resumed 两条续跑文案（prompts/system/resume-*.md）均拼接输出风格提醒
+        req = {"id": 7, "project": "req-board"}
+        for user_text in ("你好", None):
+            text, _rid = d.resume_text(req, "dev", "", user_text)
+            self.assertIn(d.RESUME_STYLE_REMINDER, text)
 
 
 class ChatPromptStyleTest(unittest.TestCase):

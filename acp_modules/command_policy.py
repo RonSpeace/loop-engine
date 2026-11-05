@@ -567,8 +567,10 @@ def _kill_redline_hit_legacy(text, self_pid):
 
 
 def kill_redline_text(pid):
-    """渲染禁杀红线文本（P1a 注入用）"""
-    return KILL_REDLINE_TMPL.format(pid=pid)
+    """渲染禁杀红线文本（P1a 注入用）。正文取提示词存储 system/kill-redline（本机覆盖优先，
+    KILL_REDLINE_TMPL 为默认文本的兼容常量，与 prompts/system/kill-redline.md 逐字一致）。"""
+    import prompt_store
+    return prompt_store.render("system/kill-redline", pid=pid)
 
 
 def append_kill_redline(prompt, pid):

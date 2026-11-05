@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import prompt_store
 from acp_shared import READONLY_TOOL_GUIDE, default_flow_id, enabled_flows, load_project_manifest, pre_role, role_meta, skill_text
 
 from dispatcher_modules.agent_run import _steps_text
@@ -151,6 +152,9 @@ def role_allowed(req, role):
         return str(req["id"]) in D.state.get("merge_resolve", {})
     return role == D.role_for(req)
 
+# 上下文编译器第一期：引擎文案搬进 prompts/system/*.md、prompts/fragments/*.md（提示词存储 prompt_store，
+# 本机覆盖 prompts.local/ 优先）。下列模块级常量保留为「默认文本」的兼容视图（测试与 /guide 在用），
+# 必须与对应文件逐字节一致（tests/test_prompt_store.py 守护）；实际拼装一律经 prompt_store.read/render。
 # #42 前缀缓存：公共尾静态化——常量不再过 str.format（build_prompt 常量直注 {common}），
 # 时限数字/步数/结果路径等按卡值全部移到模板 {card_inputs} 之后的卡片输入块；JSON 示例改单层花括号。
 # 8 条条目职责与措辞骨架不变（test_common_tail_* 等断言的静态文案全数保留）。
@@ -231,7 +235,8 @@ PRE_SLOT_CONTRACT = """
 def pre_slot_contract_text(result_json="{result_json}"):
     """前置槽位契约全文：build_prompt 注入与 /guide 展示共用同一份格式化（避免两处各自
     format 后漂移）；可选流程目录取自配置里的启用流程（软禁用流程不出现）。"""
-    return PRE_SLOT_CONTRACT.format(
+    return prompt_store.render(
+        "system/pre-contract",
         result_json=result_json,
         flow_catalog=D._flow_catalog_text(),
         default_flow=default_flow_id())
@@ -305,10 +310,7 @@ def project_conventions_text(project, role):
                 lines.append(f"【项目指引：{name}】\n{g['text']}")
         blocks.append("\n".join(lines))
     if not blocks:
-        return (f"\n项目约定（{project}）：本项目未提供 .loop/project.json，测试命令、测试实例、重启方式均未配置——"
-                "按各仓库 AGENTS.md 约定执行；没有约定就如实说明，不要假设存在实例脚本或固定端口。"
-                "起不了测试实例时：验证退化为可执行的单元/脚本级验证，报告里写明「未做实例/浏览器级验证 + 原因」，"
-                "需人工验收的项列出来（dev 写进 todos，accept 写进未覆盖项）。\n")
+        return prompt_store.render("system/project-missing", project=project)
     return "\n" + "\n\n".join(blocks) + "\n"
 
 
@@ -355,7 +357,25 @@ def split_role_template(tmpl):
     return tmpl.split(CARD_INPUTS_MARK, 1)
 
 
-def build_prompt_parts(req, role, extra=""):
+# 条件片段（L3）：注册表 when 声明生效条件，按序选取（顺序 = 搬迁前 if 拼接顺序）
+FRAGMENT_ORDER = ("fragment/branch-only-dev", "fragment/branch-only-accept", "fragment/auto-restart")
+
+
+def project_flags(project):
+    """片段 when 条件可引用的项目开关。"""
+    cfg = D.PROJECTS.get(project) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return {"project.branch_only": bool(cfg.get("company")), "project.restart": bool(cfg.get("restart"))}
+
+
+def selected_fragments(project, role):
+    """按注册表 when 选出本角色在本项目生效的条件片段 id（有序）。"""
+    flags = project_flags(project)
+    return [fid for fid in FRAGMENT_ORDER if prompt_store.when_matches(fid, role=role, flags=flags)]
+
+
+def build_prompt_parts(req, role, extra="", *, dry=False):
     """#42 前缀缓存：build_prompt 的拆段核心。返回按序四段：
     [固定段（角色 prose + 静态公共尾）, 项目约定（A2 层2）, 场景技能（A2 层3）, 卡片输入块（可变尾）]。
     逐字稳定的比较单位 = 同一（角色, 项目, 生效清单/技能/约定文件状态）；卡片内容/评审反馈/上游产物/
@@ -364,7 +384,12 @@ def build_prompt_parts(req, role, extra=""):
     二者含按卡/按进程值，不参与固定段逐字稳定口径）。"""
     # analysis 起全部角色在同一 per-requirement worktree（从主干拉取，基线=主干）工作，
     # 调研基线 = 开发基线，不随主工作区 checkout 漂移；跨阶段幂等复用同一 worktree/分支
-    _, repo_map = D.ensure_dev_worktrees(req)
+    # dry（注入预览）：不建 worktree，按配置预测各仓库 worktree 路径
+    if dry:
+        repo_map = {Path(p).name: str(D.dev_worktree_path(req, p))
+                    for p in (D.PROJECTS[req["project"]].get("paths") or [])}
+    else:
+        _, repo_map = D.ensure_dev_worktrees(req)
     repo = D.dev_repo_listing(req, repo_map, focus=effective_repos(req))
     # #419：提示词模板来自配置 prompts/<role>.md（单一源；dev_auto/dev_semi 合一为 dev.md）
     tmpl = D.role_prompt(role)
@@ -372,22 +397,10 @@ def build_prompt_parts(req, role, extra=""):
         raise ValueError(f"未知角色: {role}")
     # #419：节点输入 = 上游节点产物清单（含前置槽位），不做角色名映射/不做 prd.md 探测
     stage_input = stage_input_for(req)
-    if role == "dev" and D.PROJECTS[req["project"]].get("company"):
-        extra = ((extra + "\n") if extra else "") + \
-            "本项目为仅推分支项目（branch_only）：done 时调度器自动把有改动仓库的 f-分支 push 到 origin，" \
-            "由外部 CI/CD 或人工在发版时合并到主干；你只在本分支提交，不要 push、不要合并任何分支、" \
-            "不要操作 main 分支。待办应写「基于已推送的 f-分支完成测试验证」类表述，不要写「合并分支到 master」。"
-    # #365：仅推分支项目在 build_prompt 注入待办口径（非仅推分支项目 accept 模板不含该句式）
-    if role == "accept" and D.PROJECTS[req["project"]].get("company"):
-        extra = ((extra + "\n") if extra else "") + \
-            "本项目为仅推分支项目（branch_only）：done 时调度器自动 push f-分支，由外部 CI/CD 或人工在发版时" \
-            "合并到主干；待办应写「基于已推送的 f-分支完成测试验证」类表述，不要写「合并分支到 master」。"
-    # #318：项目配置了 restart 配方时注入「服务由调度器 done 时自动重启」提示——
-    # 源头预防：todos 只声明纯人工事项（如浏览器验收），不声明重启服务/进程类待办
-    if role == "dev" and D.PROJECTS[req["project"]].get("restart"):
-        extra = ((extra + "\n") if extra else "") + \
-            "本项目服务由调度器自动重启（done 时按 projects.json 的 restart 配方执行并做就绪校验，无需人工重启）；" \
-            "todos 只声明纯人工事项（如浏览器验收），不要声明重启服务/进程类待办。"
+    # 条件片段（注册表 when 声明）：仅推分支（dev/accept，#365）、服务自动重启（dev，#318：todos 只声明
+    # 纯人工事项）。第一期仍拼进卡片块 extra（与搬迁前逐字节一致）
+    for fid in selected_fragments(req["project"], role):
+        extra = ((extra + "\n") if extra else "") + prompt_store.read(fid)
     # #396：merge_resolve 冲突上下文注入（冲突仓库清单 + 解决方向）；时间盒覆盖为 15 分钟。
     # 评审整改（主问题 1）：主干引用不再硬编码 main——逐冲突仓库复用 _default_branch 探测
     # （base_branch 配置 → master → main → origin/HEAD，master 优先），注入各仓库具体 merge 目标
@@ -405,11 +418,8 @@ def build_prompt_parts(req, role, extra=""):
                 base, base_sha = None, None
             ref = base or base_sha or "main"  # 探测全面失败回退 main（与原行为一致）
             lines.append(f"- {Path(p).name}（主干: {ref}）：git merge {ref}")
-        merge_ctx = (f"冲突仓库（需解决）：{', '.join(failed)}\n"
-                     "各仓库主干引用（merge 目标，调度器主干探测：base_branch 配置 → master → main → origin/HEAD）：\n"
-                     + "\n".join(lines) + "\n"
-                     "解决方向：在对应仓库 worktree 内执行上述 `git merge <该仓库主干>`（把主干合并进当前 dev 分支）→ "
-                     "解冲突 → 提交；调度器随后恢复主工作区合并现场并自动重试合并 dev 分支回各仓库主干，收尾无需你处理。")
+        merge_ctx = prompt_store.render("fragment/merge-resolve", failed=", ".join(failed),
+                                        branch_lines="\n".join(lines))
     result_json = D.result_file_path(req)
     art_root = str(D.artifact_dir(req))
     repo_map_path = D.PROJECTS[req["project"]].get("repo_map") or ""
@@ -452,8 +462,8 @@ def build_prompt_parts(req, role, extra=""):
         history=history,
         extra=(f"补充上下文：{extra}\n" if extra else ""),
         merge_ctx=merge_ctx,
-        readonly_tool_guide=READONLY_TOOL_GUIDE,
-        common=COMMON_TAIL,
+        readonly_tool_guide=prompt_store.read("system/readonly-tools"),
+        common=prompt_store.read("system/common"),
         card_inputs="",
     )
     # #42 拆段：两段用同一 kwargs 各自 format（str.format 忽略未用键），占位符语义不变
@@ -468,17 +478,8 @@ def build_prompt_parts(req, role, extra=""):
 
 
 def build_prompt(req, role, extra=""):
-    # 只读评审节点拿不到范围 diff → 调度器代写 diff.patch（上游含 code 节点时才有 diff，§1.4）
-    _node = D.current_node(req)
-    if _node and _node.get("node_type") == "review":
-        if any(n.get("node_type") == "code" for n in (nodes_of(req) or [])[:node_index_of(req) or 0]):
-            D._gen_review_diff(req)
-    # #42 前缀缓存拼装：固定段 → 项目约定 → 场景技能 → 卡片输入块（可变尾）
-    prompt = "".join(build_prompt_parts(req, role, extra=extra))
-    # #419 前置槽位契约：仅当卡处于前置阶段（未入流程、无快照）时追加——判定按槽位而非角色名，
-    # 换 pre.role 后任何角色都会被告知 suggested_flow/repos 输出要求（流程内同角色节点不重复注入）。
-    # 契约含按卡 result_json 与流程目录，保持追加在最末（不参与固定段逐字稳定口径）
-    if in_pre_stage(req):
-        prompt += pre_slot_contract_text(D.result_file_path(req))
-    return prompt
+    """提示词正文 = 上下文编译器产物（dispatcher_modules/context.py compile_context）。
+    编译器：评审节点代写 diff.patch → 固定段 → 项目约定 → 场景技能 → 卡片输入块 → 前置契约（仅前置阶段），
+    同时生成注入清单供执行档案记录。"""
+    return D.compile_context(req, role, extra).prompt
 

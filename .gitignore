@@ -22,6 +22,8 @@ feishu.json.*
 # 可插拔通知渠道配置（Webhook secret / Slack webhook URL，0600）及其备份
 notifiers.json
 notifiers.json.*
+# 提示词本机覆盖（设置抽屉「提示词」tab 保存的内容，本机数据）
+prompts.local/
 # 本地备份/迁移残留
 *.bak
 .playwright-mcp/

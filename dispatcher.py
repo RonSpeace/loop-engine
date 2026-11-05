@@ -267,6 +267,13 @@ from dispatcher_modules.flow_engine import (  # noqa: E402,F401  拆分回挂，
     flow_of, flow_snapshot, in_pre_stage, next_stage, node_display, node_index_of, nodes_of,
     pre_slot_contract_text, project_conventions_text, role_allowed, role_for,
     role_skill_names, scenario_skills_text, split_role_template, stage_input_for, stage_of_review,
+    FRAGMENT_ORDER, project_flags, selected_fragments,
+)
+
+# ==================== 上下文编译器 + 执行档案（context-design 第三、七节） ====================
+from dispatcher_modules.context import (  # noqa: E402,F401  拆分回挂，见 dispatcher_modules/context.py
+    Compiled, build_manifest, compile_context, context_runtime_item, last_compiled, new_run_key,
+    record_session_start, runs_dir, write_run_record,
 )
 
 # ==================== 飞书机器人 ====================
@@ -349,6 +356,7 @@ from dispatcher_modules.agent_run import (  # noqa: E402,F401  拆分回挂，�
     _mark_swept, _notify_need_confirm, _parse_confirm_options, _register_need_confirm, _steps_text,
     _swept, _swept_lock, _swept_rows, active_lock, active_runs, artifact_ok, build_followup_prompt,
     changed_repos, has_code_changes, readonly_tool_roots, result_state, run_agent, spawn_agent,
+    _record_start, resume_text,
 )
 
 # ==================== #419 流程推进（节点完成 → 下一节点 / 收尾） ====================

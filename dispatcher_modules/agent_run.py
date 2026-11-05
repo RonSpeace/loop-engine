@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 
+import prompt_store
 from acp_shared import PLAYWRIGHT_TOOL_PREFIX, RESULT_FILENAME, TAPD_TOOL_PREFIX, TurnAborted, role_capability
 
 from dispatcher_modules.flow_advance import _apply_model_override, review_escalation_override
@@ -118,11 +119,35 @@ def result_state(req):
         return "invalid", f"result.json 解析失败（{e}）"
 
 
-# #327：存量 resume 会话保留旧系统提示词（不含输出风格新规），续接文案补一行风格提醒
+# #327：存量 resume 会话保留旧系统提示词（不含输出风格新规），续接文案补一行风格提醒。
+# 正文在 prompts/system/resume-style.md（本常量 = 默认文本兼容视图）；续跑文案经 resume_text() 渲染
 RESUME_STYLE_REMINDER = (
     "输出风格（新规范，本 resume 会话的系统提示词可能未含）：回复结论先行、能短则短"
     "（单条一般两三百字内），禁止开场白/客套/复述需求；产物文档删除过程叙述、每要点一行；"
     "result.json summary 要点化、一般不超过 10 行。")
+
+
+def resume_text(req, role, extra, user_text=None):
+    """续跑文案（恢复旧会话时发送）：人工续跑 system/resume-user，自动续跑 system/resume-auto；
+    两者都内嵌输出风格提醒 system/resume-style（{resume_style}）。返回 (正文, 条目 id)。"""
+    style = prompt_store.read("system/resume-style")
+    if user_text is not None:
+        return prompt_store.render("system/resume-user", req_id=req["id"], role=role, user_text=user_text,
+                                   extra=extra, resume_style=style), "system/resume-user"
+    return prompt_store.render("system/resume-auto", req_id=req["id"], role=role, extra=extra,
+                               resume_style=style, max_steps=_steps_text(role, req)), "system/resume-auto"
+
+
+def _record_start(req, role, sent, kind, session, compiled=None, extra_items=(), parent=None,
+                  context_update=None, redline=True):
+    """执行档案落盘（失败只告警，绝不阻断会话）。"""
+    try:
+        return D.record_session_start(req, role, sent, kind=kind, session=session, compiled=compiled,
+                                      extra_items=extra_items, parent=parent,
+                                      context_update=context_update, redline=redline)
+    except Exception as e:
+        log.warning(f"需求 #{req.get('id')} 执行档案记录失败（不阻断会话）: {e}")
+        return None
 
 
 def _artifact_ls(req):
@@ -202,9 +227,7 @@ def _budget_wrapup(session, req, role):
     D.post_event(req["id"], "system", f"预算截停（{detail}），给一轮限步收尾写结果",
                session_id=getattr(session, "session_id", None))
     session.step_budget = D.BUDGET_WRAPUP_STEPS
-    wrapup = (f"已达到本轮工具步数上限（{detail}），会话被调度器截停。立即停止新的探索与修改，"
-              f"用不超过 {D.BUDGET_WRAPUP_STEPS - 5} 步把当前进度写入 result.json：已完成且验证通过 → done；"
-              "否则 blocked，summary 写清已完成部分、未完成部分与下一步。写完即结束本轮。")
+    wrapup = prompt_store.render("system/wrapup", detail=detail, wrapup_steps=D.BUDGET_WRAPUP_STEPS - 5)
     try:
         session.prompt(wrapup, timeout=D.BUDGET_WRAPUP_SEC)
     except Exception as e:
@@ -277,6 +300,7 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
     logf = held["logf"] if held is not None else open(f"/tmp/req_board_agent_{req_id}.log", "a")
     kept = held is not None
     session = None
+    run_meta = None  # 执行档案（manifest 路径 / prompt_hash / prefix_hash），随运行记录落 agent_runs
     arun = None  # #388：本线程登记的 active_runs 对象（finally 对象匹配删除，防误删新会话登记）
     try:
         if kept:
@@ -403,29 +427,23 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
         if user_text:
             D.post_event(req["id"], "user", user_text, session_id=session.session_id)
         actual_prompt = prompt
+        resume_id = None
         if user_text is not None and not resumed:
             actual_prompt = prompt + f"\n\n用户消息：{user_text}"
-        elif user_text is not None:
-            actual_prompt = (f"继续之前看板需求 #{req['id']} 的 {role} 工作（角色 {role}）。\n"
-                             f"用户消息：{user_text}\n{extra}\n"
-                             f"{RESUME_STYLE_REMINDER}\n"
-                             "提醒：结束前必须把结果 JSON 写入产物目录 result.json"
-                             "（status: done/blocked/need_confirm，契约不变）。\n"
-                             "工具调用步数有每轮上限（约 200 步），接近上限时先把结果 JSON 写入 "
-                             "result.json 保底（契约不变，可覆盖为最终结果），再继续剩余工作，"
-                             "避免会话被截断时无结果可采。")
         elif resumed:
-            actual_prompt = (f"继续之前看板需求 #{req['id']} 的开发工作（角色 {role}）。\n{extra}\n"
-                             f"{RESUME_STYLE_REMINDER}\n"
-                             "若上次会话中途结束：先确认改动完好（git status 等）、产物目录无残留 result.json，"
-                             "再继续验证。\n"
-                             "提醒：结束前必须把结果 JSON 写入产物目录 result.json"
-                             "（status: done/blocked/need_confirm，契约不变）。\n"
-                             f"工具调用步数有每轮上限（{_steps_text(role, req)} 步），接近上限时先把结果 JSON 写入 "
-                             "result.json 保底（契约不变，可覆盖为最终结果），再继续剩余工作，"
-                             "避免会话被截断时无结果可采。")
+            # 续跑文案（人工续跑 / 自动续跑）：正文在 prompts/system/resume-*.md，均内嵌输出风格提醒
+            actual_prompt, resume_id = resume_text(req, role, extra, user_text)
         # #108：进程安全红线统一注入（新会话与续跑两条路径一次覆盖，注入点唯一）
         actual_prompt = D.append_kill_redline(actual_prompt, session.proc.pid)
+        # 执行档案：本轮实际发出的全文 + 注入清单（编译结果取自本次 build_prompt；被替换/缺失时只记全文）
+        compiled = D.last_compiled(req["id"], role)
+        if compiled is not None and compiled.prompt != prompt:
+            compiled = None
+        extra_items = []
+        if resume_id:
+            extra_items.append(D.context_runtime_item(resume_id, actual_prompt, "恢复旧会话"))
+        run_meta = _record_start(req, role, actual_prompt, "resume" if resumed else "new", session,
+                                 compiled=compiled, extra_items=extra_items)
         if not hold and not kept:
             # C2：自动开发会话按角色预算限步（人工续跑 hold/复用轮不限，由人掌控）
             session.step_budget = (D.role_budget(role, project=req.get("project")) or {}).get("max_steps")
@@ -444,6 +462,8 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
                                f"回合结束但未提交结果（{detail}），续接一轮（剩余 {int(remaining // 60)} 分钟）",
                                session_id=session.session_id)
                     follow_prompt = build_followup_prompt(role, state, req)
+                    _record_start(req, role, follow_prompt, "followup", session,
+                                  parent=(run_meta or {}).get("run_key"), redline=False)
                     try:
                         session.prompt(follow_prompt, timeout=remaining)
                     except TurnAborted as e:
@@ -540,8 +560,11 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
         except Exception as e:
             log.warning(f"需求 #{req_id} 缓存命中汇总失败（不阻断收尾）: {e}")
             usage_ext = None
+        # 执行档案字段仅在有档案时传（不给存量 stub 引入新 kwarg）
+        run_kw = {"run_meta": {k: run_meta.get(k) for k in ("manifest_path", "prompt_hash", "prefix_hash")}} \
+            if run_meta else {}
         D.post_run_record(req, role, session, started_at, time.time(), returncode, timed_out, usage,
-                        aborted=aborted, usage_ext=usage_ext)
+                        aborted=aborted, usage_ext=usage_ext, **run_kw)
     if D._swept(row_id):
         log.info(f"需求 #{req_id} 结果处理已由兜底完成（row={row_id}），跳过重复 handle_result")
         return True

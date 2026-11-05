@@ -1222,7 +1222,18 @@ def project_escalation_model(project):
 
 
 def role_prompt(role):
-    return role_meta(role, "prompt") or ""
+    """角色模板正文：本机覆盖 prompts.local/<file>（提示词存储 role/<id>，现读、改完无需重启）优先，
+    否则为 flows.json 加载时读入的默认 prompts/<role>.md。未知角色 → 空串。"""
+    default = role_meta(role, "prompt") or ""
+    if not default:
+        return ""
+    try:
+        import prompt_store
+        ov = prompt_store.override_text(prompt_store.ROLE_PREFIX + str(role))
+    except Exception as e:      # 覆盖读不了按默认走（覆盖是本机数据，坏了不能卡调度）
+        log.warning("角色 %s 覆盖模板读取失败，按默认: %s", role, e)
+        ov = None
+    return ov if ov is not None else default
 
 
 # ==================== 拆分子模块回挂（acp_modules/，名字逐个列出：含下划线名，供调用方与测试沿用 ac.<名>） ====================

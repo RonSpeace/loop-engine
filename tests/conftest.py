@@ -37,6 +37,15 @@ def _isolate_git_config():
 _isolate_git_config()
 
 
+def _isolate_prompts_local():
+    """提示词本机覆盖隔离：每个测试会话一个私有空目录，开发者真实的 prompts.local/ 不进测试。"""
+    import tempfile
+    os.environ["REQ_BOARD_PROMPTS_LOCAL"] = tempfile.mkdtemp(prefix="loop-engine-prompts-local-")
+
+
+_isolate_prompts_local()
+
+
 @pytest.fixture(autouse=True)
 def _no_supervisor_marker():
     """#8 标记隔离：钉「无标记 = launchd/未知旧路径」的测试基线。

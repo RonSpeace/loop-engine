@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import git_ops
+import prompt_store
 from acp_shared import is_run_local_supervisor
 
 from dispatcher_modules.workspace import _REAL_DEV_WORKTREE_PATH, _REAL_WORKTREES_ROOT, in_test_env
@@ -920,8 +921,7 @@ def resume_failure_hint(req_id):
     lf = _retry_rec(str(req_id)).get("last_failure")
     if not lf:
         return ""
-    return (f"上次尝试失败原因：{lf}。先针对该原因自查"
-            f"（运行超时/进程异常先确认改动完好、无残留 result.json）再继续。")
+    return prompt_store.render("system/retry-hint", last_failure=lf)
 
 
 def clear_retries(req_id):

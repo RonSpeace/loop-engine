@@ -352,7 +352,7 @@ def post_model_events(req, role, session, resolved):
         log.warning(f"需求 #{req_id} 模型留痕事件发送失败（不阻断会话）: {e}")
 
 def post_run_record(req, role, session, started_at, ended_at, returncode, timed_out, usage=None,
-                    aborted=False, usage_ext=None):
+                    aborted=False, usage_ext=None, run_meta=None):
     """会话收尾写一条运行记录到看板 agent_runs（报表基础数据源，只增不改）+ 一条明确的结束事件。
     status 按进程级判定：done / timed_out / failed / aborted（#28 输出守卫中止）；usage 为
     collect_usage 的 {context_tokens, max_tokens, context_pct}（超时/中止/异常路径为 None，
@@ -360,7 +360,8 @@ def post_run_record(req, role, session, started_at, ended_at, returncode, timed_
     input_tokens, raw}）——cache_state 只由 usage_ext['state'] 决定，与峰值 usage 是否 None 解耦
     （峰值解析失败不得把已返回的缓存字段记成 na）；usage is None 仅保持既有峰值三字段 NULL 语义；
     na 时缓存 token 由采集端构造即为 NULL。写库失败仅警告不阻断收尾（对齐 post_event 容错）；
-    sessions 状态文件不动，历史数据不迁移"""
+    sessions 状态文件不动，历史数据不迁移。
+    run_meta = 执行档案 {manifest_path, prompt_hash, prefix_hash}（context-design 第七节；无档案时省略）"""
     req_id = str(req["id"])
     sid = getattr(session, "session_id", None) if session else None
     if aborted:
@@ -385,6 +386,8 @@ def post_run_record(req, role, session, started_at, ended_at, returncode, timed_
             "input_tokens": ext.get("input_tokens"),
             "cache_state": ext.get("state"),
             "usage_raw": ext.get("raw"),
+            **({k: (run_meta or {}).get(k) for k in ("manifest_path", "prompt_hash", "prefix_hash")}
+               if run_meta else {}),
         })
     except Exception as e:
         log.warning(f"需求 #{req_id} 运行记录写入失败: {e}")

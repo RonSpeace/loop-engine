@@ -58,6 +58,9 @@ def pin():
     import os
     ntf_dir = Path(tempfile.mkdtemp(prefix="req-board-tests-ntf-"))
     os.environ.setdefault("REQ_BOARD_NOTIFIERS_JSON", str(ntf_dir / "notifiers.json"))
+    # 1c) 提示词本机覆盖隔离：prompts.local 指向进程私有空目录，本机覆盖不影响提示词断言。
+    os.environ.setdefault("REQ_BOARD_PROMPTS_LOCAL",
+                          tempfile.mkdtemp(prefix="req-board-tests-prompts-local-"))
 
     # 2) import 之后一律改钉进程私有 fixture：不读也不改本机 projects.json。
     import dispatcher as d
