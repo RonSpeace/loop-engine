@@ -363,6 +363,11 @@
             const prefix = name ? name + '：' : '';
             if (r.error) return prefix + String(r.error);
             const branch = String(r.branch || r.current_branch || '').trim() || '未知分支（detached）';
+            const numDirty = (typeof r.dirty === 'number' && isFinite(r.dirty)) ? Math.max(0, Math.round(r.dirty)) : 0;
+            if (r.local_only) {
+                const dt = r.dirty === true ? '有未提交改动' : (numDirty ? numDirty + ' 处未提交' : '工作区干净');
+                return prefix + [branch, dt, '仅本地仓库'].join(' · ');
+            }
             const num = v => (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.round(v)) : null;
             const ahead = num(r.ahead);
             const behind = num(r.behind);
@@ -392,7 +397,8 @@
             }).join('');
             const err = errorText ? `<span class="pb-git-err">${escapeHtml(errorText)}</span>` : '';
             const busy = !!o.busy;
-            const actions = o.actions === false ? '' : '<span class="pb-git-actions">'
+            const allLocal = rows.length > 0 && rows.every(r => r.local_only);
+            const actions = (o.actions === false || allLocal) ? '' : '<span class="pb-git-actions">'
                 + `<button type="button" class="btn btn-sm" data-git-op="pull"${busy ? ' disabled' : ''} title="拉取当前项目全部仓库（按项目同步策略）">拉取</button>`
                 + `<button type="button" class="btn btn-sm" data-git-op="push"${busy ? ' disabled' : ''} title="推送当前项目全部仓库（需二次确认）">推送</button>`
                 + '</span>';

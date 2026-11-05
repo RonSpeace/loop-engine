@@ -643,6 +643,13 @@ PHRASES = {
     "加载": "Loaded",
     # ---- 卡片流程进度条 ----
     "当前": "Now", "需要你处理": "needs you",
+    # ---- 页头运行状态 ----
+    "运行中": "Running", "飞书网络连接失败": "Feishu network error", "飞书凭据未加载": "Feishu credentials not loaded",
+    "飞书通知": "Feishu notifications", "凭据未配置（可选）": "not configured (optional)",
+    "调度器没有运行或尚未上报心跳；开发任务不会被领取": "The dispatcher is not running or has not reported yet; no work will be picked up",
+    "重启调度器后生效": "Takes effect after restarting the dispatcher",
+    "上次退出异常终止（无正常关闭标记）": "Last exit was abnormal (no clean shutdown marker)",
+    "仅本地仓库": "Local-only repository",
     # ---- 设置：外观 ----
     "外观": "Appearance", "动态背景": "Animated background",
     "流体动画，较耗电；关闭时显示静态底纹。切换后刷新页面生效": "Fluid animation, uses more power; when off a static backdrop is shown. The page reloads to apply",

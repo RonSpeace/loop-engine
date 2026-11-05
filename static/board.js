@@ -2576,6 +2576,11 @@ void main() {
             const prefix = name ? name + '：' : '';
             if (r.error) return prefix + String(r.error);
             const branch = String(r.branch || r.current_branch || '').trim() || '未知分支（detached）';
+            const numDirty = (typeof r.dirty === 'number' && isFinite(r.dirty)) ? Math.max(0, Math.round(r.dirty)) : 0;
+            if (r.local_only) {
+                const dt = r.dirty === true ? '有未提交改动' : (numDirty ? numDirty + ' 处未提交' : '工作区干净');
+                return prefix + [branch, dt, '仅本地仓库'].join(' · ');
+            }
             const num = v => (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.round(v)) : null;
             const ahead = num(r.ahead);
             const behind = num(r.behind);
@@ -2605,7 +2610,8 @@ void main() {
             }).join('');
             const err = errorText ? `<span class="pb-git-err">${escapeHtml(errorText)}</span>` : '';
             const busy = !!o.busy;
-            const actions = o.actions === false ? '' : '<span class="pb-git-actions">'
+            const allLocal = rows.length > 0 && rows.every(r => r.local_only);
+            const actions = (o.actions === false || allLocal) ? '' : '<span class="pb-git-actions">'
                 + `<button type="button" class="btn btn-sm" data-git-op="pull"${busy ? ' disabled' : ''} title="拉取当前项目全部仓库（按项目同步策略）">拉取</button>`
                 + `<button type="button" class="btn btn-sm" data-git-op="push"${busy ? ' disabled' : ''} title="推送当前项目全部仓库（需二次确认）">推送</button>`
                 + '</span>';
@@ -8906,14 +8912,13 @@ void main() {
             }
         }
 
-        // 调度器健康角标：每 10 秒查一次健康接口，按服务端 state 五态渲染
-        // #40：状态名由 state 决定（心跳过期 / 网络连接失败 / 显式停用 / 凭据未配置 / 凭据未加载 /
-        // 已连接 / 调度器未上报）；age 不再参与状态名判定，pid 异常只作角标后缀说明。
-        // #408：角标不再展示「上次退出 SIGTERM@时间（来源: X）/ 自动重启成功」类内部运维记录
-        // （该类信息仅保留在心跳文件与启动日志）；有心跳但无 last_shutdown 记录（崩溃/被强杀）
-        // 仍提示异常终止；首次部署（无心跳）返回空
+        // 调度器健康角标：每 10 秒查一次健康接口。角标只回答「引擎在不在跑」：
+        //   调度器心跳正常 → 运行中（绿）；心跳过期 / 未上报 → 红。
+        // 飞书是可选通知渠道：未配置 / 显式停用属于正常状态，只写进悬浮说明，不占角标、不变色；
+        // 只有「配置了但坏了」才在角标后缀说明（网络连接失败 = 红，凭据未加载待重启 = 提示档）。
+        // 上次异常退出、pid 说明等运维细节一律只进悬浮说明（title），不进角标正文。
         function shutdownText(h) {
-            if (!h.last_shutdown || !h.last_shutdown.at) return h.age === null ? '' : ' · 上次退出异常终止（无正常关闭标记）';
+            if (!h.last_shutdown || !h.last_shutdown.at) return h.age === null ? '' : '上次退出异常终止（无正常关闭标记）';
             return '';
         }
         async function refreshHealth() {
@@ -8927,26 +8932,21 @@ void main() {
                 const f = (h.feishu && typeof h.feishu === 'object') ? h.feishu : {};
                 const state = String(h.state || f.state || '');
                 const reason = String(h.reason || f.reason || '');
-                // #40：pid 说明只在服务端把它写进 reason 时（有心跳证据可注）才附在角标后面
-                const pidTip = (reason.indexOf('心跳 pid 非当前调度器进程') >= 0)
-                    ? ' · 心跳 pid 非当前调度器进程' : '';
+                const pidTip = (reason.indexOf('心跳 pid 非当前调度器进程') >= 0) ? '心跳 pid 非当前调度器进程' : '';
+                const feishuNote = state === 'connected' ? '飞书通知：已连接'
+                    : state === 'disabled' ? ('飞书通知：' + (reason.indexOf('REQ_BOARD_NO_FEISHU') >= 0 ? '显式停用' : '凭据未配置（可选）'))
+                    : '';
+                const tips = [];
                 let cls, label;
-                if (state === 'disabled') {
-                    // 显式停用（REQ_BOARD_NO_FEISHU）与凭据文件问题分开，不把凭据未配置显示成已停用
-                    cls = 'health warn';
-                    label = reason.indexOf('REQ_BOARD_NO_FEISHU') >= 0 ? '显式停用' : '凭据未配置';
-                } else if (state === 'stale') {
+                if (state === 'stale') {
                     cls = 'health bad';
                     label = '心跳过期';
-                } else if (state === 'failed') {
+                    if (reason) tips.push(reason);
+                } else if (!h.ok) {
                     cls = 'health bad';
-                    label = '网络连接失败';
-                } else if (state === 'not_loaded') {
-                    cls = 'health warn';
-                    label = '凭据未加载';
-                } else if (state === 'connected') {
-                    // #8 直跑模式：看板有新改动待重启（看板重启后由服务端 BOARD_STARTED_AT 比较自动隐藏）
-                    // 该琥珀提示只出现在已连接分支，排在通道故障之后
+                    label = '调度器未上报';
+                    tips.push('调度器没有运行或尚未上报心跳；开发任务不会被领取');
+                } else {
                     if (h.board_restart_pending) {
                         badge.className = 'health warn';
                         badge.title = pendingTip;
@@ -8954,14 +8954,24 @@ void main() {
                         return;
                     }
                     cls = 'health ok';
-                    label = '已连接';
-                } else {
-                    cls = 'health bad';
-                    label = '调度器未上报';
+                    label = '运行中';
+                    if (state === 'failed') {
+                        cls = 'health bad';
+                        label = '运行中 · 飞书网络连接失败';
+                        if (reason) tips.push(reason);
+                    } else if (state === 'not_loaded') {
+                        cls = 'health warn';
+                        label = '运行中 · 飞书凭据未加载';
+                        tips.push('重启调度器后生效');
+                    }
                 }
+                if (feishuNote) tips.push(feishuNote);
+                if (pidTip) tips.push(pidTip);
+                const sd = shutdownText(h);
+                if (sd) tips.push(sd);
                 badge.className = cls;
-                badge.title = reason || label;   // 复位：防待重启提示残留标题
-                text.textContent = label + pidTip + shutdownText(h);
+                badge.title = tips.length ? label + ' · ' + tips.join(' · ') : label;
+                text.textContent = label;
             } catch (e) { /* 网络异常时保留现状，下一轮再试 */ }
         }
         refreshHealth();

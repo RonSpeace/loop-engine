@@ -589,7 +589,10 @@ def _git_status_row(path, git_cfg):
         remote = configured
     else:
         remote = "origin" if "origin" in names else (names[0] if names else "")
-        if configured and configured not in names:
+        if not names:
+            # 没有任何远端的纯本地仓库是合法形态（不同步、只在本机合并），不当错误展示
+            row["local_only"] = True
+        elif configured and configured not in names:
             row["error"] = f"配置的远端 {configured} 不存在"
     row["remote"] = remote
     row["url"] = (git_ops.remote_url(p, remote) if remote else "") or str(git_cfg.get("url") or "")

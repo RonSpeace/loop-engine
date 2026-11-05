@@ -166,7 +166,7 @@
             --cs-btn-bg: rgba(255, 255, 255, 0.06); --cs-btn-hover: rgba(255, 255, 255, 0.12);
             --cs-head-hover: rgba(255, 255, 255, 0.06);
             --health-ok-fg: #56e9b7;   --health-ok-dot: #26d69a;
-            --health-warn-fg: #fbbf24; --health-warn-dot: #f59e0b;
+            --health-warn-fg: #93c5fd; --health-warn-dot: #3b82f6;
             --health-bad-fg: #ff9aa6;  --health-bad-dot: #ff5b6e;
             --toast-bg: rgba(4, 18, 40, 0.92); --toast-bd: var(--glass-border); --toast-err-bg: #ff5b6e;
             --warn-bg: rgba(245, 158, 11, 0.12); --warn-bd: rgba(245, 158, 11, 0.32); --warn-fg: #fbbf24;
@@ -319,7 +319,7 @@
             --cs-btn-bg: #ffffff; --cs-btn-hover: #fff5f5;
             --cs-head-hover: rgba(255, 255, 255, 0.45);
             --health-ok-fg: var(--text-2); --health-ok-dot: #16a34a;
-            --health-warn-fg: #b45309;     --health-warn-dot: #f59e0b;
+            --health-warn-fg: #1d4ed8;     --health-warn-dot: #3b82f6;
             --health-bad-fg: #dc2626;      --health-bad-dot: #dc2626;
             --toast-bg: #ffffff; --toast-bd: #d1d5db; --toast-err-bg: #dc2626;
             --warn-bg: #fffbeb; --warn-bd: #fde68a; --warn-fg: #b45309;

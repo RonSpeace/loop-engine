@@ -68,9 +68,10 @@ class HealthBadgeRenderTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return json.loads(proc.stdout)
 
-    def test_h1_five_states_label_and_style(self):
-        """五态 + unknown 的文案与档位：已连接=ok / 凭据未加载、显式停用、凭据未配置=warn /
-        心跳过期、网络连接失败、调度器未上报=bad；档位不绑旧 ok 字段。"""
+    def test_h1_engine_liveness_first_feishu_optional(self):
+        """角标回答「引擎在不在跑」：调度器存活 = 运行中（ok）；飞书未配置/显式停用是正常状态，
+        不进角标正文、不变色，只写进悬浮说明；飞书配置了但坏了才挂后缀（网络失败 = bad，待重启 = warn）；
+        心跳过期 / 未上报 = bad。"""
         payloads = [
             {"state": "connected", "reason": None, "age": 3, "ok": True,
              "feishu": {"state": "connected", "pid_status": "ok", "reason": None}},
@@ -86,27 +87,33 @@ class HealthBadgeRenderTest(unittest.TestCase):
              "feishu": {"state": "failed", "pid_status": "ok"}},
             {"age": None, "ok": False, "feishu": {"state": "unknown", "pid_status": "missing"}},
         ]
-        want = [("health ok", "已连接"),
-                ("health warn", "凭据未加载"),
-                ("health warn", "显式停用"),
-                ("health warn", "凭据未配置"),
+        want = [("health ok", "运行中"),
+                ("health warn", "飞书凭据未加载"),
+                ("health ok", "运行中"),
+                ("health ok", "运行中"),
                 ("health bad", "心跳过期"),
-                ("health bad", "网络连接失败"),
+                ("health bad", "飞书网络连接失败"),
                 ("health bad", "调度器未上报")]
         out = self._run_cases(payloads)
         for got, (cls, label) in zip(out, want):
             with self.subTest(label=label):
                 self.assertEqual(got["cls"], cls)
                 self.assertIn(label, got["text"])
-        # 显式停用与凭据未配置互不冒充
-        self.assertNotIn("凭据未配置", out[2]["text"])
-        self.assertNotIn("显式停用", out[3]["text"])
+        # 可选渠道状态只在悬浮说明里，且显式停用与凭据未配置互不冒充
+        self.assertEqual(out[2]["text"], "运行中")
+        self.assertIn("显式停用", out[2]["title"])
+        self.assertNotIn("凭据未配置", out[2]["title"])
+        self.assertEqual(out[3]["text"], "运行中")
+        self.assertIn("凭据未配置", out[3]["title"])
+        self.assertNotIn("显式停用", out[3]["title"])
+        self.assertIn("已连接", out[0]["title"])
 
-    def test_h2_pid_note_and_pending_branch(self):
-        """pid 说明只在服务端写进 reason 时附在角标后（无心跳证据不注）；connected + board_restart_pending 走琥珀待重启。"""
+    def test_h2_ops_details_only_in_title_and_pending_branch(self):
+        """pid 说明 / 上次异常退出只进悬浮说明；存活 + board_restart_pending 走待重启提示档；
+        无心跳的显式停用实例 = 调度器未上报（bad），不注 pid。"""
         payloads = [
             {"state": "connected", "reason": "心跳 pid 非当前调度器进程（pid 已不是调度器进程）",
-             "age": 3, "ok": True,
+             "age": 3, "ok": True, "last_shutdown": None,
              "feishu": {"state": "connected", "pid_status": "dead",
                         "reason": "心跳 pid 非当前调度器进程（pid 已不是调度器进程）"}},
             {"state": "connected", "reason": None, "age": 3, "ok": True,
@@ -118,16 +125,15 @@ class HealthBadgeRenderTest(unittest.TestCase):
         ]
         out = self._run_cases(payloads)
         self.assertEqual(out[0]["cls"], "health ok")
-        self.assertIn("已连接", out[0]["text"])
-        self.assertIn("心跳 pid 非当前调度器进程", out[0]["text"])
-        self.assertNotIn("心跳过期", out[0]["text"])
+        self.assertEqual(out[0]["text"], "运行中")
+        self.assertIn("心跳 pid 非当前调度器进程", out[0]["title"])
+        self.assertIn("上次退出异常终止", out[0]["title"])
         self.assertEqual(out[1]["cls"], "health warn")
         self.assertIn("看板有新改动待重启", out[1]["text"])
         self.assertIn("Ctrl-C 后重跑 run_local.sh", out[1]["text"])
-        # board_env 显式停用（无心跳 → reason 无 pid 说明）：角标只显示状态名，不注 pid
-        self.assertEqual(out[2]["cls"], "health warn")
-        self.assertIn("显式停用", out[2]["text"])
-        self.assertNotIn("心跳 pid 非当前调度器进程", out[2]["text"])
+        self.assertEqual(out[2]["cls"], "health bad")
+        self.assertIn("调度器未上报", out[2]["text"])
+        self.assertNotIn("心跳 pid 非当前调度器进程", out[2]["title"])
 
 
 if __name__ == "__main__":
