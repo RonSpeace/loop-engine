@@ -391,6 +391,7 @@
                 <a href="#prompt-manifest">清单示例</a><a href="#prompt-guides">Guide 示例</a>
                 <a href="#prompt-skills">Skill 示例</a><a href="#prompt-task">需求卡示例</a>
                 <a href="#prompt-roles">各角色读什么</a><a href="#prompt-resume">续跑与规则更新</a>
+                <a href="#prompt-agents-md">AGENTS.md 与分层</a><a href="#prompt-overrides">改提示词</a>
                 <a href="#prompt-checklist">启动前核对</a>
             </nav>
 
@@ -561,9 +562,30 @@ notes：
             </table></div>
 
             <h2 id="prompt-resume">八、续跑与规则更新</h2>
-            <p>新会话会拿到完整提示词；恢复（resume）的旧会话只拿到简短的续跑信息，<b>不保证</b>看到你刚改的 Guide、Skill 或卡片。改了规则后续跑，请在看板聊天框里明确说明：改了哪些文件、已确认的目标、剩余工作，并要求 agent 先重读这些规则。规则相互冲突时，agent 应报 <code>need_confirm</code>。</p>
+            <p>新会话拿到完整提示词。调度器自动续跑旧会话时，会先把这次要发的内容和该会话上次收到的内容逐项对比：</p>
+            <ul>
+                <li><b>没有变化</b>：只发简短的续跑提示。</li>
+                <li><b>项目约定、条件说明、技能或卡片内容变了</b>：续跑消息前面附「上下文更新」，逐条列出变了什么并附新正文，要求 agent 回读确认。</li>
+                <li><b>平台通用约束或角色模板变了</b>：不再续用旧会话，改开新会话（带完整提示词和一段交接说明）。</li>
+            </ul>
+            <p>这套对比只对上线后建立的会话生效；更早的会话、以及看板聊天框里的人工续跑，仍需你在消息里说明改了哪些文件、已确认的目标和剩余工作，并要求 agent 先重读。规则相互冲突时，agent 应报 <code>need_confirm</code>。</p>
 
-            <h2 id="prompt-checklist">九、第一张卡启动前核对</h2>
+            <h2 id="prompt-agents-md">九、AGENTS.md 与提示词分层</h2>
+            <p><code>AGENTS.md</code> 是项目自己的规则文件（很多编码 agent 都认这个文件名）。仓库根放一份写全局约定；某个子目录有特殊约定时，在那个目录再放一份，<b>离改动越近的越优先</b>。</p>
+            <ul>
+                <li><b>Loop Engine 只指路、不内联</b>：「项目约定」层提示 agent 先读仓库根的 <code>AGENTS.md</code>；这张卡涉及的子目录如果有自己的 <code>AGENTS.md</code>，卡片输入里会列出「改 <code>src/api/</code> 下的文件前先读 <code>src/api/AGENTS.md</code>」。涉及哪些目录，开发前看需求 notes、需求分析和技术方案里写到的路径，审查和验收时看真实 diff。</li>
+                <li><b>记录读的是哪一版</b>：每次拉起会话都会记下指向的每份 <code>AGENTS.md</code> 及其内容 hash（读的是 agent 实际所在的 worktree），事后能查清当时的规则版本。自带 <code>AGENTS.md</code> 加载能力的运行体（Codex）只记录、不重复指路。</li>
+                <li><b>和 <code>.loop/guides</code> 的分工</b>：<code>AGENTS.md</code> 是人和任何 agent 都会读的短规则；<code>.loop/guides</code> 是 Loop Engine 按角色挑选、直接放进提示词的项目事实（每份 4000 字以内）。同一条事实只写一处。</li>
+                <li><b>谁说了算</b>：Loop Engine 平台约束（结果契约、写入边界、进程安全）&gt; 最近的子目录 <code>AGENTS.md</code> &gt; 仓库根 <code>AGENTS.md</code> &gt; 角色模板（仅限命令、端口、路径这类事实）。权限始终由工具白名单强制，任何一层的文字都改变不了。</li>
+                <li><b>保持精简</b>：<code>scripts/doctor.py</code> 会检查根和每个子目录 <code>AGENTS.md</code> 的长度，子目录文件大段照抄根文件时也会告警。</li>
+                <li><b>在哪看</b>：设置抽屉「提示词」页的项目约定部分（只读）和卡片详情的「上下文」页会列出这些文件（界面随后上线；接口 <code>GET /api/prompts</code> 已提供）。</li>
+            </ul>
+            <p>完整分层（从稳定到多变）：平台约束 → 角色模板 → 项目约定（清单、指引、<code>AGENTS.md</code> 指路）→ 条件说明（如仅推分支、自动重启）→ 常驻技能 → 技能目录 → 本卡数据（标题、notes、上游产物、返工问题清单，用 <code>&lt;card-data&gt;</code> 标出，是数据不是指令）→ 运行参数。前几层跨卡稳定，便于模型缓存。</p>
+
+            <h2 id="prompt-overrides">十、在本机改提示词</h2>
+            <p>发给 agent 的每一段引擎文案都是文件：默认版本随代码在 <code>prompts/</code>，你在设置抽屉「提示词」页保存的修改写进不进 git 的 <code>prompts.local/</code>（目录结构一一对应），编译时<b>有覆盖用覆盖，没有用默认</b>，改完下一次拉起会话就生效、不用重启。「恢复默认」就是删掉覆盖文件。升级 Loop Engine 后默认文本变了，该项会标「默认已更新」，仍用你的覆盖，由你决定是否合并。结果契约等调度器要解析的句子被锁定，删改会被拒绝保存。</p>
+
+            <h2 id="prompt-checklist">十一、第一张卡启动前核对</h2>
             <ul>
                 <li>仓库路径、远端、<code>base_branch</code> 正确；Guide 里写的接口和目录真实存在。</li>
                 <li>清单是合法 JSON，Guide 与 Skill 文件都存在、名字和角色正确，单文件关键内容不超过 4000 字符。</li>

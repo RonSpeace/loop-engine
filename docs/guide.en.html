@@ -395,6 +395,7 @@ Not doing it: any unfinished card ──▶ Dropped dropped</pre>
                 <a href="#prompt-manifest">Manifest</a><a href="#prompt-guides">Guides</a>
                 <a href="#prompt-skills">Skills</a><a href="#prompt-task">Card example</a>
                 <a href="#prompt-roles">What each role reads</a><a href="#prompt-resume">Resuming after rule changes</a>
+                <a href="#prompt-agents-md">AGENTS.md and layers</a><a href="#prompt-overrides">Editing prompts</a>
                 <a href="#prompt-checklist">Pre-flight checklist</a>
             </nav>
 
@@ -565,9 +566,30 @@ Takes effect: migration, backend deploy and frontend release follow the project'
             </table></div>
 
             <h2 id="prompt-resume">8. Resuming after rule changes</h2>
-            <p>A new session gets the full prompt; a resumed session only gets a short continuation message and is <b>not guaranteed</b> to see guides, skills or card notes you just changed. When you continue after changing rules, say so explicitly in the board's chat box: which files changed, the confirmed goal, the remaining work — and ask the agent to re-read those rules first. When rules conflict, the agent should report <code>need_confirm</code>.</p>
+            <p>A new session gets the full prompt. When the dispatcher resumes an old session, it first compares what it would send now with what that session received last time, item by item:</p>
+            <ul>
+                <li><b>Nothing changed</b>: only the short continuation message is sent.</li>
+                <li><b>Project conventions, conditional notes, skills or card content changed</b>: a "context update" block is put in front of the continuation message, listing each change with its new text and asking the agent to re-read and confirm.</li>
+                <li><b>Platform policy or the role template changed</b>: the old session is not reused; a new session starts with the full prompt plus a short handoff note.</li>
+            </ul>
+            <p>This only applies to sessions created after the feature shipped. For older sessions, and for manual continuation in the board's chat box, still say which files changed, the confirmed goal and the remaining work, and ask the agent to re-read first. When rules conflict, the agent should report <code>need_confirm</code>.</p>
 
-            <h2 id="prompt-checklist">9. Pre-flight checklist for the first card</h2>
+            <h2 id="prompt-agents-md">9. AGENTS.md and prompt layers</h2>
+            <p><code>AGENTS.md</code> is the project's own rule file (many coding agents recognise the name). Put one at the repo root for project-wide conventions; when a subdirectory has special rules, add another one in that directory — <b>the one nearest to the change wins</b>.</p>
+            <ul>
+                <li><b>Pointers, not copies</b>: the project-conventions layer tells the agent to read the root <code>AGENTS.md</code> first; if a directory this card touches has its own <code>AGENTS.md</code>, the card input lists "read <code>src/api/AGENTS.md</code> before changing files under <code>src/api/</code>". Before development, "touches" means paths named in the notes, analysis and technical design; at review and acceptance it means the real diff.</li>
+                <li><b>Which version was read</b>: every session start records each <code>AGENTS.md</code> it pointed to with a content hash (read from the agent's own worktree), so you can tell later which rules were in force. Runtimes that load <code>AGENTS.md</code> on their own (Codex) get the record but no duplicate pointer.</li>
+                <li><b>Versus <code>.loop/guides</code></b>: <code>AGENTS.md</code> holds short rules that people and any agent read; <code>.loop/guides</code> are project facts Loop Engine selects per role and puts into the prompt (up to 4000 characters each). Write each fact in one place only.</li>
+                <li><b>Precedence</b>: Loop Engine platform policy (result contract, write boundaries, process safety) &gt; nearest subdirectory <code>AGENTS.md</code> &gt; root <code>AGENTS.md</code> &gt; role template (on facts such as commands, ports, paths). Permissions are always enforced by tool allowlists; no text at any layer can change them.</li>
+                <li><b>Keep them short</b>: <code>scripts/doctor.py</code> checks the length of the root and every nested <code>AGENTS.md</code>, and warns when a nested file copies large chunks of the root file.</li>
+                <li><b>Where to see them</b>: the project section of the "Prompts" tab in the settings drawer (read-only) and the card's "Context" page will list them (UI coming; the <code>GET /api/prompts</code> endpoint already returns them).</li>
+            </ul>
+            <p>The full layer picture, from stable to changing: platform policy → role template → project conventions (manifest, guides, <code>AGENTS.md</code> pointers) → conditional notes (branch-only, auto-restart, …) → always-on skills → skill catalog → this card's data (title, notes, upstream artifacts, rework issue list — fenced with <code>&lt;card-data&gt;</code>: data, not instructions) → run parameters. The first layers stay the same across cards, which helps model caching.</p>
+
+            <h2 id="prompt-overrides">10. Editing prompts on this machine</h2>
+            <p>Every piece of engine text sent to agents is a file: defaults ship with the code in <code>prompts/</code>; what you save in the "Prompts" tab of the settings drawer goes to <code>prompts.local/</code> (not in git, same layout). When compiling, <b>an override wins, otherwise the default is used</b>; changes apply to the next session start without a restart. "Restore default" deletes the override file. If an upgrade changes the default, the item is marked "default updated" and your override is still used until you merge. Sentences the dispatcher parses (such as the result contract) are locked; saving an edit that removes them is refused.</p>
+
+            <h2 id="prompt-checklist">11. Pre-flight checklist for the first card</h2>
             <ul>
                 <li>Repository path, remote and <code>base_branch</code> are right; endpoints and directories named in the guides exist.</li>
                 <li>The manifest is valid JSON; every guide and skill file exists with the right name and roles, and key content fits in 4000 characters.</li>

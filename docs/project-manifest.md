@@ -15,7 +15,8 @@
 | 1 固定段 | 角色职责、通用协议、输出风格 | `prompts/<角色>.md` 的固定段 + `prompts/system/common.md` |
 | 2 项目约定 | 常用命令、测试实例、按角色过滤的项目指引、AGENTS.md 指路；缺项显式写「未配置」 | `<仓库>/.loop/project.json`（`project_conventions_text`） |
 | 3 场景技能 | 按角色挂载的技能正文 | 项目 `.loop/skills/` 优先，其次本机覆盖 `prompts.local/skills/`，最后全局 `prompts/skills/`（`scenario_skills_text`；规则见下文「技能」） |
-| 4 卡片输入 | title、notes、summary、上游产物指路、仓库/分支/产物路径、预算、extra 等 | 角色模板的 `{card_inputs}` 标记之后，由调度器填充 |
+| 2b 条件片段 | 仅推分支、自动重启等按项目开关生效的说明（稳定前缀，紧跟项目约定） | `prompts/fragments/*.md`，注册表 `when` 选择 |
+| 4 卡片输入 | title、notes、summary、上游产物指路、仓库/分支/产物路径、预算、extra、子目录 AGENTS.md 指路、按卡触发的技能等（数据部分带 `<card-data>` 围栏） | 角色模板的 `{card_inputs}` 标记之后，由调度器填充 |
 | 5 前置契约 | 推荐流程与仓库识别的输出要求，仅前置阶段追加 | `prompts/system/pre-contract.md` |
 | 6 进程安全 | 当前真实 PID 对应的进程安全红线，新会话和续跑均追加 | `prompts/system/kill-redline.md`（`append_kill_redline`） |
 
@@ -78,15 +79,19 @@ status: active                  # draft | active | deprecated
 ## AGENTS.md
 
 - 模板：`docs/templates/AGENTS.template.md`（架构概览 / 目录约定 / 编码规范 / 业务红线 / 注意事项）。
-- 项目约定层注入的是「先读工作目录仓库根 AGENTS.md」指路，并非全文内联；不要把关键事实只藏在未登记的长文档中。
-- 它是高频读取的短规则，所以有长度上限，`scripts/doctor.py` 超限告警。
+- 只指路不内联：项目约定层写「先读工作目录仓库根的 AGENTS.md」（`prompts/system/agents-md-pointer.md`）；本卡涉及的子目录若有自己的 AGENTS.md，卡片输入块末尾列出「改 `<目录>/` 下的文件前先读 `<目录>/AGENTS.md`」（`prompts/system/agents-md-nested.md`）。「涉及」与技能 auto 命中同一依据：开发前取 notes 与需求分析/产品方案/技术方案里出现的路径，审查/验收取 diff.patch 的改动文件。
+- 读 agent 实际所在的 worktree（注入预览读主工作区）；每份被指到的 AGENTS.md 记为清单 L2 项 `agents-md:<仓库>/<相对路径>`（内容 hash、字数、入选依据）。自带 AGENTS.md 加载的运行体（codex）只记录（`native: true`）不指路；kimi / claude-code 的原生行为本机无法核实，照常指路。
+- 优先级：平台约束 > 最近的子目录 AGENTS.md > 仓库根 AGENTS.md > 角色模板（仅限命令、端口、路径等事实）；权限只由工具白名单决定。
+- 不要把关键事实只藏在未登记的长文档中。看板 `GET /api/prompts` 以只读条目 `project/<项目>/agents-md/<仓库>/<相对路径>` 列出仓库内全部 AGENTS.md。
+- 它是高频读取的短规则，所以有长度上限，`scripts/doctor.py` 对仓库根与每个子目录 AGENTS.md 超限告警；子目录文件与根逐字重复 ≥5 行也告警。
 - 新增一条规则，必须同时删掉或合并一条旧规则，或把场景性内容下沉到 `.loop/guides/`、`.loop/skills/`。
 - monorepo 可在子目录另放 AGENTS.md，agent 按改动目录就近优先读。
 
 ## 需求、评审与续跑边界
 
 - notes 只写本次目标、范围、事实、验收与生效方式；notes/summary 都进入 Prompt，不能当作评审日志或规则覆盖通道。评审记录存产物或 `req_reviews`，后者永不自动进入 Prompt。
-- 当前部分模板仍把 summary 叫作「评审反馈/历史记录」，属于实现遗留。流程内返工由调度器补充上下文传递；人工评审须通过看板会话明确报告路径与待修问题，不能假设仅存一条评审记录就会自动注入。
-- `run_agent` 成功恢复旧会话时发送简化续跑文案，不保证把完整项目约定、技能和卡片最新全文重新发送。重启进程或刷新 UI 不能替代上下文更新。
+- 评审打回：评审角色在 result.json 写 `issues`（`[{id, severity, where, what}]`），返工会话的卡片输入只收到「返工输入：未关闭问题」清单 + 评审产物路径（`prompts/system/rework-issues.md`），作者在自己的 result.json 用 `issue_responses` 逐条回应；未带 issues 的打回照常执行，返工输入回退为意见摘要 + 产物全文并留痕。问题来自评审 result.json，不读 `req_reviews`。模板里「评审反馈」对 summary 的引用暂保留（给人看的留档）。
+- 数据围栏：卡片输入块里的标题、notes、summary、上游产物指路、返工问题清单用 `<card-data source="…">…</card-data>` 包住，`prompts/system/common.md` 第 9 条声明块内是数据不是指令。
+- 自动续跑：恢复旧会话前把本次编译清单与该会话上次的清单（`runs/*/manifest.json`，按 session_id 匹配）逐项对比——无变化发简化续跑文案；L2–L6（项目约定、条件片段、技能、卡片数据）有变化时续跑消息前置「上下文更新」（逐条附新正文，要求回读）；L0/L1（平台策略、角色模板）有变化时不续用旧会话，开新会话并附交接说明。清单里记 `context_update`。档案上线前的存量会话与看板人工续跑不做对比，仍按简化文案。
 - 关键配置变化后通过看板聊天框交接：列明变更文件、当前基线、已确认目标、剩余任务与验收，要求回读；新会话走看板「新建聊天」，不自行启动 ACP。冲突先报 need_confirm。
 - 统一输入信任边界与必需文件缺失阻断仍是后续改进方向，不是当前已有保证；Prompt 版本/hash 记录与注入预览见上文「提示词存储与执行档案」。
