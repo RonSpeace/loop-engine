@@ -1,50 +1,311 @@
 {
-  "version": 1,
-  "items": [
-    {"id": "system/common", "file": "system/common.md", "layer": "L0", "title": "通用约束",
-     "placeholders": [], "required": [],
-     "locked": ["3. 结束前把结果 JSON 写入 result.json（路径见文末卡片输入）：{\"status\": \"done|blocked|need_confirm\", \"summary\": \"做了什么/验证方式及结果/失败原因\", \"question\": \"仅 need_confirm 时填\"}"],
-     "used_by": "全部角色 · 所有流程节点（角色模板 {common}）", "when": null},
-    {"id": "system/readonly-tools", "file": "system/readonly-tools.md", "layer": "L0", "title": "只读工具说明",
-     "placeholders": [], "required": [], "locked": [],
-     "used_by": "引用 {readonly_tool_guide} 的角色模板（只读角色）", "when": null},
-    {"id": "system/kill-redline", "file": "system/kill-redline.md", "layer": "L0", "title": "进程安全红线",
-     "placeholders": ["pid"], "required": ["pid"],
-     "locked": ["【进程安全红线】你的 ACP 驱动进程 PID={pid}（进程组）。"],
-     "used_by": "全部角色 · 每次发送（新会话、续跑、人工续跑）末尾", "when": null},
-    {"id": "system/pre-contract", "file": "system/pre-contract.md", "layer": "L7", "title": "前置环节输出契约",
-     "placeholders": ["result_json", "default_flow", "flow_catalog"], "required": ["flow_catalog"],
-     "locked": ["- \"suggested_flow\": 推荐的后置流程 id", "- \"repos\": 本需求实际涉及改动的仓库目录名数组"],
-     "used_by": "前置环节（卡未入流程时）提示词末尾", "when": null},
-    {"id": "system/resume-style", "file": "system/resume-style.md", "layer": "runtime", "title": "续跑输出风格提醒",
-     "placeholders": [], "required": [], "locked": [],
-     "used_by": "续跑文案 {resume_style}", "when": null},
-    {"id": "system/resume-auto", "file": "system/resume-auto.md", "layer": "runtime", "title": "自动续跑文案",
-     "placeholders": ["req_id", "role", "extra", "resume_style", "max_steps"], "required": [], "locked": [],
-     "used_by": "调度器恢复旧会话（自动续跑）", "when": null},
-    {"id": "system/resume-user", "file": "system/resume-user.md", "layer": "runtime", "title": "人工续跑文案",
-     "placeholders": ["req_id", "role", "user_text", "extra", "resume_style"], "required": ["user_text"], "locked": [],
-     "used_by": "看板聊天框人工续跑（恢复旧会话）", "when": null},
-    {"id": "system/wrapup", "file": "system/wrapup.md", "layer": "runtime", "title": "步数截停收尾指令",
-     "placeholders": ["detail", "wrapup_steps"], "required": [], "locked": [],
-     "used_by": "步数预算截停后的限步收尾轮", "when": null},
-    {"id": "system/retry-hint", "file": "system/retry-hint.md", "layer": "runtime", "title": "失败重试原因",
-     "placeholders": ["last_failure"], "required": ["last_failure"], "locked": [],
-     "used_by": "主循环重捞续跑时的补充上下文", "when": null},
-    {"id": "system/project-missing", "file": "system/project-missing.md", "layer": "L2", "title": "项目未配置清单兜底",
-     "placeholders": ["project"], "required": [], "locked": [],
-     "used_by": "项目各仓库都没有 .loop/project.json 时的「项目约定」层", "when": null},
-    {"id": "fragment/branch-only-dev", "file": "fragments/branch-only-dev.md", "layer": "L3", "title": "仅推分支（开发）",
-     "placeholders": [], "required": [], "locked": [],
-     "used_by": "仅推分支项目 · 需求开发", "when": {"roles": ["dev"], "flags": ["project.branch_only"]}},
-    {"id": "fragment/branch-only-accept", "file": "fragments/branch-only-accept.md", "layer": "L3", "title": "仅推分支（验收）",
-     "placeholders": [], "required": [], "locked": [],
-     "used_by": "仅推分支项目 · 测试验证", "when": {"roles": ["accept"], "flags": ["project.branch_only"]}},
-    {"id": "fragment/auto-restart", "file": "fragments/auto-restart.md", "layer": "L3", "title": "服务自动重启",
-     "placeholders": [], "required": [], "locked": [],
-     "used_by": "配置了 restart 配方的项目 · 需求开发", "when": {"roles": ["dev"], "flags": ["project.restart"]}},
-    {"id": "fragment/merge-resolve", "file": "fragments/merge-resolve.md", "layer": "L7", "title": "合并冲突上下文",
-     "placeholders": ["failed", "branch_lines"], "required": ["failed", "branch_lines"], "locked": [],
-     "used_by": "冲突解决角色（按卡填冲突仓库）", "when": {"roles": ["merge_resolve"], "flags": []}}
-  ]
+ "version": 1,
+ "items": [
+  {
+   "id": "system/common",
+   "file": "system/common.md",
+   "layer": "L0",
+   "title": "通用约束",
+   "placeholders": [],
+   "required": [],
+   "locked": [
+    "3. 结束前把结果 JSON 写入 result.json（路径见文末卡片输入）：{\"status\": \"done|blocked|need_confirm\", \"summary\": \"做了什么/验证方式及结果/失败原因\", \"question\": \"仅 need_confirm 时填\"}"
+   ],
+   "used_by": "全部角色 · 所有流程节点（角色模板 {common}）",
+   "when": null
+  },
+  {
+   "id": "system/readonly-tools",
+   "file": "system/readonly-tools.md",
+   "layer": "L0",
+   "title": "只读工具说明",
+   "placeholders": [],
+   "required": [],
+   "locked": [],
+   "used_by": "引用 {readonly_tool_guide} 的角色模板（只读角色）",
+   "when": null
+  },
+  {
+   "id": "system/kill-redline",
+   "file": "system/kill-redline.md",
+   "layer": "L0",
+   "title": "进程安全红线",
+   "placeholders": [
+    "pid"
+   ],
+   "required": [
+    "pid"
+   ],
+   "locked": [
+    "【进程安全红线】你的 ACP 驱动进程 PID={pid}（进程组）。"
+   ],
+   "used_by": "全部角色 · 每次发送（新会话、续跑、人工续跑）末尾",
+   "when": null
+  },
+  {
+   "id": "system/pre-contract",
+   "file": "system/pre-contract.md",
+   "layer": "L7",
+   "title": "前置环节输出契约",
+   "placeholders": [
+    "result_json",
+    "default_flow",
+    "flow_catalog"
+   ],
+   "required": [
+    "flow_catalog"
+   ],
+   "locked": [
+    "- \"suggested_flow\": 推荐的后置流程 id",
+    "- \"repos\": 本需求实际涉及改动的仓库目录名数组"
+   ],
+   "used_by": "前置环节（卡未入流程时）提示词末尾",
+   "when": null
+  },
+  {
+   "id": "system/resume-style",
+   "file": "system/resume-style.md",
+   "layer": "runtime",
+   "title": "续跑输出风格提醒",
+   "placeholders": [],
+   "required": [],
+   "locked": [],
+   "used_by": "续跑文案 {resume_style}",
+   "when": null
+  },
+  {
+   "id": "system/resume-auto",
+   "file": "system/resume-auto.md",
+   "layer": "runtime",
+   "title": "自动续跑文案",
+   "placeholders": [
+    "req_id",
+    "role",
+    "extra",
+    "resume_style",
+    "max_steps"
+   ],
+   "required": [],
+   "locked": [],
+   "used_by": "调度器恢复旧会话（自动续跑）",
+   "when": null
+  },
+  {
+   "id": "system/resume-user",
+   "file": "system/resume-user.md",
+   "layer": "runtime",
+   "title": "人工续跑文案",
+   "placeholders": [
+    "req_id",
+    "role",
+    "user_text",
+    "extra",
+    "resume_style"
+   ],
+   "required": [
+    "user_text"
+   ],
+   "locked": [],
+   "used_by": "看板聊天框人工续跑（恢复旧会话）",
+   "when": null
+  },
+  {
+   "id": "system/wrapup",
+   "file": "system/wrapup.md",
+   "layer": "runtime",
+   "title": "步数截停收尾指令",
+   "placeholders": [
+    "detail",
+    "wrapup_steps"
+   ],
+   "required": [],
+   "locked": [],
+   "used_by": "步数预算截停后的限步收尾轮",
+   "when": null
+  },
+  {
+   "id": "system/retry-hint",
+   "file": "system/retry-hint.md",
+   "layer": "runtime",
+   "title": "失败重试原因",
+   "placeholders": [
+    "last_failure"
+   ],
+   "required": [
+    "last_failure"
+   ],
+   "locked": [],
+   "used_by": "主循环重捞续跑时的补充上下文",
+   "when": null
+  },
+  {
+   "id": "system/project-missing",
+   "file": "system/project-missing.md",
+   "layer": "L2",
+   "title": "项目未配置清单兜底",
+   "placeholders": [
+    "project"
+   ],
+   "required": [],
+   "locked": [],
+   "used_by": "项目各仓库都没有 .loop/project.json 时的「项目约定」层",
+   "when": null
+  },
+  {
+   "id": "fragment/branch-only-dev",
+   "file": "fragments/branch-only-dev.md",
+   "layer": "L3",
+   "title": "仅推分支（开发）",
+   "placeholders": [],
+   "required": [],
+   "locked": [],
+   "used_by": "仅推分支项目 · 需求开发",
+   "when": {
+    "roles": [
+     "dev"
+    ],
+    "flags": [
+     "project.branch_only"
+    ]
+   }
+  },
+  {
+   "id": "fragment/branch-only-accept",
+   "file": "fragments/branch-only-accept.md",
+   "layer": "L3",
+   "title": "仅推分支（验收）",
+   "placeholders": [],
+   "required": [],
+   "locked": [],
+   "used_by": "仅推分支项目 · 测试验证",
+   "when": {
+    "roles": [
+     "accept"
+    ],
+    "flags": [
+     "project.branch_only"
+    ]
+   }
+  },
+  {
+   "id": "fragment/auto-restart",
+   "file": "fragments/auto-restart.md",
+   "layer": "L3",
+   "title": "服务自动重启",
+   "placeholders": [],
+   "required": [],
+   "locked": [],
+   "used_by": "配置了 restart 配方的项目 · 需求开发",
+   "when": {
+    "roles": [
+     "dev"
+    ],
+    "flags": [
+     "project.restart"
+    ]
+   }
+  },
+  {
+   "id": "fragment/merge-resolve",
+   "file": "fragments/merge-resolve.md",
+   "layer": "L7",
+   "title": "合并冲突上下文",
+   "placeholders": [
+    "failed",
+    "branch_lines"
+   ],
+   "required": [
+    "failed",
+    "branch_lines"
+   ],
+   "locked": [],
+   "used_by": "冲突解决角色（按卡填冲突仓库）",
+   "when": {
+    "roles": [
+     "merge_resolve"
+    ],
+    "flags": []
+   }
+  },
+  {
+   "id": "system/rework-issues",
+   "file": "system/rework-issues.md",
+   "layer": "L6",
+   "title": "返工输入：未关闭问题",
+   "placeholders": [
+    "review_name",
+    "round_tag",
+    "issues",
+    "artifact"
+   ],
+   "required": [
+    "issues"
+   ],
+   "locked": [
+    "返工输入：未关闭问题"
+   ],
+   "used_by": "评审打回后的作者返工会话（问题来自评审 result.json 的 issues）",
+   "when": null
+  },
+  {
+   "id": "system/context-update",
+   "file": "system/context-update.md",
+   "layer": "runtime",
+   "title": "续跑上下文更新",
+   "placeholders": [
+    "items"
+   ],
+   "required": [
+    "items"
+   ],
+   "locked": [],
+   "used_by": "续跑时 L2–L6 注入内容有变化：随续跑文案前置补发",
+   "when": null
+  },
+  {
+   "id": "system/resume-handoff",
+   "file": "system/resume-handoff.md",
+   "layer": "runtime",
+   "title": "改开新会话交接",
+   "placeholders": [
+    "role",
+    "reason",
+    "changed"
+   ],
+   "required": [],
+   "locked": [],
+   "used_by": "续跑时平台策略（L0）或角色模板（L1）有变化：不续用旧会话，新会话末尾附交接",
+   "when": null
+  },
+  {
+   "id": "system/agents-md-pointer",
+   "file": "system/agents-md-pointer.md",
+   "layer": "L2",
+   "title": "AGENTS.md 指路（仓库根）",
+   "placeholders": [
+    "root"
+   ],
+   "required": [
+    "root"
+   ],
+   "locked": [],
+   "used_by": "有 .loop/project.json 且仓库根有 AGENTS.md 的项目 · 项目约定层（自带 AGENTS.md 加载的运行体不发）",
+   "when": null
+  },
+  {
+   "id": "system/agents-md-nested",
+   "file": "system/agents-md-nested.md",
+   "layer": "L6",
+   "title": "AGENTS.md 指路（本卡涉及的子目录）",
+   "placeholders": [
+    "items"
+   ],
+   "required": [
+    "items"
+   ],
+   "locked": [],
+   "used_by": "改动路径下有子目录 AGENTS.md 的卡 · 卡片输入块末尾",
+   "when": null
+  }
+ ]
 }

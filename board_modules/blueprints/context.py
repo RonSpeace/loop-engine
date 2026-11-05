@@ -20,7 +20,7 @@ from flask import Blueprint, Response, jsonify, request
 
 
 import prompt_store
-from acp_shared import load_project_manifest
+from acp_shared import agents_md_all, load_project_manifest
 from board_modules.common import artifact_candidates
 
 
@@ -194,14 +194,24 @@ def _write_guard():
 
 
 def _project_prompt_items():
-    """项目约定只读条目：project/<项目>/<仓库>/manifest 与 project/<项目>/<仓库>/guide/<名>。"""
+    """项目约定只读条目：project/<项目>/<仓库>/manifest、project/<项目>/<仓库>/guide/<名>、
+    project/<项目>/agents-md/<仓库>/<相对路径>（仓库内全部 AGENTS.md）。"""
     out = []
     for project, paths in sorted((resolve("_projects_config")() or {}).items()):
         for repo in paths:
+            rname = Path(repo).name
+            # 仓库内全部 AGENTS.md（根 + 子目录）：只读，提示词里只指路不内联
+            for rel in agents_md_all(repo):
+                full = str(Path(repo) / rel)
+                out.append({"id": f"{prompt_store.PROJECT_PREFIX}{project}/agents-md/{rname}/{rel}", "layer": "L2",
+                            "title": f"{project} · {rname}/{rel}", "file": full, "src": full, "readonly": True,
+                            "status": "project", "kind": "project",
+                            "used_by": ("全部角色（项目约定层指路）" if rel == "AGENTS.md"
+                                        else "改动落在该目录下的卡（卡片输入块指路）"),
+                            "when": None, "placeholders": [], "required": [], "locked": []})
             m = load_project_manifest(repo)
             if not m["path"]:
                 continue
-            rname = Path(repo).name
             base = f"{prompt_store.PROJECT_PREFIX}{project}/{rname}"
             out.append({"id": f"{base}/manifest", "layer": "L2", "title": f"{project} · {rname} 项目清单",
                         "file": m["path"], "src": m["path"], "readonly": True, "status": "project",

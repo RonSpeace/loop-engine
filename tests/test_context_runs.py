@@ -49,7 +49,8 @@ class CompileManifest(unittest.TestCase):
             self.assertEqual(layers["skill:proj-skill"], "L4")
             self.assertEqual(layers["card:summary"], "L6")
             self.assertNotIn("guide:repo-man/inst", ids, "inst 指引只给 dev/accept")
-            self.assertEqual(c.skipped, [{"id": "skill:missing-skill", "why": "技能文件未找到"}])
+            self.assertEqual([x["id"] for x in c.skipped], ["skill:missing-skill"])
+            self.assertTrue(c.skipped[0]["why"].startswith("未找到"))
             self.assertEqual([w["code"] for w in c.warnings], ["missing_skill"])
             for it in c.items:
                 self.assertEqual(len(it["hash"]), 12)

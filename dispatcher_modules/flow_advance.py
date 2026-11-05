@@ -4,6 +4,7 @@ import json
 import os
 import time
 
+import prompt_store
 from acp_shared import ACP_MODEL, RESULT_FILENAME, _pool_lookup, default_flow_id, enabled_flows, load_project_manifest, pre_role, role_meta
 
 from dispatcher_modules.workspace import outside_repos, validate_repos
@@ -306,6 +307,45 @@ def _review_bounce_extra(req, node, reason, round_no=None):
     return extra
 
 
+ISSUE_SEVERITIES = ("P1", "P2", "P3", "high", "medium", "low")
+REVIEW_ISSUES_MAX = 30
+
+
+def review_issues(result):
+    """评审 result.json 的 issues（打回时必填）：[{id, severity, where, what}]。
+    宽容解析：非列表 → []；元素须为 dict 且 what 非空；id 缺省按序号补 I<n>；字段截断防膨胀。"""
+    raw = (result or {}).get("issues")
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for i, it in enumerate(raw[:REVIEW_ISSUES_MAX], 1):
+        if not isinstance(it, dict):
+            continue
+        what = " ".join(str(it.get("what") or "").split())[:500]
+        if not what:
+            continue
+        out.append({"id": str(it.get("id") or f"I{i}")[:20],
+                    "severity": str(it.get("severity") or "")[:10],
+                    "where": " ".join(str(it.get("where") or "").split())[:200],
+                    "what": what})
+    return out
+
+
+def _review_rework_extra(req, node, issues, round_no=None):
+    """评审打回（带 issues）注入作者返工会话的 extra：未关闭问题清单 + 评审产物路径
+    （prompts/system/rework-issues.md）。不读 req_reviews；summary 不再兼做反馈通道。"""
+    lines = []
+    for it in issues:
+        sev = f"[{it['severity']}]" if it["severity"] else ""
+        where = f" {it['where']}：" if it["where"] else " "
+        lines.append(f"- {it['id']}{sev}{where}{it['what']}")
+    art = node.get("artifact") or role_meta(node.get("role"), "artifact")
+    art_path = str(D.artifact_dir(req) / art) if art else "（无）"
+    return prompt_store.render("system/rework-issues", review_name=D.node_display(node),
+                               round_tag=(f"（第 {round_no} 轮）" if round_no else ""),
+                               issues="\n".join(lines), artifact=art_path)
+
+
 def _review_node_done(req, node, result, summary):
     """评审节点完成（§1.4）：verdict pass → 前进（清轮次）；reject → 打回前驱节点复修
     （**先回退指针再 resume**，否则 #279 守卫按当前节点校验会拦截致卡死；打回意见经 extra 注入
@@ -374,9 +414,17 @@ def _review_node_done(req, node, result, summary):
         D.post_dispatcher_event(int(req_id),
                               f"「{D.node_display(node)}」未通过，打回「{D.node_display(prev)}」重做（第 {cur} 轮）",
                               kind="phase")
-        D._spawn_safe(fresh, prev.get("role"),
-                    extra=_review_bounce_extra(fresh, node, D.format_summary_points(summary), cur),
-                    resume=True)
+        issues = review_issues(result)
+        if issues:
+            bounce = _review_rework_extra(fresh, node, issues, cur)
+        else:
+            # fail-closed：打回未带合法 issues 照常打回，返工输入回退旧口径（意见摘要 + 评审产物全文）并留痕
+            log.warning(f"需求 #{req_id} 评审节点 {role} 打回未带 issues，返工输入回退为意见摘要 + 产物全文")
+            D.post_dispatcher_event(int(req_id),
+                                  f"「{D.node_display(node)}」打回未提供 issues 问题清单，返工输入回退为意见摘要",
+                                  kind="action")
+            bounce = _review_bounce_extra(fresh, node, D.format_summary_points(summary), cur)
+        D._spawn_safe(fresh, prev.get("role"), extra=bounce, resume=True)
         return
     with D.state_lock:
         history = list(((D.state.get("review_round_points") or {}).get(req_id) or {}).get(rounds_key) or [])

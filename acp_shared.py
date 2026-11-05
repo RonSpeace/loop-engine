@@ -756,6 +756,39 @@ def agents_md_problems(repo, manifest=None):
     return out
 
 
+AGENTS_MD_REPEAT_WARN_LINES = 5   # 子目录 AGENTS.md 与根文件逐字重复 ≥ 该行数即告警
+
+
+def agents_md_nested_problems(repo, manifest=None):
+    """子目录 AGENTS.md 检查（doctor 只告警）：与根同一长度上限；与根文件逐字重复 ≥5 行非平凡内容
+    （子目录规范应只写该目录特有的约定，重复内容会让同一规则在上下文里出现两遍）。纯读。"""
+    from acp_modules.agents_md import discover_all, repeated_root_lines
+    limits = (manifest or {}).get("agents_md") or {}
+
+    def _limit(key, default):
+        v = limits.get(key)
+        return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else default
+    max_lines, max_chars = _limit("max_lines", AGENTS_MD_MAX_LINES), _limit("max_chars", AGENTS_MD_MAX_CHARS)
+    root = Path(repo) / "AGENTS.md"
+    root_text = root.read_text(encoding="utf-8", errors="replace") if root.is_file() else ""
+    out = []
+    for rel in discover_all(repo):
+        if rel == "AGENTS.md":
+            continue
+        f = Path(repo) / rel
+        text = f.read_text(encoding="utf-8", errors="replace")
+        n_lines, n_chars = len(text.splitlines()), len(text)
+        if n_lines > max_lines:
+            out.append(f"{f} 共 {n_lines} 行，超过上限 {max_lines} 行")
+        if n_chars > max_chars:
+            out.append(f"{f} 共 {n_chars} 字符，超过上限 {max_chars} 字符")
+        rep = repeated_root_lines(root_text, text)
+        if len(rep) >= AGENTS_MD_REPEAT_WARN_LINES:
+            out.append(f"{f} 与仓库根 AGENTS.md 逐字重复 {len(rep)} 行（如「{rep[0][:40]}」），"
+                       "子目录规范只写该目录特有的约定")
+    return out
+
+
 def skill_text(name, repos=()):
     """技能片段正文（技能 v2 发现规则，见 acp_modules/skills.py）：项目 <repo>/.loop/skills/ 优先，
     其次本机覆盖 prompts.local/skills/，最后全局 prompts/skills/；每个作用域 <名>/SKILL.md 优先于平铺 <名>.md，
@@ -1282,6 +1315,10 @@ from acp_modules.skills import (  # noqa: F401,E402
     compose_skill_file, load_skill, skill_chain, find_skill, discover, parse_notes_skills,
     glob_match, paths_from_text, auto_hit, select_skills, skills_block, catalog_block,
     lint as skill_lint, lint_level as skill_lint_level, materialize_for_claude,
+)
+from acp_modules.agents_md import (  # noqa: F401,E402
+    AGENTS_MD, discover_for_paths as agents_md_for_paths, discover_all as agents_md_all,
+    repeated_root_lines as agents_md_repeated_lines,
 )
 from acp_modules.readonly_tools import (  # noqa: F401,E402
     READONLY_TOOL_GUIDE, SENSITIVE_ENV_RE, SENSITIVE_SSH_KEY_RE, SENSITIVE_SUFFIXES,

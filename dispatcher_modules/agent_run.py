@@ -82,7 +82,16 @@ def spawn_agent(req, role=None, extra="", resume=False, model_override=None):
     # #419：进入 doing 不再写 phase（phase 为历史只读列；推进按卡上流程快照 node_index）
     D.set_req(req["id"], {"status": "doing"})
     D._note_review_model(req, role)
-    prompt = D.build_prompt(req, role, extra)
+    try:
+        prompt = D.build_prompt(req, role, extra)
+    except D.MissingRequiredContext as e:
+        # fail-closed：必需技能缺失/不可用 → 不拉会话，卡转暂缓并写明缺什么
+        names = "、".join(e.names)
+        log.error(f"需求 #{req_id} 角色 {role} 必需技能缺失（{names}），停线转暂缓")
+        D.set_status(req["id"], "later")
+        D.post_dispatcher_event(req_id, f"「{D.ROLE_NAMES.get(role, role)}」必需技能缺失或不可用：{names}，"
+                                        "未拉起会话，需求转暂缓（去技能库修复后改回待开发）", kind="action")
+        return
     log.info(f"需求 #{req_id} [{project}] 角色={role} 开始{'（续跑）' if resume else ''}: {req['title']}")
     resume_sid = D.find_resume_sid(req, role) if resume else None
     if resume_sid:
@@ -301,6 +310,11 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
     kept = held is not None
     session = None
     run_meta = None  # 执行档案（manifest 路径 / prompt_hash / prefix_hash），随运行记录落 agent_runs
+    # 本次 build_prompt 的编译结果（清单）；被替换/缺失（测试桩、人工续跑占位 prompt）时为 None，只记全文
+    compiled = D.last_compiled(req["id"], role)
+    if compiled is not None and compiled.prompt != prompt:
+        compiled = None
+    ctx_plan = None   # 续跑补发计划（context.resume_plan）
     arun = None  # #388：本线程登记的 active_runs 对象（finally 对象匹配删除，防误删新会话登记）
     try:
         if kept:
@@ -380,6 +394,15 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
             log.info(f"需求 #{req_id} ACP 进程启动 (pid={session.proc.pid}, role={role})")
             resume_sid = (resume_session_id if resume_session_id is not None
                           else (D.find_resume_sid(req, role) if resume else None))
+            if resume_sid and compiled is not None and user_text is None:
+                # 续跑补发：与该会话上次清单对比；L0/L1 变化 → 不续用旧会话，新会话带完整提示词 + 交接
+                ctx_plan = D.context_resume_plan(req, role, compiled, resume_sid)
+                if ctx_plan["mode"] == "new_session":
+                    D.post_event(req["id"], "system",
+                                 "上下文的平台策略/角色模板已变化（" + "、".join(ctx_plan["changed"])
+                                 + "），不续用旧会话，改开新会话并附交接说明")
+                    resume_sid = None
+                    prompt = prompt + "\n\n" + ctx_plan["handoff"]
             resumed = session.start(workdir, resume_session_id=resume_sid)
             # #11 落定回读留痕（仅非 held 复用轮）：降级 / 未落定 → 记录 + 时间线 kind="model"
             settle = getattr(session, "model_settle", None)
@@ -436,14 +459,27 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
         # #108：进程安全红线统一注入（新会话与续跑两条路径一次覆盖，注入点唯一）
         actual_prompt = D.append_kill_redline(actual_prompt, session.proc.pid)
         # 执行档案：本轮实际发出的全文 + 注入清单（编译结果取自本次 build_prompt；被替换/缺失时只记全文）
-        compiled = D.last_compiled(req["id"], role)
-        if compiled is not None and compiled.prompt != prompt:
-            compiled = None
         extra_items = []
+        context_update = None
+        if ctx_plan is not None:
+            sent = bool(resumed and ctx_plan["mode"] == "update")
+            context_update = {"sent": sent or (ctx_plan["mode"] == "new_session" and not resumed),
+                              "mode": ctx_plan["mode"], "changed": ctx_plan["changed"],
+                              "prev_run_key": ctx_plan["prev_run_key"]}
+            if sent:
+                # L2–L6 有变化：续跑消息前置「上下文更新」块
+                actual_prompt = ctx_plan["block"] + "\n\n" + actual_prompt
+                extra_items.append(D.context_runtime_item("system/context-update", ctx_plan["block"],
+                                                          "续跑补发：" + "、".join(ctx_plan["changed"])))
+                D.post_event(req["id"], "system", "续跑补发上下文更新：" + "、".join(ctx_plan["changed"]),
+                             session_id=session.session_id)
+            elif ctx_plan["mode"] == "new_session":
+                extra_items.append(D.context_runtime_item("system/resume-handoff", ctx_plan["handoff"],
+                                                          "L0/L1 变化改开新会话"))
         if resume_id:
             extra_items.append(D.context_runtime_item(resume_id, actual_prompt, "恢复旧会话"))
         run_meta = _record_start(req, role, actual_prompt, "resume" if resumed else "new", session,
-                                 compiled=compiled, extra_items=extra_items)
+                                 compiled=compiled, extra_items=extra_items, context_update=context_update)
         if not hold and not kept:
             # C2：自动开发会话按角色预算限步（人工续跑 hold/复用轮不限，由人掌控）
             session.step_budget = (D.role_budget(role, project=req.get("project")) or {}).get("max_steps")

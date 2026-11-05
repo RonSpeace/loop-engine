@@ -268,12 +268,15 @@ from dispatcher_modules.flow_engine import (  # noqa: E402,F401  拆分回挂，
     pre_slot_contract_text, project_conventions_text, role_allowed, role_for,
     role_skill_names, scenario_skills_text, split_role_template, stage_input_for, stage_of_review,
     FRAGMENT_ORDER, project_flags, selected_fragments,
+    AGENTS_MD_NATIVE_RUNTIMES, agents_md_files, agents_md_nested_text, card_data, card_paths_hint,
+    fragments_text, runtime_for,
 )
 
 # ==================== 上下文编译器 + 执行档案（context-design 第三、七节） ====================
 from dispatcher_modules.context import (  # noqa: E402,F401  拆分回挂，见 dispatcher_modules/context.py
-    Compiled, build_manifest, compile_context, context_runtime_item, last_compiled, new_run_key,
-    record_session_start, runs_dir, write_run_record,
+    Compiled, MissingRequiredContext, build_manifest, compile_context, context_runtime_item, last_compiled, new_run_key,
+    previous_manifest, public_items, record_session_start, runs_dir, write_run_record,
+    resume_plan as context_resume_plan,
 )
 
 # ==================== 飞书机器人 ====================

@@ -242,7 +242,8 @@ def check_dirs_and_port():
 
 
 def check_project_conventions():
-    """A3/A4：各项目仓库的 .loop/project.json 清单校验 + AGENTS.md 长度检查（均为告警，不阻断启动）。"""
+    """A3/A4：各项目仓库的 .loop/project.json 清单校验 + AGENTS.md 长度检查（仓库根与各子目录 AGENTS.md，
+    子目录文件另查与根逐字重复；均为告警，不阻断启动）。"""
     sys.path.insert(0, str(REPO))
     try:
         import acp_shared
@@ -275,6 +276,9 @@ def check_project_conventions():
                 warn(f"项目 {name}：{msg}")
             if not problems:
                 ok(f"项目 {name}：{Path(p) / 'AGENTS.md'} 长度在上限内")
+            nested = acp_shared.agents_md_nested_problems(p, m)
+            for msg in nested:
+                warn(f"项目 {name}：{msg}")
 
 
 def check_flow_config():

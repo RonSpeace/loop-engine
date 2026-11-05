@@ -165,13 +165,17 @@ class P3FeedbackVariations(PrefixCacheBase):
         self.assertIn("第 1 轮打回", pb[3])
         self.assertNotIn("第 1 轮打回", pb[0])
 
-    def test_company_extra_change_only_in_card_block(self):
+    def test_company_fragment_in_stable_prefix(self):
+        """上下文编译器二期：仅推分支是项目级条件片段（L3）→ 进稳定前缀（项目约定之后），不进卡片块"""
         pa = self.parts(self.req(42), "dev")
         self.projects["proj"]["company"] = True
         pb = self.parts(self.req(42), "dev")
+        pc = self.parts(self.req(43), "dev")
         self.projects["proj"]["company"] = False
         self.assertEqual(pa[0], pb[0])
-        self.assertIn("仅推分支项目", pb[3])
+        self.assertIn("仅推分支项目", pb[1])
+        self.assertNotIn("仅推分支项目", pb[3])
+        self.assertEqual(pb[1], pc[1], "片段随项目不随卡")
 
     def test_merge_ctx_change_only_in_card_block(self):
         d.state.setdefault("merge_resolve", {})["42"] = {"failed": [str(self.r1)]}

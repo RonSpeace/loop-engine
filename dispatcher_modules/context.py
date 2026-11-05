@@ -21,19 +21,30 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import acp_shared
 import prompt_store
 from acp_shared import GLOBAL_SKILLS_DIR, MANIFEST_GUIDE_MAX_CHARS, _SKILL_NAME_RE, _repo_rel_file, \
     load_project_manifest, role_meta
 
 from dispatcher_modules.flow_engine import (CARD_INPUTS_MARK, build_prompt_parts, in_pre_stage,
                                              node_index_of, nodes_of, pre_slot_contract_text,
-                                             selected_fragments, split_role_template)
+                                             AGENTS_MD_NATIVE_RUNTIMES, fragments_text, selected_fragments,
+                                             split_role_template)
 from dispatcher_modules.workspace import in_test_env
 from dispatcher_modules.runtime import D, log, threading
 
 REAL_ARTIFACTS_ROOT = Path.home() / ".req-board" / "artifacts"
 RUNS_DIRNAME = "runs"
 _TRUNC_MARK = "已截断，完整内容见"
+REWORK_MARK = "返工输入：未关闭问题"
+
+
+class MissingRequiredContext(Exception):
+    """必需件缺失（必需技能缺失/不可用）：不拉会话，卡转暂缓并写明缺什么（fail-closed）。"""
+
+    def __init__(self, names):
+        self.names = list(names)
+        super().__init__("必需技能缺失或不可用：" + "、".join(self.names))
 
 
 @dataclass
@@ -59,9 +70,14 @@ def last_compiled(req_id, role, pop=True):
 
 
 def _item(item_id, layer, title, text, *, origin, src, why, truncated=0, chars=None):
+    """清单项；"_text" 只留在内存（续跑补发用），落盘/接口前由 public_items 剥掉。"""
     return {"id": item_id, "layer": layer, "title": title, "src": src, "origin": origin,
             "hash": prompt_store.short_hash(text), "chars": len(text) if chars is None else chars,
-            "why": why, "truncated": int(truncated or 0)}
+            "why": why, "truncated": int(truncated or 0), "_text": text}
+
+
+def public_items(items):
+    return [{k: v for k, v in it.items() if not k.startswith("_")} for it in items]
 
 
 def _store_item(item_id, layer, why, text=None, *, chars=None):
@@ -137,51 +153,60 @@ def _convention_items(project, role, conv_text):
     return items, warnings
 
 
-def _skill_items(project, role):
-    """L4 场景技能：与 scenario_skills_text 同一选择（flows.json 角色点名 + 项目清单 skills.<角色>，
-    项目技能优先于全局同名）；只记录、不改正文。"""
-    repos = D._project_repos(project)
-    role_names = list(D.role_skill_names(role))
-    names = list(role_names)
-    proj_named = set()
-    for repo in repos:
-        for n in (load_project_manifest(repo)["skills"].get(role) or []):
-            proj_named.add(n)
-            if n not in names:
-                names.append(n)
+def _skill_items(sel, role, claude_native=False):
+    """技能清单项（技能 v2 Selection）：always → L4、on_demand → L5（技能目录）、auto/点名 → L6。
+    id 一律 skill:<名>（技能库按此前缀统计加载次数）。claude-code 运行体下 L5/L6 技能落到
+    .claude/skills/ 由其原生加载，清单项标 native。"""
     items, skipped, warnings = [], [], []
-    for n in names:
-        why = "flows.json 角色点名" if n in role_names else f"项目清单 skills.{role} 点名"
-        path, origin = None, "default"
-        if isinstance(n, str) and _SKILL_NAME_RE.match(n):
-            for repo in repos:
-                f = _repo_rel_file(repo, Path(".loop") / "skills" / f"{n}.md")[0]
-                if f is not None and f.is_file():
-                    path, origin = f, "project"
-                    break
-            if path is None and (GLOBAL_SKILLS_DIR / f"{n}.md").is_file():
-                path = GLOBAL_SKILLS_DIR / f"{n}.md"
-        if path is None:
-            skipped.append({"id": f"skill:{n}", "why": "技能文件未找到"})
-            warnings.append({"code": "missing_skill", "id": f"skill:{n}",
-                             "message": f"角色 {role} 声明的技能 {n} 未找到（已跳过）"})
-            continue
-        try:
-            raw = path.read_text(encoding="utf-8", errors="replace").strip()
-        except Exception:
-            raw = ""
-        cut = max(0, len(raw) - MANIFEST_GUIDE_MAX_CHARS)
-        text = raw[:MANIFEST_GUIDE_MAX_CHARS] if cut else raw
-        items.append(_item(f"skill:{n}", "L4", f"场景技能 {n}", text, origin=origin, src=str(path), why=why,
-                           truncated=cut, chars=len(f"【场景技能：{n}】\n") + len(text)))
-        if cut:
-            warnings.append({"code": "truncated", "id": f"skill:{n}",
-                             "message": f"技能 {n} 超过 {MANIFEST_GUIDE_MAX_CHARS} 字，截断 {cut} 字（全文 {path}）"})
+
+    def add(sk, layer, why, native=False):
+        it = _item(f"skill:{sk.name}", layer, f"场景技能 {sk.name}", sk.text,
+                   origin=("project" if sk.scope == "project" else "override" if sk.scope == "local" else "default"),
+                   src=str(sk.path), why=why, truncated=(sk.truncated or 0),
+                   chars=(len(f"【场景技能：{sk.name}】\n") + len(sk.text)) if layer != "L5" else len(sk.description or ""))
+        if native:
+            it["native"] = True
+        items.append(it)
+        if sk.truncated:
+            warnings.append({"code": "truncated", "id": f"skill:{sk.name}",
+                             "message": f"技能 {sk.name} 超过上限，截断 {sk.truncated} 字（全文 {sk.path}）"})
+    for sk in sel.always:
+        add(sk, "L4", sel.why.get(sk.name) or "always")
+    for sk in sel.catalog:
+        add(sk, "L5", sel.why.get(sk.name) or "on_demand", native=claude_native)
+    for sk, why in sel.card:
+        add(sk, "L6", why, native=claude_native)
+    for name, why in sel.skipped:
+        skipped.append({"id": f"skill:{name}", "why": why})
+        if why.startswith("未找到"):
+            warnings.append({"code": "missing_skill", "id": f"skill:{name}",
+                             "message": f"角色 {role} 声明的技能 {name} 未找到（已跳过）"})
+    for name in sel.missing_required:
+        warnings.append({"code": "missing_required", "id": f"skill:{name}",
+                         "message": f"必需技能 {name} 缺失或不可用（停线）"})
+    warnings += list(sel.warnings or [])
     return items, skipped, warnings
 
 
-def _card_items(req, role, extra, card_text, fragments, merge_text):
-    """L6 卡片数据 + L3 条件片段 + L7 运行参数（卡片输入块按来源拆项；剩余为模板框架与运行参数）。"""
+def _agents_md_items(files, runtime):
+    """嵌套 AGENTS.md（L2）：只指路不内联；清单记内容 hash 与字数（读 agent 实际看到的 worktree 版本）。"""
+    native = runtime in AGENTS_MD_NATIVE_RUNTIMES
+    items = []
+    for f in files:
+        try:
+            text = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        it = _item(f"agents-md:{f['repo']}/{f['rel']}", "L2", f"AGENTS.md {f['show']}", text, origin="project",
+                   src=f["path"], why=f["why"])
+        if native:
+            it["native"] = True
+        items.append(it)
+    return items
+
+
+def _card_items(req, role, extra, card_text, merge_text):
+    """L6 卡片数据 + L7 运行参数（卡片输入块按来源拆项；剩余为模板框架与运行参数）。"""
     items = []
     used = 0
     title_notes = f"{req.get('title') or ''}\n{req.get('notes') or '（无）'}"
@@ -198,10 +223,12 @@ def _card_items(req, role, extra, card_text, fragments, merge_text):
         items.append(_item("card:stage-input", "L6", "上游产物指路", si, origin="card",
                            src=str(D.artifact_dir(req)), why=f"流程第 {node_index_of(req)} 个节点"))
         used += len(si)
-    for fid in fragments:
-        items.append(_store_item(fid, "L3", _fragment_why(fid)))
-        used += items[-1]["chars"]
-    if extra:
+    if extra and REWORK_MARK in extra:
+        # 评审打回带 issues 的返工输入（prompts/system/rework-issues.md）：L6 数据
+        items.append(_item("card:rework-issues", "L6", "返工输入：未关闭问题", extra, origin="card",
+                           src="评审 result.json issues", why="评审打回"))
+        used += len(extra)
+    elif extra:
         items.append(_item("card:extra", "L7", "补充上下文", extra, origin="runtime", src="dispatcher",
                            why="调度器传入（失败重试原因等）"))
         used += len(extra)
@@ -235,7 +262,8 @@ def compile_context(req, role, extra="", *, dry=False):
             if any(n.get("node_type") == "code" for n in (nodes_of(req) or [])[:node_index_of(req) or 0]):
                 D._gen_review_diff(req)
     # #42 前缀缓存拼装：固定段 → 项目约定 → 场景技能 → 卡片输入块（可变尾）
-    parts = build_prompt_parts(req, role, extra=extra, dry=dry)
+    meta = {}
+    parts = build_prompt_parts(req, role, extra=extra, dry=dry, _out=meta)
     prompt = "".join(parts)
     contract = ""
     # #419 前置槽位契约：仅当卡处于前置阶段（未入流程、无快照）时追加（按槽位而非角色名判定）
@@ -244,17 +272,25 @@ def compile_context(req, role, extra="", *, dry=False):
         prompt += contract
     compiled = Compiled(prompt=prompt, parts=list(parts), prefix="".join(parts[:3]))
     try:
-        _fill_manifest(compiled, req, role, extra, parts, contract)
+        _fill_manifest(compiled, req, role, extra, parts, contract, meta)
     except Exception as e:      # 清单是旁路记录：失败只告警，绝不影响正文
         log.warning(f"需求 #{req.get('id')} 注入清单生成失败（不影响提示词）: {e}")
         compiled.warnings.append({"code": "manifest_error", "id": "", "message": str(e)})
+    sel = meta.get("selection")
+    if sel is not None and sel.missing_required and not dry:
+        raise MissingRequiredContext(sel.missing_required)
     if not dry:
+        if meta.get("claude_native") and sel is not None:
+            try:
+                acp_shared.materialize_for_claude(D.dev_workdir_for(req), sel.loaded())
+            except Exception as e:
+                log.warning(f"需求 #{req.get('id')} 技能落盘 .claude/skills 失败（不阻断）: {e}")
         with _last_lock:
             _last_compiled[(str(req["id"]), role)] = compiled
     return compiled
 
 
-def _fill_manifest(compiled, req, role, extra, parts, contract):
+def _fill_manifest(compiled, req, role, extra, parts, contract, meta=None):
     tmpl = D.role_prompt(role)
     fixed_tmpl, _card_tmpl = split_role_template(tmpl)
     items, skipped, warnings = [], [], []
@@ -275,21 +311,30 @@ def _fill_manifest(compiled, req, role, extra, parts, contract):
         fixed_chars -= len(hint)
     role_item = _store_item(f"role/{role}", "L1", "当前节点角色", text=fixed_tmpl, chars=max(0, fixed_chars))
     items.insert(1, role_item)
-    conv_items, conv_warn = _convention_items(req["project"], role, parts[1])
+    frags = selected_fragments(req["project"], role)
+    frag_text = fragments_text(req["project"], role)
+    conv_text = parts[1][:len(parts[1]) - len(frag_text)] if frag_text and parts[1].endswith(frag_text) else parts[1]
+    conv_items, conv_warn = _convention_items(req["project"], role, conv_text)
     items += conv_items
     warnings += conv_warn
     if "system/project-missing" in [i["id"] for i in conv_items]:
         used_ids.append("system/project-missing")
-    sk_items, sk_skipped, sk_warn = _skill_items(req["project"], role)
+    meta = meta or {}
+    items += _agents_md_items(meta.get("agents_md") or [], meta.get("runtime"))
+    sel = meta.get("selection")
+    sk_items, sk_skipped, sk_warn = (_skill_items(sel, role, meta.get("claude_native"))
+                                     if sel is not None else ([], [], []))
     items += sk_items
     skipped += sk_skipped
     warnings += sk_warn
-    frags = selected_fragments(req["project"], role)
+    # L3 条件片段：稳定前缀（项目约定之后）
+    for fid in frags:
+        items.append(_store_item(fid, "L3", _fragment_why(fid)))
     used_ids += frags
     merge_text = _merge_text_of(parts[3]) if role == "merge_resolve" else ""
     if merge_text:
         used_ids.append("fragment/merge-resolve")
-    items += _card_items(req, role, extra, parts[3], frags, merge_text)
+    items += _card_items(req, role, extra, parts[3], merge_text)
     if contract:
         items.append(_store_item("system/pre-contract", "L7", "卡处于前置环节（未入流程）", text=contract))
         used_ids.append("system/pre-contract")
@@ -331,8 +376,8 @@ def build_manifest(req, role, compiled, sent_text, *, kind, run_key=None, runtim
                    extra_items=(), context_update=None, parent=None):
     """manifest 字典（不落盘）：compiled 可为 None（编译结果缺失时只记全文 hash 与字数）。"""
     flow = (req or {}).get("flow")
-    items = list(compiled.items) if compiled else []
-    items += list(extra_items)
+    items = public_items(list(compiled.items) if compiled else [])
+    items += public_items(extra_items)
     m = {
         "run_key": run_key or new_run_key(role), "req": req.get("id"), "project": req.get("project"),
         "role": role, "flow": flow, "node_index": node_index_of(req), "kind": kind,
@@ -395,6 +440,92 @@ def record_session_start(req, role, sent_text, *, kind, session=None, compiled=N
         items.append(redline_item(pid))
     m = build_manifest(req, role, compiled, sent_text, kind=kind, runtime=runtime, model=model,
                        extra_items=items, context_update=context_update, parent=parent)
+    sid = getattr(session, "session_id", None)
+    if isinstance(sid, str) and sid:
+        m["session_id"] = sid
     path = write_run_record(req, m, sent_text)
     return {"run_key": m["run_key"], "manifest_path": path, "prompt_hash": m["prompt_hash"],
             "prefix_hash": m["prefix_hash"], "manifest": m}
+
+
+# ==================== 续跑补发（context-design 第七节） ====================
+# 只比较 L0–L6 的指令/数据项；运行参数（L7 / runtime:*）、补充上下文（每轮由调度器重新给出）、
+# 进程红线（PID 每轮不同）不参与比较。
+DIFF_LAYERS = ("L0", "L1", "L2", "L3", "L4", "L5", "L6")
+DIFF_SKIP_IDS = ("card:extra", "card:rework-issues")
+UPDATE_ITEM_MAX_CHARS = 4000
+
+
+def _diffable(items):
+    return {i["id"]: i for i in items or []
+            if i.get("layer") in DIFF_LAYERS and i.get("id") not in DIFF_SKIP_IDS}
+
+
+def previous_manifest(req, role, session_id):
+    """该会话上一次的清单（同角色、kind new/resume、session_id 命中，取最新）；找不到 → None。
+    存量会话（档案上线前建立、清单无 session_id）一律找不到 → 按现行为发简短续跑文案。"""
+    if not session_id:
+        return None
+    best = None
+    try:
+        root = runs_dir(req)
+        if not root.is_dir():
+            return None
+        for sub in sorted(root.iterdir()):
+            try:
+                m = json.loads((sub / "manifest.json").read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if (isinstance(m, dict) and m.get("role") == role and m.get("kind") in ("new", "resume")
+                    and m.get("session_id") == session_id):
+                best = m
+    except Exception as e:
+        log.warning(f"需求 #{req.get('id')} 读取上一份执行档案失败（按无变化处理）: {e}")
+        return None
+    return best
+
+
+def resume_plan(req, role, compiled, session_id):
+    """续跑前对比本次编译清单与该会话上次清单：
+    - none：无上次清单或无变化 → 照旧发简短续跑文案；
+    - update：L2–L6 有变化 → 续跑消息前置「上下文更新」块（逐条列出并附新正文，要求回读）；
+    - new_session：L0（平台策略）或 L1（角色模板）有变化 → 不续用旧会话，开新会话并附交接说明
+      （与飞书助手 prompt_hash 不一致即重建同一口径）。"""
+    plan = {"mode": "none", "changed": [], "block": "", "handoff": "", "prev_run_key": None}
+    prev = previous_manifest(req, role, session_id)
+    if not prev or compiled is None:
+        return plan
+    plan["prev_run_key"] = prev.get("run_key")
+    old = _diffable(prev.get("items"))
+    new = _diffable(compiled.items)
+    changed = [k for k in new if k not in old or old[k].get("hash") != new[k].get("hash")]
+    removed = [k for k in old if k not in new]
+    plan["changed"] = changed + removed
+    if not plan["changed"]:
+        return plan
+    layers = {(new.get(k) or old.get(k) or {}).get("layer") for k in plan["changed"]}
+    if layers & {"L0", "L1"}:
+        reasons = []
+        if "L0" in layers:
+            reasons.append("平台策略")
+        if "L1" in layers:
+            reasons.append("角色模板")
+        plan["mode"] = "new_session"
+        plan["handoff"] = prompt_store.render("system/resume-handoff", role=D.ROLE_NAMES.get(role, role),
+                                              reason="、".join(reasons), changed="、".join(plan["changed"]))
+        return plan
+    blocks = []
+    for k in changed:
+        it = new[k]
+        text = str(it.get("_text") or "")
+        if len(text) > UPDATE_ITEM_MAX_CHARS:
+            text = text[:UPDATE_ITEM_MAX_CHARS] + f"\n……（超过 {UPDATE_ITEM_MAX_CHARS} 字已截断，完整内容见 {it.get('src')}）"
+        if k.startswith("card:"):
+            text = f'<card-data source="{k}">{text}</card-data>'
+        tag = "新增" if k not in old else "已变更"
+        blocks.append(f"--- {tag}：{it.get('title') or k}（{k}，{it.get('layer')}）---\n{text}")
+    for k in removed:
+        blocks.append(f"--- 已移除：{(old[k].get('title') or k)}（{k}）——不再适用，忽略此前收到的这部分 ---")
+    plan["mode"] = "update"
+    plan["block"] = prompt_store.render("system/context-update", items="\n".join(blocks))
+    return plan
