@@ -145,6 +145,7 @@ window.LOOP_I18N_EN = {
   "config.toml 配 provider/API key/模型别名，mcp.json 配 MCP server）": "config.toml holds providers / API keys / model aliases, mcp.json holds MCP servers)",
   "default_model 不能为空（原值非空被清空，已拦截）": "default_model cannot be empty (blocked)",
   "default_model（全局默认模型别名）": "default_model (global default model alias)",
+  "feishu.json 缺失，或 app_id / app_secret 为空": "feishu.json is missing, or app_id / app_secret is empty",
   "flows.json / 项目清单已点名该角色": "Already named for this role by flows.json / the project manifest",
   "https://git.example.com/org/repo.git 或 git@host:org/repo.git": "https://git.example.com/org/repo.git or git@host:org/repo.git",
   "kimi CLI 路径": "kimi CLI path",
@@ -392,6 +393,7 @@ window.LOOP_I18N_EN = {
   "原因：": "Reason: ",
   "去技能库查看": "Open in skill library",
   "去提示词处理": "Resolve in prompts",
+  "参考文件": "Reference files",
   "双向 · feishu.json": "Two-way · feishu.json",
   "发给 agent 的每一段文字都是文件：保存写进本机覆盖目录": "Every piece of text sent to agents is a file. Saving writes to the local override folder",
   "发送": "Send",
@@ -402,6 +404,7 @@ window.LOOP_I18N_EN = {
   "取消失败: 网络异常": "Cancel failed: network error",
   "取消本轮": "Cancel turn",
   "受限 git 命令（只读 + add/commit/merge 等），仅 worktree/产物/临时目录内写": "Restricted git (read-only + add/commit/merge…); writes only in worktree / artifacts / temp",
+  "受限角色暂不可用": "not available for restricted roles",
   "变更": "Changed",
   "只 fetch": "Fetch only",
   "只读": "Read-only",
@@ -1076,6 +1079,7 @@ window.LOOP_I18N_EN = {
   "远端地址 URL（探测后回填，可手动修改）": "Remote URL (filled in after detection; editable)",
   "退回待开发": "Back to open",
   "适用场景": "When to use",
+  "适配器默认模型": "adapter default model",
   "选择左侧技能查看详情": "Select a skill on the left",
   "选择文件夹": "Choose folder",
   "选择文件夹失败": "Failed to choose a folder",
@@ -1223,6 +1227,7 @@ window.LOOP_I18N_EN = {
   "：超过 10MB 上限": ": exceeds the 10 MB limit",
   "：非 git 仓库（请在路径中填写含 .git 的仓库根目录）": ": not a git repository (use the repository root that contains .git)",
   "；点「重启调度器使其生效」）": "; click “Restart the dispatcher to apply”)",
-  "？关闭后该会话不可继续。": "? It cannot be continued after closing."
+  "？关闭后该会话不可继续。": "? It cannot be continued after closing.",
+  "📎 参考文件": "📎 Reference files"
  }
 };

@@ -3,7 +3,7 @@
 补丁名单名字与留在 board.py 的名字一律经 runtime.resolve 在调用期读取。
 """
 from acp_shared import ACP_MODEL
-from acp_shared import KIMI, agent_runtime, role_runtime_detail, role_capability
+from acp_shared import KIMI, agent_runtime, role_runtime_detail, role_capability, opencode_session_config
 from acp_shared import NODE_TYPE_LABELS
 from acp_shared import PLAYWRIGHT_ALLOWED_TOOLS
 from acp_shared import READONLY_TOOL_SERVER
@@ -68,10 +68,17 @@ def _effective_model_label(role, project=None):
     model, source = role_model_detail(role, project)
     try:
         runtime_id, _runtime_source = role_runtime_detail(role, project)
-        runtime_label = agent_runtime(runtime_id)["display_name"] + f" ({runtime_id})"
+        rt = agent_runtime(runtime_id)
+        runtime_label = rt["display_name"] + f" ({runtime_id})"
         if runtime_id != "kimi":
-            return f"{runtime_label} · 适配器默认模型" + ("（受限角色暂不可用）" if role_capability(role, "readonly")
-                                                         or role_capability(role, "bash") != "allow" else "")
+            restricted = role_capability(role, "readonly") or role_capability(role, "bash") != "allow"
+            caveat = "（受限角色暂不可用）" if restricted and not rt.get("supports_restricted_roles") else ""
+            if runtime_id == "opencode":
+                # 与会话实际注入的配置同一来源（LOOP_OPENCODE_MODEL_<角色> > LOOP_OPENCODE_MODEL）
+                chosen = (opencode_session_config(role=role).get("model") or "").split("/", 1)[-1]
+                if chosen:
+                    return f"{chosen} · {runtime_label}{caveat}"
+            return f"{runtime_label} · 适配器默认模型{caveat}"
     except ValueError as exc:
         return f"运行体配置错误：{exc}"
     return f"{model}{_model_source_label(role, source)} · {runtime_label}"
@@ -237,7 +244,7 @@ def _feishu_runtime_text(status=None):
         text = f"凭据未加载（{reason}；点「重启调度器使其生效」）"
     elif state == 'disabled':
         text = (f"显式停用（{reason}）" if 'REQ_BOARD_NO_FEISHU' in (reason or '')
-                else f"凭据未配置（{reason}）")
+                else (reason if (reason or "").startswith("凭据未配置") else f"凭据未配置（{reason}）"))
     else:
         text = f"调度器未上报（{reason}）" if reason else "调度器未上报"
     return text
