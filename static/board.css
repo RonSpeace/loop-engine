@@ -386,6 +386,13 @@
             0% { background-position: 0% 0; }
             100% { background-position: 100% 0; }
         }
+        /* 品牌标识：一段未闭合的环（循环）+ 末端节点（闸门），描边渐变取品牌令牌 */
+        .brand { display: flex; align-items: center; gap: 9px; align-self: center; }
+        .brand-mark { flex: none; display: block; filter: drop-shadow(0 0 6px var(--brand-glow)); }
+        .brand-mark .bm-a { stop-color: var(--accent); }
+        .brand-mark .bm-b { stop-color: var(--cyan); }
+        .brand-mark .bm-node { fill: var(--cyan); stroke: var(--bg); stroke-width: 1.6; }
+        .brand-mark .bm-core { fill: var(--accent); opacity: .55; }
         .page-head h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--brand-fg); }
         /* #15 品牌标识：渐变文字 + 光晕（浅色为纯 --accent 无光晕；不支持 background-clip 时保留 --brand-fg 底色） */
         @supports ((-webkit-background-clip: text) or (background-clip: text)) {
@@ -2076,3 +2083,8 @@
             .cx-detail { padding-left: 12px; }
             .cx-tabs { align-self: stretch; }
         }
+
+        /* 设置 → 外观：开关行 */
+        .sd-switch { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text); cursor: pointer; }
+        .sd-switch input { accent-color: var(--accent); }
+        .sd-switch .sd-note { flex-basis: 100%; margin: 2px 0 0 22px; }

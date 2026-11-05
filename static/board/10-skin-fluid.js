@@ -269,6 +269,9 @@ void main() {
             try {
                 reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
             } catch (e) { reduced = false; }
+            // 默认静态：只渲染一帧流体当底纹（不占 GPU/CPU、不分散注意力）；
+            // localStorage reqBoardFluid=on 时才启用动态流体（设置 → 全局信息里切换）
+            try { if (localStorage.getItem('reqBoardFluid') !== 'on') reduced = true; } catch (e) { reduced = true; }
             try {
                 // preserveDrawingBuffer 仅静态单帧模式（reduced-motion）需要：该模式不跑循环，
                 // 单帧内容须在合成后仍可见；动画模式每帧重绘，保持默认走合成快路径。

@@ -71,7 +71,7 @@
         }
         async function loadSettingsDrawer(force) {
             const body = document.getElementById('settingsBody');
-            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; decorateRoleRows(body); return; }
+            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; decorateRoleRows(body); appendAppearanceGroup(body); return; }
             if (settingsLoading) return;
             settingsLoading = true;
             body.innerHTML = '<div class="sd-note">加载中…</div>';
@@ -82,6 +82,7 @@
                 settingsDrawerHtml = d.html;
                 body.innerHTML = settingsDrawerHtml;
                 decorateRoleRows(body);
+                appendAppearanceGroup(body);
             } catch (e) {
                 settingsDrawerHtml = '';
                 body.innerHTML = '<div class="sd-warn">设置内容加载失败。</div>'
@@ -91,6 +92,22 @@
             } finally {
                 settingsLoading = false;
             }
+        }
+        // 外观（本机偏好，存 localStorage）：动态背景默认关闭，打开后刷新生效
+        function appendAppearanceGroup(body) {
+            if (!body || body.querySelector('#sdAppearance')) return;
+            let on = false;
+            try { on = localStorage.getItem('reqBoardFluid') === 'on'; } catch (e) { on = false; }
+            const sec = document.createElement('section');
+            sec.className = 'sd-group';
+            sec.id = 'sdAppearance';
+            sec.innerHTML = '<h3>外观</h3><label class="sd-switch"><input type="checkbox" id="sdFluidToggle"' + (on ? ' checked' : '')
+                + '><span>动态背景</span><span class="sd-note">流体动画，较耗电；关闭时显示静态底纹。切换后刷新页面生效</span></label>';
+            body.appendChild(sec);
+            sec.querySelector('#sdFluidToggle').addEventListener('change', (ev) => {
+                try { localStorage.setItem('reqBoardFluid', ev.target.checked ? 'on' : 'off'); } catch (e) {}
+                location.reload();
+            });
         }
         // ---- #6 模型设置：GET /api/model-settings（严格读；失败仅抽屉内降级 + 重试） ----
         async function loadModelSettings(force) {

@@ -643,6 +643,9 @@ PHRASES = {
     "加载": "Loaded",
     # ---- 卡片流程进度条 ----
     "当前": "Now", "需要你处理": "needs you",
+    # ---- 设置：外观 ----
+    "外观": "Appearance", "动态背景": "Animated background",
+    "流体动画，较耗电；关闭时显示静态底纹。切换后刷新页面生效": "Fluid animation, uses more power; when off a static backdrop is shown. The page reloads to apply",
 }
 
 PATTERNS = [
