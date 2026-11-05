@@ -109,7 +109,8 @@ BOARD_API = os.environ.get("REQ_BOARD_API", "http://127.0.0.1:8899/api/requireme
 # 看板根 API（/agent-sessions、/manual-commands 等顶层路由），从 BOARD_API 派生
 BOARD_ROOT_API = BOARD_API.rsplit("/requirements", 1)[0] if "/requirements" in BOARD_API else BOARD_API
 # 自动开发的项目清单：projects.json（看板 project 名 -> {paths, confirm}），与看板页面共享，加项目改这个文件
-PROJECTS_FILE = REPO_DIR / "projects.json"
+# REQ_BOARD_PROJECTS 覆盖路径（与 acp_shared / board 同口径；测试实例与注入预览子进程靠它读隔离清单）
+PROJECTS_FILE = Path(os.environ.get("REQ_BOARD_PROJECTS") or (REPO_DIR / "projects.json"))
 # 评审/开发产物统一外移（不在任何仓库/worktree 内，避免随分支清理丢失）
 ARTIFACTS_ROOT = Path.home() / ".req-board" / "artifacts"
 # dev 分支命名规范：f-YYYYMMDD-<req_id>（日期取需求创建日，跨天不漂移）；仅推分支项目（branch_only）分支保留到发版

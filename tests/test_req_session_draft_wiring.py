@@ -85,7 +85,12 @@ class DraftFrontendWiringTest(unittest.TestCase):
         self.assertNotIn("origin", self._fn("sessionFooterHtml"), "中间栏不得新增来源标记")
         self.assertNotIn("origin", self._fn("sessionList"))
         # 页面 DELETE 入口仅两处：需求删除（既有）+ #5 项目移除接入；仍禁止任何会话删除 UI
-        deletes = [m.start() for m in re.finditer(r"method: 'DELETE'", self.js)]
+        # 提示词「恢复默认」与技能库「删除本机版本」只删本机覆盖文件（/api/prompts、/api/skills），不在此锁内
+        prompts_skills = (Path(__file__).resolve().parent.parent / "static" / "board" / "56-prompts-skills.js").read_text(encoding="utf-8")
+        js_rest = self.js.replace(prompts_skills, "")
+        self.assertEqual(len(re.findall(r"method: 'DELETE'", prompts_skills)), 2)
+        self.assertNotIn("/api/agent-sessions", prompts_skills)
+        deletes = [m.start() for m in re.finditer(r"method: 'DELETE'", js_rest)]
         self.assertEqual(len(deletes), 2,
                          "页面 DELETE 入口数量变化（#5 起项目移除接入 /api/projects/<name> 为唯一新增）")
         idx = self.js.index("fetch(`/api/requirements/${id}`")

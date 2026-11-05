@@ -312,7 +312,7 @@
                     selectedAgentSession = null;
                     selectedSid = null;
                     pane.innerHTML = detailHtml(item);
-                    loadReviews(item.id);
+                    afterDetailRender(item);
                 }
             } else if (agentDraft && agentDraft.reqId === item.id && item.status !== 'done'
                        && !selectedSid && !selectedDispatcher && !selectedArtifact && !selectedReqChat) {
@@ -333,7 +333,7 @@
                 refreshDispatcherEvents(item.id);
             } else {
                 pane.innerHTML = detailHtml(item);
-                loadReviews(item.id);
+                afterDetailRender(item);   // 概要分页拉评审记录；上下文分页挂载执行档案（55-context.js）
             }
         }
 
@@ -359,6 +359,19 @@
             // #386 merge 冲突待处理（doing + 冲突表命中）：渲染「重试合并 / 人工接管」，与卡片头部按钮同机制
             const mergeActions = (i.status === 'doing' && mergeConflicts[i.id])
                 ? `<div class="detail-actions"><button class="btn" onclick="decideMerge(${i.id},'retry')">重试合并</button><button class="btn" onclick="decideMerge(${i.id},'takeover')">人工接管</button></div>` : '';
+            // 上下文分页（55-context.js）：头部与元信息共用，正文换成执行档案视图 #ctxPane
+            if (detailTab === 'context') {
+                return `
+            <div class="detail-pane">
+                <div class="detail-head">
+                    ${statusBadgeHtml(i)}
+                    <div class="detail-title">${escapeHtml(i.title)}</div>
+                </div>
+                <div class="detail-meta">${meta.join(' · ')}</div>
+                ${detailTabsHtml(i)}
+                <div class="cx-pane" id="ctxPane" data-req="${i.id}"></div>
+            </div>`;
+            }
             return `
             <div class="detail-pane">
                 <div class="detail-head">
@@ -366,6 +379,7 @@
                     <div class="detail-title">${escapeHtml(i.title)}</div>
                 </div>
                 <div class="detail-meta">${meta.join(' · ')}</div>
+                ${detailTabsHtml(i)}
                 ${mergeActions}
                 <div class="detail-section-label">需求详情</div>
                 <div class="detail-notes${i.notes ? '' : ' empty'}">${notes}</div>

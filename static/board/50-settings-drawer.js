@@ -26,6 +26,8 @@
             modelSettingsLoaded = false;   // 每次打开后首次切模型 tab 重拉
             feishuSettingsLoaded = false;  // 每次打开后首次切通知渠道 tab 重拉（飞书 + Webhook/Slack）
             notifierSettingsLoaded = false;
+            promptsLoaded = false;          // 提示词 / 技能库：每次打开后首次切换重拉（同次打开内保留未保存草稿）
+            skillsLoaded = false;
             switchSettingsTab('global');
             loadSettingsDrawer(false);
         }
@@ -36,28 +38,40 @@
             panel.inert = true;
         }
         function switchSettingsTab(tab) {
-            settingsTab = (tab === 'model') ? 'model' : ((tab === 'feishu') ? 'feishu' : 'global');
+            settingsTab = ['model', 'feishu', 'prompts', 'skills'].includes(tab) ? tab : 'global';
             document.getElementById('sdTabGlobal').classList.toggle('on', settingsTab === 'global');
             document.getElementById('sdTabModel').classList.toggle('on', settingsTab === 'model');
             document.getElementById('sdTabFeishu').classList.toggle('on', settingsTab === 'feishu');
+            document.getElementById('sdTabPrompts').classList.toggle('on', settingsTab === 'prompts');
+            document.getElementById('sdTabSkills').classList.toggle('on', settingsTab === 'skills');
             document.getElementById('sdTabGlobal').setAttribute('aria-selected', String(settingsTab === 'global'));
             document.getElementById('sdTabModel').setAttribute('aria-selected', String(settingsTab === 'model'));
             document.getElementById('sdTabFeishu').setAttribute('aria-selected', String(settingsTab === 'feishu'));
+            document.getElementById('sdTabPrompts').setAttribute('aria-selected', String(settingsTab === 'prompts'));
+            document.getElementById('sdTabSkills').setAttribute('aria-selected', String(settingsTab === 'skills'));
             document.getElementById('settingsBody').hidden = settingsTab !== 'global';
             document.getElementById('settingsModelBody').hidden = settingsTab !== 'model';
             document.getElementById('settingsFeishuBody').hidden = settingsTab !== 'feishu';
+            document.getElementById('settingsPromptsBody').hidden = settingsTab !== 'prompts';
+            document.getElementById('settingsSkillsBody').hidden = settingsTab !== 'skills';
+            // 提示词 / 技能库是左右分栏的编辑器：抽屉加宽（窄屏仍按 100vw 封顶）
+            document.getElementById('settingsDrawer').classList.toggle('sd-wide', settingsTab === 'prompts' || settingsTab === 'skills');
             if (settingsTab === 'model' && !modelSettingsLoaded) loadModelSettings(false);
             if (settingsTab === 'feishu' && !feishuSettingsLoaded) loadFeishuSettings(false);
             if (settingsTab === 'feishu' && !notifierSettingsLoaded) loadNotifierSettings(false);
+            if (settingsTab === 'prompts' && !promptsLoaded) loadPromptsTab(false);
+            if (settingsTab === 'skills' && !skillsLoaded) loadSkillsTab(false);
         }
         function reloadSettingsDrawer() {
             if (settingsTab === 'model') loadModelSettings(true);
             else if (settingsTab === 'feishu') { loadFeishuSettings(true); loadNotifierSettings(true); }
+            else if (settingsTab === 'prompts') loadPromptsTab(true);
+            else if (settingsTab === 'skills') loadSkillsTab(true);
             else loadSettingsDrawer(true);
         }
         async function loadSettingsDrawer(force) {
             const body = document.getElementById('settingsBody');
-            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; return; }
+            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; decorateRoleRows(body); return; }
             if (settingsLoading) return;
             settingsLoading = true;
             body.innerHTML = '<div class="sd-note">加载中…</div>';
@@ -67,6 +81,7 @@
                 if (!d || !d.html) throw new Error('empty');
                 settingsDrawerHtml = d.html;
                 body.innerHTML = settingsDrawerHtml;
+                decorateRoleRows(body);
             } catch (e) {
                 settingsDrawerHtml = '';
                 body.innerHTML = '<div class="sd-warn">设置内容加载失败。</div>'

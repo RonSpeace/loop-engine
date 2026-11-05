@@ -204,6 +204,8 @@
             <button type="button" class="sd-tab on" id="sdTabGlobal" role="tab" aria-selected="true">全局信息</button>
             <button type="button" class="sd-tab" id="sdTabModel" role="tab" aria-selected="false">模型设置</button>
             <button type="button" class="sd-tab" id="sdTabFeishu" role="tab" aria-selected="false">通知渠道</button>
+            <button type="button" class="sd-tab" id="sdTabPrompts" role="tab" aria-selected="false">提示词</button>
+            <button type="button" class="sd-tab" id="sdTabSkills" role="tab" aria-selected="false">技能库</button>
         </div>
         <div class="sd-body" id="settingsBody"></div>
         <div class="sd-body" id="settingsModelBody" hidden></div>
@@ -215,6 +217,26 @@
                 <div id="settingsFeishuForm"></div>
             </section>
             <div id="settingsNotifierBody"></div>
+        </div>
+        <!-- 提示词 tab：引擎文案 / 角色模板的本机覆盖编辑（prompts.local/），项目约定只读 -->
+        <div class="sd-body" id="settingsPromptsBody" hidden></div>
+        <!-- 技能库 tab：列表 / 详情编辑 / 角色 × 技能矩阵 -->
+        <div class="sd-body" id="settingsSkillsBody" hidden></div>
+    </div>
+
+    <!-- 注入预览（右侧浮层，叠在设置抽屉之上）：选项目 + 角色（+ 可选卡片）后 dry 编译，不拉会话、不花 token -->
+    <div class="drawer-mask cx-preview-mask" id="ctxPreviewMask"></div>
+    <div class="robot-drawer cx-preview-drawer" id="ctxPreviewDrawer" role="dialog" aria-modal="true" aria-labelledby="ctxPreviewTitle" inert>
+        <div class="sd-head">
+            <h2 id="ctxPreviewTitle">注入预览</h2>
+            <div class="sd-head-actions">
+                <button class="btn" id="ctxPreviewCloseBtn" title="关闭（ESC）">关闭</button>
+            </div>
+        </div>
+        <div class="sd-body">
+            <p class="sd-note">这个角色在这个项目会收到什么：与调度器用同一个编译器，不拉会话、不花 token。选一张卡可以连任务数据层一起看。</p>
+            <div id="ctxPreviewControls"></div>
+            <div class="cx-col" id="ctxPreviewBody"></div>
         </div>
     </div>
 

@@ -3023,6 +3023,8 @@ void main() {
             modelSettingsLoaded = false;   // 每次打开后首次切模型 tab 重拉
             feishuSettingsLoaded = false;  // 每次打开后首次切通知渠道 tab 重拉（飞书 + Webhook/Slack）
             notifierSettingsLoaded = false;
+            promptsLoaded = false;          // 提示词 / 技能库：每次打开后首次切换重拉（同次打开内保留未保存草稿）
+            skillsLoaded = false;
             switchSettingsTab('global');
             loadSettingsDrawer(false);
         }
@@ -3033,28 +3035,40 @@ void main() {
             panel.inert = true;
         }
         function switchSettingsTab(tab) {
-            settingsTab = (tab === 'model') ? 'model' : ((tab === 'feishu') ? 'feishu' : 'global');
+            settingsTab = ['model', 'feishu', 'prompts', 'skills'].includes(tab) ? tab : 'global';
             document.getElementById('sdTabGlobal').classList.toggle('on', settingsTab === 'global');
             document.getElementById('sdTabModel').classList.toggle('on', settingsTab === 'model');
             document.getElementById('sdTabFeishu').classList.toggle('on', settingsTab === 'feishu');
+            document.getElementById('sdTabPrompts').classList.toggle('on', settingsTab === 'prompts');
+            document.getElementById('sdTabSkills').classList.toggle('on', settingsTab === 'skills');
             document.getElementById('sdTabGlobal').setAttribute('aria-selected', String(settingsTab === 'global'));
             document.getElementById('sdTabModel').setAttribute('aria-selected', String(settingsTab === 'model'));
             document.getElementById('sdTabFeishu').setAttribute('aria-selected', String(settingsTab === 'feishu'));
+            document.getElementById('sdTabPrompts').setAttribute('aria-selected', String(settingsTab === 'prompts'));
+            document.getElementById('sdTabSkills').setAttribute('aria-selected', String(settingsTab === 'skills'));
             document.getElementById('settingsBody').hidden = settingsTab !== 'global';
             document.getElementById('settingsModelBody').hidden = settingsTab !== 'model';
             document.getElementById('settingsFeishuBody').hidden = settingsTab !== 'feishu';
+            document.getElementById('settingsPromptsBody').hidden = settingsTab !== 'prompts';
+            document.getElementById('settingsSkillsBody').hidden = settingsTab !== 'skills';
+            // 提示词 / 技能库是左右分栏的编辑器：抽屉加宽（窄屏仍按 100vw 封顶）
+            document.getElementById('settingsDrawer').classList.toggle('sd-wide', settingsTab === 'prompts' || settingsTab === 'skills');
             if (settingsTab === 'model' && !modelSettingsLoaded) loadModelSettings(false);
             if (settingsTab === 'feishu' && !feishuSettingsLoaded) loadFeishuSettings(false);
             if (settingsTab === 'feishu' && !notifierSettingsLoaded) loadNotifierSettings(false);
+            if (settingsTab === 'prompts' && !promptsLoaded) loadPromptsTab(false);
+            if (settingsTab === 'skills' && !skillsLoaded) loadSkillsTab(false);
         }
         function reloadSettingsDrawer() {
             if (settingsTab === 'model') loadModelSettings(true);
             else if (settingsTab === 'feishu') { loadFeishuSettings(true); loadNotifierSettings(true); }
+            else if (settingsTab === 'prompts') loadPromptsTab(true);
+            else if (settingsTab === 'skills') loadSkillsTab(true);
             else loadSettingsDrawer(true);
         }
         async function loadSettingsDrawer(force) {
             const body = document.getElementById('settingsBody');
-            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; return; }
+            if (settingsDrawerHtml && !force) { body.innerHTML = settingsDrawerHtml; decorateRoleRows(body); return; }
             if (settingsLoading) return;
             settingsLoading = true;
             body.innerHTML = '<div class="sd-note">加载中…</div>';
@@ -3064,6 +3078,7 @@ void main() {
                 if (!d || !d.html) throw new Error('empty');
                 settingsDrawerHtml = d.html;
                 body.innerHTML = settingsDrawerHtml;
+                decorateRoleRows(body);
             } catch (e) {
                 settingsDrawerHtml = '';
                 body.innerHTML = '<div class="sd-warn">设置内容加载失败。</div>'
@@ -4008,6 +4023,1352 @@ void main() {
             if (e.key === 'Escape') closeSettingsDrawer();
         });
 
+        // ==================== 上下文编译器界面（context-design 第八节）：卡片「上下文」页 + 注入预览 ====================
+        // 数据：GET /api/requirements/<id>/context/runs[/<run_key>[/prompt]]（执行档案）、GET /api/context/preview（dry 编译）。
+        // 分层渲染（堆叠条 + 图例 + 警告 + 按层分组的条目）由纯函数 ctx*Html 产出，卡片上下文页与注入预览共用；
+        // 层色只经 board.css 令牌 --layer-0..7 / --layer-rt 消费。提示词/文件内容一律 data-i18n-skip（不翻译）。
+        const CTX_LAYERS = {
+            L0: {name: '平台策略', nature: '指令 · 稳定前缀', cls: 'cx-l0'},
+            L1: {name: '角色', nature: '指令 · 稳定前缀', cls: 'cx-l1'},
+            L2: {name: '项目约定', nature: '指令 · 稳定前缀', cls: 'cx-l2'},
+            L3: {name: '条件片段', nature: '指令 · 稳定前缀', cls: 'cx-l3'},
+            L4: {name: '常驻技能', nature: '指令 · 稳定前缀', cls: 'cx-l4'},
+            L5: {name: '技能目录', nature: '索引 · 稳定前缀末尾', cls: 'cx-l5'},
+            L6: {name: '任务数据', nature: '数据 · 围栏内，不是指令', cls: 'cx-l6'},
+            L7: {name: '运行参数', nature: '指令 · 调度器生成', cls: 'cx-l7'},
+            runtime: {name: '运行时文案', nature: '续跑 / 收尾 / 补发', cls: 'cx-lrt'},
+        };
+        const CTX_LAYER_ORDER = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'runtime'];
+        const CTX_STABLE_LAYERS = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'];
+        const CTX_KIND_LABEL = {new: '新会话', resume: '续跑', followup: '续接轮', preview: '预览'};
+        const CTX_STATUS = {
+            running: ['进行中', 'cx-tone-blue'], done: ['完成', 'cx-tone-green'], failed: ['失败', 'cx-tone-red'],
+            timed_out: ['超时', 'cx-tone-red'], aborted: ['中止', 'cx-tone-amber'],
+        };
+        function ctxFmt(n) {
+            return Number(n || 0).toLocaleString('en-US');
+        }
+        function ctxLayerOf(layer) {
+            return CTX_LAYERS[layer] ? layer : 'runtime';
+        }
+        function ctxShortHash(h) {
+            const s = String(h || '');
+            return s.length > 8 ? s.slice(0, 4) + '…' + s.slice(-4) : (s || '—');
+        }
+        // 条目按层分组（层序固定 L0..L7 + 运行时文案），组内保持清单原序
+        function ctxGroupItems(items) {
+            const by = {};
+            (items || []).forEach(it => {
+                if (!it || typeof it !== 'object') return;
+                const k = ctxLayerOf(it.layer);
+                (by[k] = by[k] || []).push(it);
+            });
+            return CTX_LAYER_ORDER.filter(k => by[k]).map(k => ({
+                layer: k, items: by[k], sum: by[k].reduce((a, x) => a + (Number(x.chars) || 0), 0),
+            }));
+        }
+        function ctxStableSum(groups) {
+            return (groups || []).filter(g => CTX_STABLE_LAYERS.includes(g.layer)).reduce((a, g) => a + g.sum, 0);
+        }
+        // 分层堆叠条：宽度按字数占比；最后一个稳定前缀层右侧画缓存断点（.cx-cut）
+        function ctxStackBarHtml(groups) {
+            const total = (groups || []).reduce((a, g) => a + g.sum, 0) || 1;
+            let last = -1;
+            (groups || []).forEach((g, i) => { if (CTX_STABLE_LAYERS.includes(g.layer)) last = i; });
+            const segs = (groups || []).map((g, i) => {
+                const L = CTX_LAYERS[g.layer];
+                const pct = Math.max(g.sum / total * 100, g.sum ? 0.6 : 0).toFixed(2);
+                return `<div class="cx-seg ${L.cls}${i === last ? ' cx-cut' : ''}" style="width:${pct}%" title="${escapeAttr(g.layer + ' ' + L.name + '：' + ctxFmt(g.sum) + ' 字')}"></div>`;
+            }).join('');
+            return `<div class="cx-bar" role="img" aria-label="各层字数占比">${segs}</div>`;
+        }
+        function ctxLegendHtml(groups) {
+            return '<div class="cx-legend">' + (groups || []).map(g => {
+                const L = CTX_LAYERS[g.layer];
+                return `<span><i class="cx-dot ${L.cls}" aria-hidden="true"></i>${escapeHtml(g.layer === 'runtime' ? '' : g.layer + ' ')}${escapeHtml(L.name)} <span class="cx-mono cx-dim">${ctxFmt(g.sum)}</span></span>`;
+            }).join('') + '</div>';
+        }
+        // 警告横幅：带去处（缺技能 → 技能库该项；截断 → 该条目 / 对应提示词；覆盖基于旧默认 → 提示词 tab）
+        function ctxWarnTarget(w) {
+            const id = String((w && w.id) || '');
+            if (id.startsWith('skill:')) return {act: 'skill', arg: id.slice(6), label: '去技能库查看'};
+            if (w && w.code === 'stale_override' && id) return {act: 'prompt', arg: id, label: '去提示词处理'};
+            if (id.startsWith('guide:')) return {act: 'item', arg: id, label: '查看该指引'};
+            if (id) return {act: 'item', arg: id, label: '定位该条目'};
+            return null;
+        }
+        function ctxWarningsHtml(warnings) {
+            return (warnings || []).map(w => {
+                const code = (w && w.code) || '';
+                const tone = (code === 'missing_required' || code === 'manifest_error') ? 'cx-banner-bad'
+                    : (code === 'missing_skill' || code === 'truncated' || code === 'stale_override') ? 'cx-banner-warn' : 'cx-banner-info';
+                const t = ctxWarnTarget(w);
+                const go = t ? ` <button type="button" class="cx-link" data-cx-act="${t.act}" data-cx-arg="${escapeAttr(t.arg)}">${escapeHtml(t.label)} →</button>` : '';
+                // 告警文案来自编译器（含路径与数字），整句不进翻译层，避免中英夹杂
+                return `<div class="cx-banner ${tone}"><span data-i18n-skip>${escapeHtml(w.message || code)}</span>${go}</div>`;
+            }).join('');
+        }
+        function ctxOriginLabel(origin) {
+            return {default: '默认', override: '本机覆盖', project: '项目', engine: '引擎', card: '卡片', runtime: '调度器'}[origin] || origin || '—';
+        }
+        function ctxItemBadges(it, mark) {
+            let b = '';
+            if (Number(it.truncated) > 0) b += `<span class="cx-pill cx-tone-amber">截断 ${ctxFmt(it.truncated)} 字</span>`;
+            if (it.origin === 'override') b += '<span class="cx-pill cx-tone-blue">本机覆盖</span>';
+            if (ctxLayerOf(it.layer) === 'L6') b += '<span class="cx-pill cx-tone-fence">数据围栏</span>';
+            if (/^auto/.test(String(it.why || ''))) b += '<span class="cx-pill cx-tone-violet">自动触发</span>';
+            if (mark === 'changed') b += '<span class="cx-pill cx-tone-blue cx-strong">变更</span>';
+            if (mark === 'added') b += '<span class="cx-pill cx-tone-green cx-strong">新增</span>';
+            return b;
+        }
+        // 按层分组的条目列表。opts = {open: {id: true}, diff: {changed, added, removed}|null, excerpts: {id: {text}|{error}|'loading'}}
+        function ctxItemsHtml(groups, opts) {
+            const o = opts || {};
+            const open = o.open || {};
+            const diff = o.diff || null;
+            const mark = id => !diff ? '' : (diff.added || []).includes(id) ? 'added' : (diff.changed || []).includes(id) ? 'changed' : '';
+            let h = '<div class="cx-groups">' + (groups || []).map(g => {
+                const L = CTX_LAYERS[g.layer];
+                const head = `<div class="cx-ghead"><i class="cx-dot ${L.cls}" aria-hidden="true"></i>`
+                    + (g.layer === 'runtime' ? '' : `<span class="cx-mono cx-dim">${g.layer}</span>`)
+                    + `<b>${escapeHtml(L.name)}</b><span class="cx-note">${escapeHtml(L.nature)}</span>`
+                    + `<span class="cx-spacer"></span><span class="cx-mono cx-dim">${ctxFmt(g.sum)} 字</span></div>`;
+                return `<div class="cx-group">${head}` + g.items.map(it => {
+                    const id = String(it.id || '');
+                    const isOpen = !!open[id];
+                    const btn = `<button type="button" class="cx-item-btn" data-cx-act="toggle" data-cx-arg="${escapeAttr(id)}" aria-expanded="${isOpen}">`
+                        + `<span class="cx-caret" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>`
+                        + `<b class="cx-item-title">${escapeHtml(it.title || id)}</b>`
+                        + `<span class="cx-mono cx-src" data-i18n-skip title="${escapeAttr(it.src || '')}">${escapeHtml(it.src || '')}</span>`
+                        + ctxItemBadges(it, mark(id))
+                        + `<span class="cx-mono cx-num">${ctxFmt(it.chars)}</span></button>`;
+                    let detail = '';
+                    if (isOpen) {
+                        const ex = (o.excerpts || {})[id];
+                        let exHtml = '';
+                        if (ex === 'loading') exHtml = '<div class="cx-note">摘录加载中…</div>';
+                        else if (ex && ex.text != null) exHtml = `<div class="cx-note">${escapeHtml(ex.label || '当前文件摘录')}</div><pre class="cx-pre" data-i18n-skip>${escapeHtml(ex.text)}</pre>`;
+                        else if (ex && ex.error) exHtml = `<div class="cx-note">${escapeHtml(ex.error)}</div>`;
+                        detail = `<div class="cx-detail"><div class="cx-kv">`
+                            + `<span>入选理由：<span data-i18n-skip>${escapeHtml(it.why || '—')}</span></span>`
+                            + `<span>版本：<span class="cx-mono">${escapeHtml(it.hash || '—')}</span></span>`
+                            + `<span>来源：${escapeHtml(ctxOriginLabel(it.origin))}</span>`
+                            + `<span>条目：<span class="cx-mono" data-i18n-skip>${escapeHtml(id)}</span></span></div>${exHtml}</div>`;
+                    }
+                    return `<div class="cx-item" data-cx-item="${escapeAttr(id)}">${btn}${detail}</div>`;
+                }).join('') + '</div>';
+            }).join('') + '</div>';
+            if (diff && (diff.removed || []).length) {
+                h += '<div class="cx-removed"><span class="cx-pill cx-tone-red cx-strong">已移除</span> '
+                    + diff.removed.map(x => `<span class="cx-mono" data-i18n-skip>${escapeHtml(x)}</span>`).join('、') + '</div>';
+            }
+            return h;
+        }
+        // 统计行：执行档案（prev = 同角色上一轮清单，用于前缀一致性判断）
+        function ctxStatsHtml(m, prev) {
+            const model = (m && m.model) || {};
+            const mid = typeof model === 'object' ? model.id : model;
+            const msrc = typeof model === 'object' ? model.source : '';
+            let cache = ['首轮', 'cx-tone-gray', '同角色无上一轮可比'];
+            if (prev && prev.prefix_hash && m.prefix_hash) {
+                cache = prev.prefix_hash === m.prefix_hash
+                    ? ['与上一轮一致', 'cx-tone-green', '稳定前缀未变，可命中缓存']
+                    : ['有变化', 'cx-tone-amber', '稳定前缀与上一轮不同'];
+            }
+            return '<div class="cx-stats">'
+                + `<div><div class="cx-k">模型</div><div class="cx-mono" data-i18n-skip>${escapeHtml(mid || '—')}</div><div class="cx-k">来源：<span data-i18n-skip>${escapeHtml(msrc || '—')}</span></div></div>`
+                + `<div><div class="cx-k">运行体</div><div class="cx-mono">${escapeHtml(m.runtime || '—')}</div></div>`
+                + `<div><div class="cx-k">提示词总量</div><div class="cx-mono">${ctxFmt(m.chars)} 字</div></div>`
+                + `<div><div class="cx-k">前缀缓存</div><div><span class="cx-pill ${cache[1]}">${cache[0]}</span></div><div class="cx-k">${cache[2]}</div></div>`
+                + `<div><div class="cx-k">前缀 hash</div><div class="cx-mono" title="${escapeAttr(m.prefix_hash || '')}">${escapeHtml(ctxShortHash(m.prefix_hash))}</div></div>`
+                + `<div><div class="cx-k">清单 hash</div><div class="cx-mono" title="${escapeAttr(m.prompt_hash || '')}">${escapeHtml(ctxShortHash(m.prompt_hash))}</div></div>`
+                + '</div>';
+        }
+        function ctxPreviewStatsHtml(m, groups) {
+            const total = (groups || []).reduce((a, g) => a + g.sum, 0);
+            const stable = ctxStableSum(groups);
+            return '<div class="cx-stats">'
+                + `<div><div class="cx-k">总量</div><div class="cx-mono cx-big">${ctxFmt(m.chars || total)} 字</div></div>`
+                + `<div><div class="cx-k">稳定前缀（可缓存）</div><div class="cx-mono cx-big">${ctxFmt(stable)} 字</div></div>`
+                + `<div><div class="cx-k">本卡专有</div><div class="cx-mono cx-big">${ctxFmt(total - stable)} 字</div></div>`
+                + `<div><div class="cx-k">前缀 hash</div><div class="cx-mono cx-big" title="${escapeAttr(m.prefix_hash || '')}">${escapeHtml(ctxShortHash(m.prefix_hash))}</div></div>`
+                + '</div>';
+        }
+        // 分层构成块（标题 + 堆叠条 + 图例），两处共用
+        function ctxCompositionHtml(groups) {
+            return '<div class="cx-col"><div class="cx-row cx-between"><b>分层构成</b>'
+                + '<span class="cx-note">竖线左侧 = 稳定前缀（可缓存）· 右侧 = 本卡专有</span></div>'
+                + ctxStackBarHtml(groups) + ctxLegendHtml(groups) + '</div>';
+        }
+        // 流程节点条模型：前置角色（有档案时）+ 卡上流程快照节点（去重、跳过收尾）+ 档案里出现的其它角色
+        function ctxNodeList(item, runs, preRole) {
+            const out = [];
+            const seen = {};
+            const add = (role, name) => {
+                if (!role || seen[role]) return;
+                seen[role] = true;
+                out.push({role: role, name: name || ''});
+            };
+            const rs = runs || [];
+            if (preRole && rs.some(r => r.role === preRole)) add(preRole, '');
+            let nodes = [];
+            try { nodes = JSON.parse((item && item.nodes_json) || '[]'); } catch (e) { nodes = []; }
+            (Array.isArray(nodes) ? nodes : []).forEach(n => {
+                if (n && typeof n === 'object' && n.node_type !== 'terminal' && n.role) add(n.role, n.name || '');
+            });
+            rs.slice().reverse().forEach(r => add(r.role, ''));
+            return out.map(n => {
+                const mine = rs.filter(r => r.role === n.role);
+                return {role: n.role, name: n.name, runs: mine.length, latest: mine[0] || null};
+            });
+        }
+        // 某角色的各轮：按时间正序编号（第 1 轮…），列表新 → 旧
+        function ctxRoleRounds(runs, role) {
+            const mine = (runs || []).filter(r => r.role === role);
+            const n = mine.length;
+            return mine.map((r, i) => Object.assign({}, r, {round: n - i}));
+        }
+        function ctxStatusPill(status) {
+            const s = CTX_STATUS[status] || [status || '—', 'cx-tone-gray'];
+            return `<span class="cx-pill ${s[1]}">${escapeHtml(s[0])}</span>`;
+        }
+
+        // ---------------- 卡片「上下文」页（右栏需求详情的第二个分页） ----------------
+        let detailTab = 'summary';   // 需求详情分页：summary（概要）| context（上下文）；跨卡保持
+        let ctxState = null;          // {req, runs, loading, error, role, runKey, manifests, diff, open, full, prompts, excerpts}
+        function ctxFreshState(reqId) {
+            return {req: reqId, runs: null, loading: false, error: '', role: null, runKey: null, manifests: {},
+                    mErr: {}, diff: true, open: {}, full: false, prompts: {}, excerpts: {}};
+        }
+        function setDetailTab(tab) {
+            detailTab = tab === 'context' ? 'context' : 'summary';
+            renderDetailPane();
+        }
+        function detailTabsHtml(i) {
+            const warn = ctxState && ctxState.req === i.id && ctxState.runs && ctxState.runs[0] ? Number(ctxState.runs[0].warnings || 0) : 0;
+            const tab = (id, label, extra) => `<button type="button" class="cx-tab${detailTab === id ? ' on' : ''}" role="tab" aria-selected="${detailTab === id}" onclick="setDetailTab('${id}')">${label}${extra || ''}</button>`;
+            return `<div class="cx-tabs" role="tablist" aria-label="详情分页">${tab('summary', '概要')}${tab('context', '上下文', warn ? ` <span class="cx-pill cx-tone-amber" title="最近一轮的警告数">${warn}</span>` : '')}</div>`;
+        }
+        // renderDetailPane 渲染完需求详情后调用：上下文分页挂载（按需拉档案列表），概要分页拉评审记录
+        function afterDetailRender(item) {
+            if (detailTab === 'context') ctxMount(item);
+            else loadReviews(item.id);
+        }
+        function ctxMount(item) {
+            if (!ctxState || ctxState.req !== item.id) ctxState = ctxFreshState(item.id);
+            renderCtxPane();
+            if (ctxState.runs === null && !ctxState.loading) ctxLoadRuns(item.id);
+        }
+        async function ctxLoadRuns(reqId) {
+            const st = ctxState;
+            st.loading = true;
+            st.error = '';
+            try {
+                const res = await fetch(`/api/requirements/${reqId}/context/runs`, {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                st.runs = Array.isArray(d.runs) ? d.runs : [];
+                if (!st.role) {
+                    const item = items.find(x => x.id === reqId);
+                    st.role = st.runs[0] ? st.runs[0].role : (item ? currentNodeRole(item) : null);
+                }
+                if (!st.runKey) {
+                    const first = st.runs.find(r => r.role === st.role);
+                    st.runKey = first ? first.run_key : null;
+                }
+            } catch (e) {
+                st.runs = [];
+                st.error = String((e && e.message) || e);
+            } finally {
+                st.loading = false;
+            }
+            if (ctxState !== st) return;   // 迟到响应：已切卡
+            renderCtxPane();
+            if (st.runKey) ctxLoadManifest(st.runKey);
+        }
+        async function ctxLoadManifest(runKey) {
+            const st = ctxState;
+            if (!st || st.manifests[runKey]) { renderCtxPane(); return; }
+            try {
+                const res = await fetch(`/api/requirements/${st.req}/context/runs/${encodeURIComponent(runKey)}`, {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                st.manifests[runKey] = d;
+                if (d.prev_run_key && !st.manifests[d.prev_run_key]) {
+                    // 上一轮清单只用于前缀一致性对比：后台补拉，不阻塞当前渲染
+                    fetch(`/api/requirements/${st.req}/context/runs/${encodeURIComponent(d.prev_run_key)}`, {cache: 'no-store'})
+                        .then(r => r.ok ? r.json() : null)
+                        .then(p => { if (p && ctxState === st) { st.manifests[d.prev_run_key] = p; renderCtxPane(); } })
+                        .catch(() => {});
+                }
+            } catch (e) {
+                st.mErr[runKey] = String((e && e.message) || e);
+            }
+            if (ctxState === st) renderCtxPane();
+        }
+        async function ctxLoadPrompt(runKey) {
+            const st = ctxState;
+            if (!st || st.prompts[runKey] != null) return;
+            st.prompts[runKey] = {loading: true};
+            renderCtxPane();
+            try {
+                const res = await fetch(`/api/requirements/${st.req}/context/runs/${encodeURIComponent(runKey)}/prompt`, {cache: 'no-store'});
+                const t = await res.text();
+                if (!res.ok) {
+                    let msg = 'HTTP ' + res.status;
+                    try { msg = JSON.parse(t).error || msg; } catch (e) { /* 非 JSON 错误体 */ }
+                    throw new Error(msg);
+                }
+                st.prompts[runKey] = {text: t};
+            } catch (e) {
+                st.prompts[runKey] = {error: String((e && e.message) || e)};
+            }
+            if (ctxState === st) renderCtxPane();
+        }
+        // 条目摘录：提示词存储条目取 /api/prompts/<id>，技能取 /api/skills/<名>；其它条目只给来源（全文见「实际发出的全文」）
+        function ctxExcerptSource(it, project) {
+            const id = String((it && it.id) || '');
+            if (/^(system|fragment|role)\//.test(id)) return {url: '/api/prompts/' + id, pick: d => d.text};
+            if (id.startsWith('skill:')) {
+                const q = it.origin === 'project' && project ? '?project=' + encodeURIComponent(project) : '';
+                return {url: '/api/skills/' + encodeURIComponent(id.slice(6)) + q, pick: d => d.body};
+            }
+            const g = id.match(/^guide:([^/]+)\/(.+)$/);
+            if (g && project) return {url: '/api/prompts/project/' + project + '/' + g[1] + '/guide/' + g[2], pick: d => d.text};
+            return null;
+        }
+        async function ctxLoadExcerpt(holder, it, project, rerender) {
+            const id = String(it.id || '');
+            if (holder[id] !== undefined) return;
+            const srcDef = ctxExcerptSource(it, project);
+            if (!srcDef) {
+                holder[id] = {error: '该条目由调度器按卡片生成，没有独立文件；完整内容见「查看实际发出的全文」。'};
+                rerender();
+                return;
+            }
+            holder[id] = 'loading';
+            rerender();
+            try {
+                const res = await fetch(srcDef.url, {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                const text = String(srcDef.pick(d) || '');
+                holder[id] = {text: text.length > 1200 ? text.slice(0, 1200) + '\n…' : text,
+                              label: '当前文件摘录（该轮实际发出的版本见全文；版本 hash 不同即已改动）'};
+            } catch (e) {
+                holder[id] = {error: '摘录加载失败：' + String((e && e.message) || e)};
+            }
+            rerender();
+        }
+        function ctxPaneHtml(item) {
+            const st = ctxState;
+            if (!st || st.req !== item.id) return '';
+            if (st.runs === null || st.loading) return '<div class="cx-note">执行档案加载中…</div>';
+            let h = '';
+            if (st.error) h += `<div class="cx-banner cx-banner-bad"><span>执行档案加载失败：${escapeHtml(st.error)}</span> <button type="button" class="cx-link" data-cx-act="reload">重试</button></div>`;
+            const nodes = ctxNodeList(item, st.runs, PRE_ROLE);
+            h += '<section class="cx-col"><div class="cx-note">流程节点（点选查看每一轮收到的上下文）</div><div class="cx-row cx-wrap">'
+                + nodes.map(n => {
+                    const latest = n.latest;
+                    const sub = n.runs ? `${n.runs} 轮 · ${(CTX_STATUS[latest.status] || [latest.status || '—'])[0]}` : '未开始';
+                    const tone = !n.runs ? 'cx-sub-idle' : (CTX_STATUS[latest.status] || ['', 'cx-tone-gray'])[1].replace('cx-tone-', 'cx-sub-');
+                    return `<button type="button" class="cx-pick${n.role === st.role ? ' on' : ''}" aria-pressed="${n.role === st.role}" data-cx-act="node" data-cx-arg="${escapeAttr(n.role)}"><b>${escapeHtml(n.name || roleLabel(n.role))}</b><span class="cx-sub ${tone}">${escapeHtml(sub)}</span></button>`;
+                }).join('') + '</div></section>';
+            if (!nodes.length && !st.error) {
+                return h + '<div class="cx-empty"><div>这张卡还没有执行档案（尚未拉起过会话，或档案记录未开启）。</div></div>';
+            }
+            const rounds = ctxRoleRounds(st.runs, st.role);
+            if (!rounds.length) {
+                return h + `<div class="cx-empty"><div>「${escapeHtml(roleLabel(st.role || ''))}」尚未运行。</div>`
+                    + `<button type="button" class="btn btn-sm" data-cx-act="preview">在注入预览里看它将收到什么 →</button></div>`;
+            }
+            h += '<div class="cx-row cx-wrap">' + rounds.map(r => {
+                const on = r.run_key === st.runKey;
+                return `<button type="button" class="cx-pick cx-run${on ? ' on' : ''}" aria-pressed="${on}" data-cx-act="run" data-cx-arg="${escapeAttr(r.run_key)}">`
+                    + `<span><span class="cx-mono cx-dim" data-i18n-skip>${escapeHtml(r.run_key)}</span></span>`
+                    + `<span>第 ${r.round} 轮 · ${escapeHtml(CTX_KIND_LABEL[r.kind] || r.kind || '—')} ${ctxStatusPill(r.status)}`
+                    + (Number(r.warnings) ? ` <span class="cx-pill cx-tone-amber">警告 ${Number(r.warnings)}</span>` : '') + '</span></button>';
+            }).join('') + '</div>';
+            const m = st.manifests[st.runKey];
+            if (!m) {
+                return h + (st.mErr[st.runKey]
+                    ? `<div class="cx-banner cx-banner-bad"><span>清单加载失败：${escapeHtml(st.mErr[st.runKey])}</span></div>`
+                    : '<div class="cx-note">清单加载中…</div>');
+            }
+            const prev = m.prev_run_key ? st.manifests[m.prev_run_key] : null;
+            const groups = ctxGroupItems(m.items);
+            h += ctxStatsHtml(m, prev);
+            h += ctxCompositionHtml(groups);
+            h += ctxWarningsHtml(m.warnings);
+            if (m.context_update && m.context_update.sent) {
+                h += `<div class="cx-banner cx-banner-ok"><span>续跑补发：与上一轮相比 ${(m.context_update.changed || []).length} 项有变化，已在续跑消息前附「上下文更新」。</span></div>`;
+            }
+            const diffOn = st.diff && !!m.prev_run_key;
+            const d = m.diff || {};
+            h += '<div class="cx-row cx-wrap">'
+                + `<button type="button" class="btn btn-sm${diffOn ? ' cx-on' : ''}" data-cx-act="diff" aria-pressed="${diffOn}"${m.prev_run_key ? '' : ' disabled'}>${m.prev_run_key ? (diffOn ? '对比上一轮：开' : '对比上一轮：关') : '首轮，无可对比'}</button>`
+                + `<button type="button" class="btn btn-sm${st.full ? ' cx-on' : ''}" data-cx-act="full" aria-pressed="${st.full}">${st.full ? '返回分层列表' : '查看实际发出的全文'}</button>`
+                + (diffOn ? `<span class="cx-note">与 <span class="cx-mono" data-i18n-skip>${escapeHtml(m.prev_run_key)}</span> 相比：变更 ${(d.changed || []).length} · 新增 ${(d.added || []).length} · 已移除 ${(d.removed || []).length}</span>` : '')
+                + '</div>';
+            if (st.full) {
+                const p = st.prompts[st.runKey];
+                if (!p || p.loading) h += '<div class="cx-note">全文加载中…</div>';
+                else if (p.error) h += `<div class="cx-banner cx-banner-bad"><span>全文加载失败：${escapeHtml(p.error)}</span></div>`;
+                else h += `<div class="cx-note">实际发出的提示词（prompt.txt，${ctxFmt(p.text.length)} 字）</div><pre class="cx-pre cx-full" data-i18n-skip>${escapeHtml(p.text)}</pre>`;
+            } else {
+                h += ctxItemsHtml(groups, {open: st.open, diff: diffOn ? d : null, excerpts: st.excerpts});
+            }
+            return h;
+        }
+        function renderCtxPane() {
+            const el = document.getElementById('ctxPane');
+            if (!el || !ctxState) return;
+            const item = items.find(x => x.id === ctxState.req);
+            if (!item || Number(el.dataset.req) !== item.id) return;
+            el.innerHTML = ctxPaneHtml(item);
+            const tabs = document.querySelector('.detail-pane .cx-tabs');
+            if (tabs) tabs.outerHTML = detailTabsHtml(item);
+        }
+        function ctxFocusItem(id) {
+            const st = ctxState;
+            st.full = false;
+            st.open[id] = true;
+            const m = st.manifests[st.runKey];
+            const it = m && (m.items || []).find(x => x.id === id);
+            renderCtxPane();
+            if (it) ctxLoadExcerpt(st.excerpts, it, m.project, renderCtxPane);
+            const el = document.querySelector(`#ctxPane [data-cx-item="${CSS.escape(id)}"]`);
+            if (el && el.scrollIntoView) el.scrollIntoView({block: 'center'});
+        }
+        // 警告去处：缺技能 → 设置抽屉技能库并选中；覆盖 → 提示词 tab；截断项目指引 → 提示词 tab 只读条目
+        function ctxFollowWarning(act, arg, project) {
+            if (act === 'skill') { openSettingsAt('skills', {skill: arg}); return true; }
+            if (act === 'prompt') { openSettingsAt('prompts', {prompt: arg}); return true; }
+            const g = String(arg || '').match(/^guide:([^/]+)\/(.+)$/);
+            if (act === 'item' && g && project) { openSettingsAt('prompts', {prompt: 'project/' + project + '/' + g[1] + '/guide/' + g[2]}); return true; }
+            return false;
+        }
+        document.getElementById('detail').addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest('[data-cx-act]') : null;
+            if (!t || !ctxState || !t.closest('#ctxPane') || t.disabled) return;
+            const st = ctxState;
+            const act = t.dataset.cxAct;
+            const arg = t.dataset.cxArg;
+            const item = items.find(x => x.id === st.req);
+            if (act === 'node') {
+                st.role = arg;
+                const first = (st.runs || []).find(r => r.role === arg);
+                st.runKey = first ? first.run_key : null;
+                st.open = {};
+                st.full = false;
+                renderCtxPane();
+                if (st.runKey) ctxLoadManifest(st.runKey);
+            } else if (act === 'run') {
+                st.runKey = arg;
+                st.open = {};
+                st.full = false;
+                renderCtxPane();
+                ctxLoadManifest(arg);
+            } else if (act === 'toggle') {
+                st.open[arg] = !st.open[arg];
+                renderCtxPane();
+                const m = st.manifests[st.runKey];
+                const it = m && (m.items || []).find(x => x.id === arg);
+                if (st.open[arg] && it) ctxLoadExcerpt(st.excerpts, it, m.project, renderCtxPane);
+            } else if (act === 'diff') {
+                st.diff = !st.diff;
+                renderCtxPane();
+            } else if (act === 'full') {
+                st.full = !st.full;
+                renderCtxPane();
+                if (st.full) ctxLoadPrompt(st.runKey);
+            } else if (act === 'reload') {
+                ctxState = ctxFreshState(st.req);
+                if (item) ctxMount(item);
+            } else if (act === 'preview') {
+                if (item) openContextPreview({project: item.project, role: st.role, req: item.id});
+            } else if (act === 'skill' || act === 'prompt' || act === 'item') {
+                if (!ctxFollowWarning(act, arg, item && item.project) && act === 'item') ctxFocusItem(arg);
+            }
+        });
+
+        // ---------------- 注入预览（右侧浮层抽屉，叠在设置抽屉之上） ----------------
+        let pvState = {project: '', role: '', req: '', data: null, loading: false, error: '', open: {}, excerpts: {}, full: false, seq: 0};
+        function openContextPreview(opts) {
+            const o = opts || {};
+            const projects = autoProjects || [];
+            pvState.project = o.project || pvState.project || (selectedProject !== ALL_PROJECTS ? selectedProject : '') || projects[0] || '';
+            pvState.role = o.role || pvState.role || 'dev';
+            pvState.req = o.req != null ? String(o.req) : (o.project && o.project !== pvState.project ? '' : pvState.req);
+            if (pvState.req && !items.some(i => String(i.id) === pvState.req && i.project === pvState.project)) pvState.req = '';
+            document.getElementById('ctxPreviewMask').classList.add('show');
+            const panel = document.getElementById('ctxPreviewDrawer');
+            panel.inert = false;
+            panel.classList.add('show');
+            renderPreviewControls();
+            runContextPreview();
+            const close = document.getElementById('ctxPreviewCloseBtn');
+            if (close) close.focus();
+        }
+        function closeContextPreview() {
+            document.getElementById('ctxPreviewMask').classList.remove('show');
+            const panel = document.getElementById('ctxPreviewDrawer');
+            panel.classList.remove('show');
+            panel.inert = true;
+        }
+        function previewOpen() {
+            const p = document.getElementById('ctxPreviewDrawer');
+            return !!(p && p.classList.contains('show'));
+        }
+        function previewRoleOptions() {
+            const roles = (roleMeta || []).slice().sort((a, b) => (a.order || 99) - (b.order || 99));
+            return roles.length ? roles.map(r => ({id: r.role, display: r.display || r.role})) : [{id: 'dev', display: 'dev'}];
+        }
+        function renderPreviewControls() {
+            const box = document.getElementById('ctxPreviewControls');
+            const projects = autoProjects || [];
+            const cards = items.filter(i => i.project === pvState.project).slice(0, 200);
+            box.innerHTML = '<div class="cx-row cx-wrap cx-end">'
+                + `<label class="cx-lbl"><span>项目</span><select id="pvProject">${projects.map(p => `<option value="${escapeAttr(p)}"${p === pvState.project ? ' selected' : ''}>${escapeHtml(displayProjectName(p))}</option>`).join('')}</select></label>`
+                + `<label class="cx-lbl"><span>角色</span><select id="pvRole">${previewRoleOptions().map(r => `<option value="${escapeAttr(r.id)}"${r.id === pvState.role ? ' selected' : ''}>${escapeHtml(r.display)}</option>`).join('')}</select></label>`
+                + `<label class="cx-lbl cx-grow"><span>卡片（可选）</span><select id="pvReq"><option value="">不指定（占位卡）</option>${cards.map(c => `<option value="${c.id}"${String(c.id) === pvState.req ? ' selected' : ''} data-i18n-skip>#${c.id} ${escapeHtml(String(c.title || '').slice(0, 40))}</option>`).join('')}</select></label>`
+                + '<button type="button" class="btn btn-sm" id="pvRunBtn">重新编译</button></div>';
+        }
+        async function runContextPreview() {
+            const seq = ++pvState.seq;
+            pvState.loading = true;
+            pvState.error = '';
+            pvState.open = {};
+            pvState.excerpts = {};
+            pvState.full = false;
+            renderPreviewBody();
+            const q = new URLSearchParams({project: pvState.project, role: pvState.role});
+            if (pvState.req) q.set('req', pvState.req);
+            try {
+                const res = await fetch('/api/context/preview?' + q.toString(), {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                if (seq !== pvState.seq) return;
+                pvState.data = d;
+            } catch (e) {
+                if (seq !== pvState.seq) return;
+                pvState.data = null;
+                pvState.error = String((e && e.message) || e);
+            }
+            pvState.loading = false;
+            renderPreviewBody();
+        }
+        function previewBodyHtml(st) {
+            if (st.loading) return '<div class="cx-note">编译中…（与调度器同一个编译器，不拉会话、不花 token）</div>';
+            if (st.error) return `<div class="cx-banner cx-banner-bad"><span>注入预览失败：${escapeHtml(st.error)}</span></div>`;
+            const m = st.data;
+            if (!m) return '';
+            const groups = ctxGroupItems(m.items);
+            let h = '';
+            if (m.placeholder_card) h += '<div class="cx-banner cx-banner-info"><span>未指定卡片：任务数据层用占位卡。选一张已有卡片可连任务数据层一起看。</span></div>';
+            h += ctxPreviewStatsHtml(m, groups) + ctxCompositionHtml(groups) + ctxWarningsHtml(m.warnings);
+            if ((m.skipped || []).length) {
+                h += '<details class="cx-skipped"><summary>未入选 ' + m.skipped.length + ' 项</summary><ul>'
+                    + m.skipped.map(s => `<li><span class="cx-mono" data-i18n-skip>${escapeHtml(s.id || '')}</span> — <span data-i18n-skip>${escapeHtml(s.why || '')}</span></li>`).join('') + '</ul></details>';
+            }
+            h += '<div class="cx-row cx-wrap">'
+                + `<button type="button" class="btn btn-sm" data-cx-act="pvcopy">复制清单 JSON</button>`
+                + `<button type="button" class="btn btn-sm${st.full ? ' cx-on' : ''}" data-cx-act="pvfull" aria-pressed="${st.full}">${st.full ? '返回分层列表' : '查看完整提示词'}</button></div>`;
+            h += st.full ? `<pre class="cx-pre cx-full" data-i18n-skip>${escapeHtml(m.prompt || '')}</pre>`
+                : ctxItemsHtml(groups, {open: st.open, excerpts: st.excerpts});
+            return h;
+        }
+        function renderPreviewBody() {
+            const el = document.getElementById('ctxPreviewBody');
+            if (el) el.innerHTML = previewBodyHtml(pvState);
+        }
+        document.getElementById('ctxPreviewControls').addEventListener('change', (e) => {
+            const id = e.target && e.target.id;
+            if (id === 'pvProject') { pvState.project = e.target.value; pvState.req = ''; renderPreviewControls(); }
+            else if (id === 'pvRole') pvState.role = e.target.value;
+            else if (id === 'pvReq') pvState.req = e.target.value;
+            else return;
+            runContextPreview();
+        });
+        document.getElementById('ctxPreviewControls').addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'pvRunBtn') runContextPreview();
+        });
+        document.getElementById('ctxPreviewBody').addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest('[data-cx-act]') : null;
+            if (!t || t.disabled) return;
+            const act = t.dataset.cxAct;
+            const arg = t.dataset.cxArg;
+            const m = pvState.data;
+            if (act === 'toggle') {
+                pvState.open[arg] = !pvState.open[arg];
+                renderPreviewBody();
+                const it = m && (m.items || []).find(x => x.id === arg);
+                if (pvState.open[arg] && it) ctxLoadExcerpt(pvState.excerpts, it, m.project, renderPreviewBody);
+            } else if (act === 'pvfull') {
+                pvState.full = !pvState.full;
+                renderPreviewBody();
+            } else if (act === 'pvcopy' && m) {
+                const copy = Object.assign({}, m);
+                delete copy.prompt;
+                const txt = JSON.stringify(copy, null, 1);
+                const done = () => showToast('已复制清单 JSON');
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => showToast('复制失败', true));
+                else showToast('复制失败', true);
+            } else if (act === 'skill' || act === 'prompt' || act === 'item') {
+                if (ctxFollowWarning(act, arg, m && m.project)) closeContextPreview();
+                else if (act === 'item') { pvState.open[arg] = true; renderPreviewBody(); }
+            }
+        });
+        document.getElementById('ctxPreviewMask').addEventListener('click', closeContextPreview);
+        document.getElementById('ctxPreviewCloseBtn').addEventListener('click', closeContextPreview);
+        // ESC 只关最上层：预览打开时在捕获阶段拦下，不让设置抽屉一起关
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && previewOpen()) { e.stopPropagation(); closeContextPreview(); }
+        }, true);
+        // ==================== 设置抽屉「提示词」「技能库」两个 tab（context-design 第五、六、八节） ====================
+        // 提示词：GET /api/prompts（按层分组的目录）→ GET /api/prompts/<id>（详情）→ PUT（存本机覆盖，校验以服务端为准）
+        //         / DELETE（恢复默认）；默认已更新（stale）给三方对比与「采用新默认 / 保留我的覆盖」；项目约定只读。
+        // 技能库：GET /api/skills（列表 + 校验 + 近 30 天加载次数）→ GET/PUT/POST/DELETE /api/skills[/<名>]；
+        //         列表 ↔ 角色 × 技能矩阵（点格子循环切换激活方式，PUT roles/activation）。项目技能只读。
+        // 提示词正文、技能正文与描述、文件内容一律在 textarea / pre / data-i18n-skip 内，不经界面翻译层。
+        let promptsLoaded = false;
+        let promptsLoading = false;
+        let ppState = {items: [], localDir: '', sel: null, details: {}, dErr: {}, drafts: {}, rebase: {},
+                       diff: false, three: false, serverErr: {}, pending: null};
+        const PP_STATUS = {
+            default: ['默认', 'cx-tone-gray'], override: ['已覆盖', 'cx-tone-blue'], stale: ['默认已更新', 'cx-tone-amber'],
+            project: ['只读', 'cx-tone-gray'], missing: ['缺失', 'cx-tone-red'],
+        };
+        const PP_MAX_CHARS = 20000;   // 与 prompt_store.MAX_CHARS 一致（服务端为准，这里只做即时提示）
+        const PP_PH_RE = /\{([a-z_][a-z0-9_]*)\}/g;   // 与 prompt_store._PH_RE 同口径
+
+        // 目录分组：可编辑条目按层（L0..L7 / 运行时文案），项目约定只读条目单列一组放最后
+        function promptGroups(list) {
+            const by = {};
+            (list || []).forEach(it => {
+                const k = it.kind === 'project' ? 'project' : ctxLayerOf(it.layer);
+                (by[k] = by[k] || []).push(it);
+            });
+            return CTX_LAYER_ORDER.concat(['project']).filter(k => by[k]).map(k => ({
+                key: k, layer: k === 'project' ? 'L2' : k,
+                name: k === 'project' ? '项目约定（只读）' : CTX_LAYERS[k].name,
+                locked: by[k].some(x => (x.locked || []).length), items: by[k],
+            }));
+        }
+        function promptTreeHtml(groups, sel) {
+            return '<nav class="pp-tree" aria-label="提示词目录">' + groups.map(g => {
+                const L = CTX_LAYERS[g.layer];
+                return `<div class="cx-group"><div class="cx-ghead"><i class="cx-dot ${L.cls}" aria-hidden="true"></i>`
+                    + (g.key === 'runtime' || g.key === 'project' ? '' : `<span class="cx-mono cx-dim">${g.key}</span>`)
+                    + `<b>${escapeHtml(g.name)}</b>${g.locked ? '<span class="cx-pill cx-tone-amber">含锁定句</span>' : ''}</div>`
+                    + g.items.map(it => {
+                        const s = PP_STATUS[it.status] || [it.status || '—', 'cx-tone-gray'];
+                        const on = it.id === sel;
+                        return `<div class="cx-item"><button type="button" class="cx-item-btn pp-node${on ? ' on' : ''}" aria-current="${on ? 'true' : 'false'}" data-pp-act="sel" data-pp-arg="${escapeAttr(it.id)}">`
+                            + `<span class="pp-node-main"><span>${escapeHtml(it.title || it.id)}</span><span class="cx-mono cx-dim pp-file" data-i18n-skip>${escapeHtml(it.kind === 'project' ? it.file : it.file || it.id)}</span></span>`
+                            + `<span class="cx-pill ${s[1]}">${escapeHtml(s[0])}</span></button></div>`;
+                    }).join('') + '</div>';
+            }).join('') + '</nav>';
+        }
+        // 锁定句（契约句）：编辑区里替换成不可改内容的标记行，保存时再还原——标记可整体移动，删掉即校验失败
+        function promptLockMarker(i) {
+            return '⟦锁定句 ' + (i + 1) + '⟧';
+        }
+        function promptToEditable(text, locked) {
+            let t = String(text == null ? '' : text);
+            const missing = [];
+            (locked || []).forEach((s, i) => {
+                const k = t.indexOf(s);
+                if (k < 0) { missing.push(i); return; }
+                t = t.slice(0, k) + promptLockMarker(i) + t.slice(k + s.length);
+            });
+            return {text: t, missing: missing};
+        }
+        function promptFromEditable(text, locked) {
+            let t = String(text == null ? '' : text);
+            (locked || []).forEach((s, i) => { t = t.split(promptLockMarker(i)).join(s); });
+            return t;
+        }
+        // 即时校验（服务端校验的镜像：未声明占位符 / 缺必需占位符 / 锁定句 / 超长）；返回 [[级别, 文案]]
+        function promptClientCheck(d, editable) {
+            const out = [];
+            const locked = d.locked || [];
+            locked.forEach((s, i) => {
+                const n = String(editable).split(promptLockMarker(i)).length - 1;
+                if (n !== 1) out.push(['bad', `锁定句标记 ${promptLockMarker(i)} ${n ? '重复' : '被删除'}：契约句必须原样保留一次`]);
+            });
+            const full = promptFromEditable(editable, locked);
+            const declared = d.placeholders || [];
+            const used = [];
+            let m;
+            PP_PH_RE.lastIndex = 0;
+            while ((m = PP_PH_RE.exec(full))) if (!used.includes(m[1])) used.push(m[1]);
+            const unknown = used.filter(u => !declared.includes(u));
+            const missing = (d.required || []).filter(r => full.indexOf('{' + r + '}') < 0);
+            unknown.forEach(u => out.push(['bad', `未声明的占位符 {${u}}：调度器不会替换它`]));
+            missing.forEach(r => out.push(['bad', `缺少必需占位符 {${r}}`]));
+            if (!unknown.length && !missing.length) out.push(['ok', declared.length ? '占位符齐全' : '本项不使用占位符']);
+            if (locked.length && !out.some(x => x[1].startsWith('锁定句标记'))) out.push(['ok', '契约句完整（锁定，不可删改）']);
+            if (full.length > PP_MAX_CHARS) out.push(['bad', `超过 ${ctxFmt(PP_MAX_CHARS)} 字（当前 ${ctxFmt(full.length)}）`]);
+            else out.push(['ok', `${ctxFmt(full.length)} 字`]);
+            return out;
+        }
+        // 行级对比（LCS）：返回 [[' '|'-'|'+', 行]]
+        function promptLineDiff(a, b) {
+            const A = String(a == null ? '' : a).split('\n');
+            const B = String(b == null ? '' : b).split('\n');
+            const n = A.length, m = B.length;
+            if (n * m > 4000000) return A.map(x => ['-', x]).concat(B.map(x => ['+', x]));
+            const dp = [];
+            for (let i = 0; i <= n; i++) dp.push(new Int32Array(m + 1));
+            for (let i = n - 1; i >= 0; i--) {
+                for (let j = m - 1; j >= 0; j--) {
+                    dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+            const out = [];
+            let i = 0, j = 0;
+            while (i < n && j < m) {
+                if (A[i] === B[j]) { out.push([' ', A[i]]); i++; j++; }
+                else if (dp[i + 1][j] >= dp[i][j + 1]) out.push(['-', A[i++]]);
+                else out.push(['+', B[j++]]);
+            }
+            while (i < n) out.push(['-', A[i++]]);
+            while (j < m) out.push(['+', B[j++]]);
+            return out;
+        }
+        function promptDiffHtml(a, b) {
+            const rows = promptLineDiff(a, b);
+            if (!rows.some(r => r[0] !== ' ')) return '<div class="cx-note">与默认完全一致</div>';
+            return '<pre class="cx-pre pp-diff" data-i18n-skip>' + rows.map(r => {
+                const cls = r[0] === '+' ? 'pp-add' : r[0] === '-' ? 'pp-del' : 'pp-same';
+                return `<span class="${cls}">${r[0]} ${escapeHtml(r[1])}</span>`;
+            }).join('\n') + '</pre>';
+        }
+        function promptWhenText(w) {
+            if (!w) return '';
+            const parts = [];
+            if ((w.roles || []).length) parts.push('角色 ' + w.roles.map(r => roleLabel(r)).join('、'));
+            if ((w.flags || []).length) parts.push('开关 ' + w.flags.join(' 且 '));
+            return parts.join('；') || '恒生效';
+        }
+        function promptCheckHtml(checks) {
+            return checks.map(c => `<span class="pp-check pp-${c[0]}">${c[0] === 'ok' ? '✓' : c[0] === 'bad' ? '✕' : '!'} ${escapeHtml(c[1])}</span>`).join('');
+        }
+        // 编辑区（纯函数）：d = GET /api/prompts/<id> 详情；st = {editable, dirty, diff, three, serverErr, localDir, rebase}
+        function promptEditorHtml(d, st) {
+            const s = PP_STATUS[d.status] || [d.status || '—', 'cx-tone-gray'];
+            const L = CTX_LAYERS[ctxLayerOf(d.layer)];
+            const ro = !!d.readonly;
+            const full = ro ? d.text : promptFromEditable(st.editable, d.locked);
+            const checks = ro ? [] : promptClientCheck(d, st.editable);
+            const bad = checks.some(c => c[0] === 'bad');
+            let h = `<div class="cx-row cx-wrap pp-head"><i class="cx-dot ${L.cls}" aria-hidden="true"></i><b class="pp-title">${escapeHtml(d.title || d.id)}</b>`
+                + `<span class="cx-pill ${s[1]}">${escapeHtml(s[0])}</span>`
+                + `<span class="cx-pill cx-tone-violet" id="ppDirty"${st.dirty ? '' : ' hidden'}>有未保存修改</span><span class="cx-spacer"></span>`;
+            if (ro) {
+                h += '<button type="button" class="btn btn-sm" data-pp-act="copypath">复制文件路径</button>';
+            } else {
+                h += `<button type="button" class="btn btn-sm${st.diff ? ' cx-on' : ''}" data-pp-act="diff" aria-pressed="${!!st.diff}">${st.diff ? '返回编辑' : '对比默认'}</button>`
+                    + `<button type="button" class="btn btn-sm" data-pp-act="restore"${d.status === 'default' ? ' disabled' : ''}>恢复默认</button>`;
+            }
+            h += '<button type="button" class="btn btn-sm" data-pp-act="preview">在注入预览里看效果</button>';
+            if (!ro) h += `<button type="button" class="btn btn-sm btn-primary" id="ppSaveBtn" data-pp-act="save"${bad || !st.dirty ? ' disabled' : ''}>保存</button>`;
+            h += '</div>';
+            h += '<div class="cx-stats pp-meta">'
+                + `<div><div class="cx-k">${ro ? '文件（项目仓库）' : '默认文件'}</div><div class="cx-mono" data-i18n-skip>${escapeHtml(ro ? d.file : 'prompts/' + d.file)}</div></div>`
+                + (ro ? '' : `<div><div class="cx-k">覆盖文件（本机，不进 git）</div><div class="cx-mono" data-i18n-skip>${d.override_text != null ? escapeHtml((st.localDir || 'prompts.local') + '/' + d.file) : '（无）'}</div></div>`)
+                + `<div><div class="cx-k">用于</div><div>${escapeHtml(d.used_by || '—')}</div></div>`
+                + (d.when ? `<div><div class="cx-k">生效条件（引擎定义，只读）</div><div>${escapeHtml(promptWhenText(d.when))}</div></div>` : '')
+                + '</div>';
+            if (ro) {
+                h += '<div class="cx-banner cx-banner-info"><span>只读：这份文件在项目仓库里，第一期请在编辑器里修改并提交到该仓库；这里显示的是下次编译会读到的内容。</span></div>';
+                return h + `<pre class="cx-pre pp-ro" data-i18n-skip>${escapeHtml(d.text || '')}</pre>`;
+            }
+            if (d.status === 'stale') {
+                h += `<div class="cx-banner cx-banner-warn"><span>升级后默认版本已更新，你的覆盖基于旧版默认。编译仍使用你的覆盖，直到你处理。</span> <button type="button" class="btn btn-sm${st.three ? ' cx-on' : ''}" data-pp-act="three" aria-pressed="${!!st.three}">${st.three ? '收起三方对比' : '三方对比'}</button></div>`;
+                if (st.three) {
+                    const col = (title, t) => `<div class="pp-col"><b>${title}</b><pre class="cx-pre" data-i18n-skip>${escapeHtml(t || '')}</pre></div>`;
+                    h += '<div class="pp-three">' + col('旧默认（你保存时的默认）', d.base_text) + col('新默认', d.default_text) + col('你的覆盖', d.override_text) + '</div>'
+                        + '<div class="cx-row cx-wrap"><button type="button" class="btn btn-sm" data-pp-act="takenew">采用新默认（删除覆盖）</button>'
+                        + '<button type="button" class="btn btn-sm" data-pp-act="rebasenew">以新默认为底稿重新编辑</button>'
+                        + '<button type="button" class="btn btn-sm" data-pp-act="keepmine">保留我的覆盖并标记已处理</button></div>';
+                }
+            } else if (d.status === 'override') {
+                h += '<div class="cx-banner cx-banner-info"><span>当前生效的是你的本机覆盖；编译时使用覆盖，清单里记为「本机覆盖」。</span></div>';
+            }
+            if (st.rebase) h += '<div class="cx-banner cx-banner-warn"><span>正在以新默认为底稿编辑：保存后覆盖改为基于新默认。</span></div>';
+            if (st.diff) {
+                h += '<div class="cx-col"><span class="cx-note">与默认相比（- 默认里有、你删掉的；+ 你新增或改写的）</span>' + promptDiffHtml(d.default_text, full) + '</div>';
+            } else {
+                const ph = d.placeholders || [];
+                if (ph.length) {
+                    h += '<div class="cx-row cx-wrap"><span class="cx-note">可用占位符（点击插入到光标处）：</span>'
+                        + ph.map(p => `<button type="button" class="pp-chip cx-mono" data-pp-act="ins" data-pp-arg="${escapeAttr(p)}">{${escapeHtml(p)}}${(d.required || []).includes(p) ? ' · 必需' : ''}</button>`).join('') + '</div>';
+                }
+                if ((d.locked || []).length) {
+                    h += '<div class="cx-col"><span class="cx-note">契约句（调度器按它解析结果，锁定不可删改；正文里以标记行代替，可整体移动）</span>'
+                        + `<pre class="cx-pre pp-locked" data-i18n-skip>${d.locked.map((l, i) => '🔒 ' + promptLockMarker(i) + ' ' + escapeHtml(l)).join('\n')}</pre></div>`;
+                }
+                h += `<label class="cx-lbl"><span>可编辑正文</span><textarea id="ppEdit" class="pp-edit cx-mono" rows="16" spellcheck="false">${escapeHtml(st.editable)}</textarea></label>`;
+            }
+            h += `<div class="cx-col pp-checks" id="ppCheck"><b>校验</b>${promptCheckHtml(checks)}</div>`;
+            if ((st.serverErr || []).length) {
+                h += '<div class="cx-banner cx-banner-bad"><span>服务端拒绝保存：' + st.serverErr.map(e => escapeHtml(e.message || e.code || '')).join('；') + '</span></div>';
+            }
+            return h;
+        }
+        async function loadPromptsTab(force) {
+            const body = document.getElementById('settingsPromptsBody');
+            if (promptsLoaded && !force) return;
+            if (promptsLoading) return;
+            promptsLoading = true;
+            body.innerHTML = '<div class="sd-note">提示词加载中…</div>';
+            try {
+                const res = await fetch('/api/prompts', {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                ppState.items = d.items || [];
+                ppState.localDir = d.local_dir || '';
+                if (force) { ppState.details = {}; ppState.dErr = {}; }
+                promptsLoaded = true;
+                const want = ppState.pending || ppState.sel;
+                ppState.pending = null;
+                ppState.sel = ppState.items.some(x => x.id === want) ? want : (ppState.items[0] || {}).id || null;
+                renderPromptsTab();
+                if (ppState.sel) ppLoadDetail(ppState.sel);
+            } catch (e) {
+                promptsLoaded = false;
+                body.innerHTML = '<div class="sd-warn">提示词加载失败：' + escapeHtml(String((e && e.message) || e)) + '</div>'
+                    + '<button type="button" class="btn" data-pp-act="retry">重试</button>';
+            } finally {
+                promptsLoading = false;
+            }
+        }
+        async function ppLoadDetail(id, force) {
+            if (ppState.details[id] && !force) { renderPromptsTab(); return; }
+            try {
+                const res = await fetch('/api/prompts/' + id, {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                ppState.details[id] = d;
+                delete ppState.dErr[id];
+            } catch (e) {
+                ppState.dErr[id] = String((e && e.message) || e);
+            }
+            renderPromptsTab();
+        }
+        function ppEditable(d) {
+            const id = d.id;
+            if (ppState.drafts[id] != null) return ppState.drafts[id];
+            return promptToEditable(d.text, d.locked).text;
+        }
+        function ppDirty(d) {
+            return ppState.drafts[d.id] != null && promptFromEditable(ppState.drafts[d.id], d.locked) !== d.text;
+        }
+        function renderPromptsTab() {
+            const body = document.getElementById('settingsPromptsBody');
+            if (!promptsLoaded) return;
+            const st = ppState;
+            const d = st.details[st.sel];
+            let editor;
+            if (!st.sel) editor = '<div class="cx-note">没有可编辑的提示词条目</div>';
+            else if (st.dErr[st.sel]) editor = `<div class="sd-warn">条目加载失败：${escapeHtml(st.dErr[st.sel])}</div>`;
+            else if (!d) editor = '<div class="cx-note">加载中…</div>';
+            else editor = promptEditorHtml(d, {editable: ppEditable(d), dirty: ppDirty(d), diff: st.diff, three: st.three,
+                                               serverErr: st.serverErr[st.sel], localDir: st.localDir, rebase: !!st.rebase[st.sel]});
+            const prevScroll = body.scrollTop;
+            body.innerHTML = '<p class="sd-note pp-intro">发给 agent 的每一段文字都是文件：保存写进本机覆盖目录 <code data-i18n-skip>'
+                + escapeHtml(st.localDir || 'prompts.local/') + '</code>（不进 git），下一次编译即生效，无需重启；「恢复默认」= 删除覆盖。</p>'
+                + '<div class="pp-split">' + promptTreeHtml(promptGroups(st.items), st.sel)
+                + `<div class="pp-editor cx-col">${editor}</div></div>`;
+            body.scrollTop = prevScroll;
+        }
+        // 只刷新校验区 / 保存按钮 / 未保存标记（输入时不重建 textarea，保住光标）
+        function ppRefreshChecks() {
+            const d = ppState.details[ppState.sel];
+            if (!d) return;
+            const checks = promptClientCheck(d, ppEditable(d));
+            const box = document.getElementById('ppCheck');
+            if (box) box.innerHTML = '<b>校验</b>' + promptCheckHtml(checks);
+            const dirty = ppDirty(d);
+            const btn = document.getElementById('ppSaveBtn');
+            if (btn) btn.disabled = !dirty || checks.some(c => c[0] === 'bad');
+            const tag = document.getElementById('ppDirty');
+            if (tag) tag.hidden = !dirty;
+        }
+        function ppSetItemStatus(d) {
+            const it = ppState.items.find(x => x.id === d.id);
+            if (it) it.status = d.status;
+        }
+        async function ppSave(text, rebase) {
+            const id = ppState.sel;
+            const d = ppState.details[id];
+            if (!d) return;
+            const res = await fetch('/api/prompts/' + id, {method: 'PUT', headers: {'Content-Type': 'application/json'},
+                                                            body: JSON.stringify({text: text, rebase: !!rebase})});
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                ppState.serverErr[id] = r.errors || [{message: r.error || ('HTTP ' + res.status)}];
+                renderPromptsTab();
+                showToast('保存失败：' + ppState.serverErr[id].map(e => e.message || e.code).join('；'), true);
+                return;
+            }
+            delete ppState.serverErr[id];
+            delete ppState.drafts[id];
+            delete ppState.rebase[id];
+            ppState.details[id] = r;
+            ppState.three = false;
+            ppSetItemStatus(r);
+            renderPromptsTab();
+            showToast('已保存为本机覆盖，下一次编译生效');
+        }
+        async function ppRestore() {
+            const id = ppState.sel;
+            if (!window.confirm('恢复默认会删除本机覆盖文件，确定？')) return;
+            const res = await fetch('/api/prompts/' + id, {method: 'DELETE'});
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok) { showToast('恢复默认失败：' + (r.error || ('HTTP ' + res.status)), true); return; }
+            delete ppState.drafts[id];
+            delete ppState.rebase[id];
+            delete ppState.serverErr[id];
+            ppState.details[id] = r;
+            ppState.three = false;
+            ppSetItemStatus(r);
+            renderPromptsTab();
+            showToast('已恢复默认');
+        }
+        function ppPreviewRole(d) {
+            const id = String(d.id || '');
+            if (id.startsWith('role/')) return id.slice(5);
+            if (d.when && (d.when.roles || []).length) return d.when.roles[0];
+            return 'dev';
+        }
+        document.getElementById('settingsPromptsBody').addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest('[data-pp-act]') : null;
+            if (!t || t.disabled) return;
+            const act = t.dataset.ppAct;
+            const arg = t.dataset.ppArg;
+            const d = ppState.details[ppState.sel];
+            if (act === 'retry') { loadPromptsTab(true); return; }
+            if (act === 'sel') {
+                ppState.sel = arg;
+                ppState.diff = false;
+                ppState.three = false;
+                ppLoadDetail(arg);
+                return;
+            }
+            if (!d) return;
+            if (act === 'diff') { ppState.diff = !ppState.diff; renderPromptsTab(); }
+            else if (act === 'three') { ppState.three = !ppState.three; renderPromptsTab(); }
+            else if (act === 'save') ppSave(promptFromEditable(ppEditable(d), d.locked), ppState.rebase[d.id]);
+            else if (act === 'restore' || act === 'takenew') ppRestore();
+            else if (act === 'keepmine') ppSave(d.override_text, true);
+            else if (act === 'rebasenew') {
+                ppState.drafts[d.id] = promptToEditable(d.default_text, d.locked).text;
+                ppState.rebase[d.id] = true;
+                ppState.three = false;
+                ppState.diff = false;
+                renderPromptsTab();
+            } else if (act === 'ins') {
+                const ta = document.getElementById('ppEdit');
+                if (!ta) return;
+                const pos = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+                const end = ta.selectionEnd == null ? pos : ta.selectionEnd;
+                const tok = '{' + arg + '}';
+                ta.value = ta.value.slice(0, pos) + tok + ta.value.slice(end);
+                ppState.drafts[d.id] = ta.value;
+                ta.focus();
+                ta.setSelectionRange(pos + tok.length, pos + tok.length);
+                ppRefreshChecks();
+            } else if (act === 'preview') {
+                const parts = String(d.id).split('/');
+                openContextPreview({role: ppPreviewRole(d), project: d.readonly ? parts[1] : undefined});
+            } else if (act === 'copypath') {
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d.file || '').then(() => showToast('已复制路径'), () => showToast('复制失败', true));
+            }
+        });
+        document.getElementById('settingsPromptsBody').addEventListener('input', (e) => {
+            if (!e.target || e.target.id !== 'ppEdit') return;
+            ppState.drafts[ppState.sel] = e.target.value;
+            ppRefreshChecks();
+        });
+
+        // ---------------- 技能库 ----------------
+        let skillsLoaded = false;
+        let skillsLoading = false;
+        let skState = {data: null, q: '', scope: 'all', view: 'list', sel: null, details: {}, dErr: {}, forms: {},
+                       errors: {}, creating: false, createErr: '', pending: null, busy: {}};
+        const SK_ACT = {
+            always: {label: '始终', hint: '角色匹配就内联正文', cls: 'cx-tone-blue'},
+            auto: {label: '自动', hint: '命中路径或关键词时内联', cls: 'cx-tone-violet'},
+            on_demand: {label: '按需', hint: '只进目录，agent 自取', cls: 'cx-tone-teal'},
+            manual: {label: '手动', hint: '卡片 notes 点名才加载', cls: 'cx-tone-amber'},
+        };
+        const SK_CYCLE = ['', 'always', 'auto', 'on_demand', 'manual'];
+        const SK_STATUS = {active: ['启用', 'cx-tone-green'], draft: ['草稿', 'cx-tone-violet'], deprecated: ['废弃', 'cx-tone-gray']};
+        const SK_SCOPE = {global: '全局', local: '本机', project: '项目'};
+        function skillKey(sk) {
+            return sk.scope === 'project' ? 'project:' + sk.project + ':' + sk.name : 'g:' + sk.name;
+        }
+        function skillScopeLabel(sk) {
+            if (sk.scope === 'project') return '项目 ' + (sk.project || '');
+            if (sk.scope === 'local') return sk.override_of ? '本机覆盖' : '本机';
+            return '全局';
+        }
+        function skillFilter(skills, q, scope) {
+            const s = String(q || '').trim().toLowerCase();
+            return (skills || []).filter(k => (scope === 'all' || k.scope === scope)
+                && (!s || String(k.name).toLowerCase().includes(s) || String(k.description || '').toLowerCase().includes(s)));
+        }
+        function skillRolesText(sk, roles) {
+            const disp = id => ((roles || []).find(r => r.id === id) || {}).display || id;
+            return (sk.effective_roles || sk.roles || []).map(disp).join('、');
+        }
+        function skillLintTone(level) {
+            return level === 'error' ? ['校验失败', 'pp-bad'] : level === 'warn' ? ['有提醒', 'pp-warn'] : ['校验通过', 'pp-ok'];
+        }
+        function skillListHtml(list, sel, roles) {
+            if (!list.length) return '<div class="cx-note">没有匹配的技能</div>';
+            return list.map(k => {
+                const a = SK_ACT[k.activation] || {label: k.activation || '—', cls: 'cx-tone-gray'};
+                const st = SK_STATUS[k.status] || [k.status || '—', 'cx-tone-gray'];
+                const lt = skillLintTone(k.lint_level);
+                const on = skillKey(k) === sel;
+                return `<button type="button" class="cx-pick sk-row${on ? ' on' : ''}" aria-current="${on ? 'true' : 'false'}" data-sk-act="sel" data-sk-arg="${escapeAttr(skillKey(k))}">`
+                    + `<span class="cx-row"><b class="cx-mono" data-i18n-skip>${escapeHtml(k.name)}</b><span class="cx-pill ${a.cls}">${escapeHtml(a.label)}</span>`
+                    + `<span class="cx-note">${escapeHtml(skillScopeLabel(k))}</span><span class="cx-spacer"></span><span class="cx-pill ${st[1]}">${escapeHtml(st[0])}</span></span>`
+                    + `<span class="sk-desc" data-i18n-skip>${escapeHtml(k.description || '')}</span>`
+                    + `<span class="cx-row cx-note sk-meta"><span>${escapeHtml(skillRolesText(k, roles) || '未挂载角色')}</span><span>近 30 天加载 ${Number(k.uses_30d || 0)} 次</span><span class="${lt[1]}">${lt[0]}</span></span></button>`;
+            }).join('');
+        }
+        // 矩阵格：返回 {value: '' | activation, mounted: [来源], editable, inRoles}
+        function skillCell(sk, role) {
+            const inRoles = (sk.roles || []).includes(role);
+            const mounted = (sk.mounted || []).filter(m => m.role === role).map(m => m.source);
+            return {value: (inRoles || mounted.length) ? (sk.activation || '') : '', inRoles: inRoles, mounted: mounted,
+                    editable: !!sk.editable};
+        }
+        // 点格子：— → 始终 → 自动 → 按需 → 手动 → —。返回要 PUT 的 {roles, activation}；
+        // 激活方式按技能生效（同一行同步变化）；由 flows.json / 项目清单点名的格子不能回到「—」（跳回「始终」）
+        function skillCellNext(sk, role) {
+            const c = skillCell(sk, role);
+            let next = SK_CYCLE[(SK_CYCLE.indexOf(c.value) + 1) % SK_CYCLE.length];
+            if (!next && c.mounted.length) next = 'always';
+            const roles = (sk.roles || []).filter(r => r !== role);
+            if (next) {
+                if (c.inRoles || !c.mounted.length) roles.push(role);
+                return {roles: roles, activation: next};
+            }
+            return {roles: roles, activation: sk.activation};
+        }
+        function skillMatrixHtml(list, roles) {
+            return '<div class="cx-note">点格子循环切换：— → 始终 → 自动 → 按需 → 手动 → —。改动写回技能的 roles / activation；激活方式按技能生效，同一行的格子同步变化。</div>'
+                + '<div class="sk-tablebox"><table class="sk-matrix"><thead><tr><th scope="col">技能</th>'
+                + (roles || []).map(r => `<th scope="col">${escapeHtml(r.display)}</th>`).join('') + '</tr></thead><tbody>'
+                + list.map(k => '<tr>' + `<th scope="row"><span class="cx-mono" data-i18n-skip>${escapeHtml(k.name)}</span> <span class="cx-note">${escapeHtml(skillScopeLabel(k))}</span></th>`
+                    + (roles || []).map(r => {
+                        const c = skillCell(k, r.id);
+                        const a = SK_ACT[c.value];
+                        const why = !c.editable ? '项目技能只读' : c.mounted.length && !c.inRoles ? '由 ' + c.mounted.join('、') + ' 点名' : '点击切换';
+                        return `<td><button type="button" class="sk-cell${a ? ' cx-pill ' + a.cls : ''}${c.mounted.length ? ' sk-mounted' : ''}" data-sk-act="cell" data-sk-arg="${escapeAttr(skillKey(k) + '|' + r.id)}"${c.editable ? '' : ' disabled'} aria-label="${escapeAttr(k.name + ' 在 ' + r.display + '：' + (a ? a.label : '未挂载') + '，' + why)}" title="${escapeAttr(why)}">${a ? escapeHtml(a.label) : '—'}${c.mounted.length ? '<sup aria-hidden="true">*</sup>' : ''}</button></td>`;
+                    }).join('') + '</tr>').join('')
+                + '</tbody></table></div><div class="cx-note">* = 由 flows.json 或项目清单点名挂载（在这里只能改激活方式，取消挂载请改配置文件）。</div>';
+        }
+        function skillFormFrom(d) {
+            return {description: d.description || '', activation: d.activation || 'on_demand', roles: (d.roles || []).slice(),
+                    paths: (d.paths || []).join(', '), keywords: (d.keywords || []).join(', '), required: !!d.required,
+                    status: d.status || 'active', body: d.body || ''};
+        }
+        function skillDetailHtml(sk, d, f, roles, errors) {
+            const ro = !sk.editable;
+            const dis = ro ? ' disabled' : '';
+            let h = `<div class="cx-row cx-wrap"><b class="cx-mono sk-name" data-i18n-skip>${escapeHtml(sk.name)}</b><span class="cx-note cx-mono" data-i18n-skip>${escapeHtml(sk.rel_path || sk.path || '')}</span><span class="cx-spacer"></span>`
+                + '<button type="button" class="btn btn-sm" data-sk-act="preview">在注入预览里试用</button>'
+                + (sk.scope === 'local' ? `<button type="button" class="btn btn-sm" data-sk-act="delete">${sk.override_of ? '删除本机覆盖' : '删除草稿'}</button>` : '')
+                + (ro ? '' : '<button type="button" class="btn btn-sm btn-primary" data-sk-act="save">保存</button>') + '</div>';
+            if (ro) h += `<div class="cx-banner cx-banner-info"><span>项目技能（${escapeHtml(sk.project || '')}）：文件在项目仓库里，在看板上只读；同名时优先于全局与本机版本。</span></div>`;
+            else if (sk.scope === 'global') h += '<div class="cx-banner cx-banner-info"><span>全局默认随代码发布；保存会写一份本机覆盖（prompts.local/skills/），不改默认文件。</span></div>';
+            else if (sk.override_of) h += '<div class="cx-banner cx-banner-info"><span>本机覆盖：编译时优先于全局默认；删除本机覆盖即恢复默认。</span></div>';
+            if (f.status === 'draft') h += '<div class="cx-banner cx-banner-violet"><span>草稿：发布（状态改为启用）前不会进入任何真实会话。</span></div>';
+            if ((errors || []).length) h += '<div class="cx-banner cx-banner-bad"><span>服务端拒绝保存：' + errors.map(e => escapeHtml(e.message || e)).join('；') + '</span></div>';
+            h += `<label class="cx-lbl"><span>描述（会进技能目录，agent 靠它判断要不要用；≤ 200 字）</span><textarea id="skDesc" rows="2"${dis}>${escapeHtml(f.description)}</textarea></label>`;
+            h += '<div class="cx-col"><span class="cx-note">激活方式</span><div class="cx-row cx-wrap" role="group" aria-label="激活方式">' + Object.keys(SK_ACT).map(id => {
+                const on = id === f.activation;
+                return `<button type="button" class="sk-act${on ? ' on cx-pill ' + SK_ACT[id].cls : ''}" aria-pressed="${on}" data-sk-act="act" data-sk-arg="${id}"${dis}><b>${SK_ACT[id].label}</b><span class="cx-note">${SK_ACT[id].hint}</span></button>`;
+            }).join('') + '</div></div>';
+            const mountedRoles = (sk.mounted || []).map(m => m.role);
+            h += '<div class="cx-col"><span class="cx-note">挂载角色（展示名取自 flows.json）</span><div class="cx-row cx-wrap" role="group" aria-label="挂载角色">' + (roles || []).map(r => {
+                const on = f.roles.includes(r.id);
+                const cfg = mountedRoles.includes(r.id);
+                return `<button type="button" class="pp-chip${on ? ' on' : ''}" aria-pressed="${on}" data-sk-act="role" data-sk-arg="${escapeAttr(r.id)}"${dis}${cfg ? ' title="flows.json / 项目清单已点名该角色"' : ''}>${on ? '✓ ' : '+ '}${escapeHtml(r.display)}${cfg ? ' *' : ''}</button>`;
+            }).join('') + '</div></div>';
+            if (f.activation === 'auto') {
+                h += '<div class="cx-row cx-wrap cx-stretch">'
+                    + `<label class="cx-lbl cx-grow"><span>命中路径（glob，逗号分隔，任一命中即触发）</span><input id="skPaths" class="cx-mono" value="${escapeAttr(f.paths)}"${dis}></label>`
+                    + `<label class="cx-lbl cx-grow"><span>命中关键词（标题或 notes，逗号分隔）</span><input id="skKeywords" value="${escapeAttr(f.keywords)}"${dis}></label></div>`;
+            }
+            h += '<div class="cx-row cx-wrap">'
+                + `<label class="cx-check"><input type="checkbox" id="skRequired"${f.required ? ' checked' : ''}${dis}><span>必需：文件缺失或解析失败时停线，不拉会话</span></label>`
+                + `<label class="cx-lbl cx-inline"><span>状态</span><select id="skStatus"${dis}>${Object.keys(SK_STATUS).map(s => `<option value="${s}"${s === f.status ? ' selected' : ''}>${SK_STATUS[s][0]}</option>`).join('')}</select></label></div>`;
+            h += `<label class="cx-lbl"><span>正文（SKILL.md，frontmatter 由上面的表单生成）</span><textarea id="skBody" class="cx-mono" rows="10" spellcheck="false"${dis}>${escapeHtml(f.body)}</textarea></label>`;
+            const lint = sk.lint || [];
+            h += '<div class="cx-row cx-wrap cx-top"><div class="cx-col cx-grow"><b>校验</b>'
+                + (lint.length ? lint.map(l => { const lv = l.level === 'error' ? 'bad' : l.level === 'warn' ? 'warn' : 'ok'; return `<span class="pp-check pp-${lv}">${lv === 'ok' ? '✓' : lv === 'bad' ? '✕' : '!'} ${escapeHtml(l.message)}</span>`; }).join('') : '<span class="pp-check pp-ok">✓ 没有问题</span>')
+                + '</div><div class="cx-col cx-grow"><b>使用情况（近 30 天）</b>'
+                + `<span>加载 <span class="cx-mono">${Number(sk.uses_30d || 0)}</span> 次 · 正文 <span class="cx-mono">${ctxFmt(sk.chars)}</span> 字</span>`
+                + `<span class="cx-note">挂载来源：${(sk.mounted || []).length ? sk.mounted.map(m => escapeHtml(roleLabel(m.role) + ' ← ' + m.source)).join('；') : '仅技能自身 roles'}</span></div></div>`;
+            return h;
+        }
+        function skillCreateHtml(err) {
+            return '<div class="sk-create cx-col"><b>新建技能（草稿）</b>'
+                + '<div class="cx-row cx-wrap cx-end"><label class="cx-lbl"><span>名称（小写字母/数字/连字符）</span><input id="skNewName" class="cx-mono" maxlength="40" autocomplete="off"></label>'
+                + '<label class="cx-lbl cx-grow"><span>描述</span><input id="skNewDesc" maxlength="200" autocomplete="off"></label>'
+                + '<button type="button" class="btn btn-sm btn-primary" data-sk-act="create">创建</button><button type="button" class="btn btn-sm" data-sk-act="cancelnew">取消</button></div>'
+                + (err ? `<div class="cx-banner cx-banner-bad"><span>${escapeHtml(err)}</span></div>` : '') + '</div>';
+        }
+        async function loadSkillsTab(force) {
+            const body = document.getElementById('settingsSkillsBody');
+            if (skillsLoaded && !force) return;
+            if (skillsLoading) return;
+            skillsLoading = true;
+            if (!skState.data) body.innerHTML = '<div class="sd-note">技能库加载中…</div>';
+            try {
+                const res = await fetch('/api/skills', {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                skState.data = d;
+                if (force) { skState.details = {}; skState.forms = {}; skState.errors = {}; }
+                skillsLoaded = true;
+                const skills = d.skills || [];
+                if (skState.pending) {
+                    const hit = skills.find(k => skillKey(k) === skState.pending) || skills.find(k => k.name === skState.pending);
+                    skState.sel = hit ? skillKey(hit) : skState.sel;
+                    skState.view = 'list';
+                    skState.q = '';
+                    skState.scope = 'all';
+                    if (!hit) showToast('技能库里没有「' + skState.pending + '」：文件缺失，可新建同名技能或取消必需', true);
+                    skState.pending = null;
+                }
+                if (!skills.some(k => skillKey(k) === skState.sel)) skState.sel = skills[0] ? skillKey(skills[0]) : null;
+                renderSkillsTab();
+                if (skState.sel) skLoadDetail(skState.sel);
+            } catch (e) {
+                skillsLoaded = false;
+                body.innerHTML = '<div class="sd-warn">技能库加载失败：' + escapeHtml(String((e && e.message) || e)) + '</div>'
+                    + '<button type="button" class="btn" data-sk-act="retry">重试</button>';
+            } finally {
+                skillsLoading = false;
+            }
+        }
+        function skFind(key) {
+            return ((skState.data || {}).skills || []).find(k => skillKey(k) === key) || null;
+        }
+        async function skLoadDetail(key, force) {
+            const sk = skFind(key);
+            if (!sk) return;
+            if (skState.details[key] && !force) { renderSkillsTab(); return; }
+            try {
+                const q = sk.scope === 'project' ? '?project=' + encodeURIComponent(sk.project) : '';
+                const res = await fetch('/api/skills/' + encodeURIComponent(sk.name) + q, {cache: 'no-store'});
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+                skState.details[key] = d;
+                skState.forms[key] = skillFormFrom(d);
+                delete skState.dErr[key];
+            } catch (e) {
+                skState.dErr[key] = String((e && e.message) || e);
+            }
+            renderSkillsTab();
+        }
+        // 重绘前把输入框里的值收回表单态（激活方式 / 角色按钮会触发重绘）
+        function skSyncForm() {
+            const f = skState.forms[skState.sel];
+            if (!f) return;
+            const v = id => { const el = document.getElementById(id); return el ? el : null; };
+            if (v('skDesc')) f.description = v('skDesc').value;
+            if (v('skPaths')) f.paths = v('skPaths').value;
+            if (v('skKeywords')) f.keywords = v('skKeywords').value;
+            if (v('skRequired')) f.required = v('skRequired').checked;
+            if (v('skStatus')) f.status = v('skStatus').value;
+            if (v('skBody')) f.body = v('skBody').value;
+        }
+        function skSplit(s) {
+            return String(s || '').split(/[,，\n]/).map(x => x.trim()).filter(Boolean);
+        }
+        function renderSkillsTab() {
+            const body = document.getElementById('settingsSkillsBody');
+            if (!skillsLoaded || !skState.data) return;
+            const st = skState;
+            const data = st.data;
+            const roles = data.roles || [];
+            const list = skillFilter(data.skills, st.q, st.scope);
+            const seg = (cur, act, opts) => `<div class="cx-segctl" role="group">${opts.map(o => `<button type="button" class="${cur === o[0] ? 'on' : ''}" aria-pressed="${cur === o[0]}" data-sk-act="${act}" data-sk-arg="${o[0]}">${o[1]}</button>`).join('')}</div>`;
+            let h = '<div class="cx-row cx-wrap sk-toolbar">'
+                + `<label class="cx-lbl sk-search"><span class="cx-vh">搜索技能</span><input id="skQuery" placeholder="搜索名称或描述" value="${escapeAttr(st.q)}" autocomplete="off"></label>`
+                + seg(st.scope, 'scope', [['all', '全部'], ['global', '全局'], ['local', '本机'], ['project', '项目']])
+                + '<span class="cx-spacer"></span>'
+                + seg(st.view, 'view', [['list', '列表'], ['matrix', '角色 × 技能矩阵']])
+                + '<button type="button" class="btn btn-sm btn-primary" data-sk-act="new">新建技能</button></div>';
+            if (st.creating) h += skillCreateHtml(st.createErr);
+            if (st.view === 'matrix') {
+                h += skillMatrixHtml(list, roles);
+            } else {
+                const sk = skFind(st.sel);
+                let detail = '<div class="cx-note">选择左侧技能查看详情</div>';
+                if (sk && st.dErr[st.sel]) detail = `<div class="sd-warn">技能详情加载失败：${escapeHtml(st.dErr[st.sel])}</div>`;
+                else if (sk && st.details[st.sel]) detail = skillDetailHtml(sk, st.details[st.sel], st.forms[st.sel], roles, st.errors[st.sel]);
+                else if (sk) detail = '<div class="cx-note">加载中…</div>';
+                h += `<div class="pp-split"><div class="sk-list cx-col">${skillListHtml(list, st.sel, roles)}</div><div class="pp-editor cx-col">${detail}</div></div>`;
+            }
+            const prevScroll = body.scrollTop;
+            body.innerHTML = h;
+            body.scrollTop = prevScroll;
+        }
+        async function skSave() {
+            skSyncForm();
+            const key = skState.sel;
+            const sk = skFind(key);
+            const f = skState.forms[key];
+            if (!sk || !f) return;
+            const payload = {description: f.description, activation: f.activation, roles: f.roles, required: f.required,
+                             status: f.status, body: f.body, paths: skSplit(f.paths), keywords: skSplit(f.keywords)};
+            const res = await fetch('/api/skills/' + encodeURIComponent(sk.name), {method: 'PUT', headers: {'Content-Type': 'application/json'},
+                                                                               body: JSON.stringify(payload)});
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                skState.errors[key] = r.errors || [{message: r.error || ('HTTP ' + res.status)}];
+                renderSkillsTab();
+                showToast('保存失败', true);
+                return;
+            }
+            delete skState.errors[key];
+            showToast('已保存为本机版本，下一次编译生效');
+            await loadSkillsTab(true);
+        }
+        async function skCellClick(arg) {
+            const [key, role] = String(arg).split('|');
+            const sk = skFind(key);
+            if (!sk || !sk.editable || skState.busy[key]) return;
+            const next = skillCellNext(sk, role);
+            const old = {roles: sk.roles, activation: sk.activation, mounted: sk.mounted};
+            sk.roles = next.roles;
+            sk.activation = next.activation;
+            skState.busy[key] = true;
+            renderSkillsTab();
+            try {
+                const res = await fetch('/api/skills/' + encodeURIComponent(sk.name), {method: 'PUT', headers: {'Content-Type': 'application/json'},
+                                                                                   body: JSON.stringify({roles: next.roles, activation: next.activation})});
+                const r = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error((r.errors || []).map(e => e.message).join('；') || r.error || ('HTTP ' + res.status));
+                Object.assign(sk, {roles: r.roles || next.roles, activation: r.activation || next.activation, scope: r.scope || sk.scope,
+                                   override_of: r.override_of !== undefined ? r.override_of : sk.override_of, lint: r.lint || sk.lint,
+                                   lint_level: r.lint_level || sk.lint_level});
+                delete skState.details[key];
+            } catch (e) {
+                Object.assign(sk, old);
+                showToast('保存失败：' + String((e && e.message) || e), true);
+            } finally {
+                delete skState.busy[key];
+            }
+            renderSkillsTab();
+            const cell = document.querySelector(`#settingsSkillsBody [data-sk-arg="${CSS.escape(arg)}"]`);
+            if (cell) cell.focus();
+        }
+        async function skCreate() {
+            const name = (document.getElementById('skNewName') || {}).value || '';
+            const desc = (document.getElementById('skNewDesc') || {}).value || '';
+            const res = await fetch('/api/skills', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                                    body: JSON.stringify({name: name.trim(), description: desc.trim(), body: ''})});
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                skState.createErr = r.error || (r.errors || []).map(e => e.message).join('；') || ('HTTP ' + res.status);
+                renderSkillsTab();
+                return;
+            }
+            skState.creating = false;
+            skState.createErr = '';
+            skState.pending = 'g:' + name.trim();
+            showToast('已新建草稿技能');
+            await loadSkillsTab(true);
+        }
+        async function skDelete() {
+            const sk = skFind(skState.sel);
+            if (!sk || !window.confirm('删除本机版本（覆盖或草稿）？全局默认不受影响。')) return;
+            const res = await fetch('/api/skills/' + encodeURIComponent(sk.name), {method: 'DELETE'});
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok) { showToast('删除失败：' + (r.error || ('HTTP ' + res.status)), true); return; }
+            showToast('已删除本机版本');
+            await loadSkillsTab(true);
+        }
+        document.getElementById('settingsSkillsBody').addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest('[data-sk-act]') : null;
+            if (!t || t.disabled) return;
+            const act = t.dataset.skAct;
+            const arg = t.dataset.skArg;
+            const st = skState;
+            if (act === 'retry') { loadSkillsTab(true); return; }
+            if (act === 'scope' || act === 'view') { skSyncForm(); st[act] = arg; renderSkillsTab(); return; }
+            if (act === 'sel') { skSyncForm(); st.sel = arg; skLoadDetail(arg); return; }
+            if (act === 'new') { skSyncForm(); st.creating = true; st.createErr = ''; renderSkillsTab(); const n = document.getElementById('skNewName'); if (n) n.focus(); return; }
+            if (act === 'cancelnew') { skSyncForm(); st.creating = false; renderSkillsTab(); return; }
+            if (act === 'create') { skCreate(); return; }
+            if (act === 'cell') { skCellClick(arg); return; }
+            const f = st.forms[st.sel];
+            const sk = skFind(st.sel);
+            if (act === 'act' && f) { skSyncForm(); f.activation = arg; renderSkillsTab(); }
+            else if (act === 'role' && f) {
+                skSyncForm();
+                f.roles = f.roles.includes(arg) ? f.roles.filter(r => r !== arg) : f.roles.concat([arg]);
+                renderSkillsTab();
+            } else if (act === 'save') skSave();
+            else if (act === 'delete') skDelete();
+            else if (act === 'preview' && sk) {
+                const roles = (f && f.roles.length ? f.roles : sk.effective_roles) || [];
+                openContextPreview({role: roles[0] || 'dev', project: sk.project || undefined});
+            }
+        });
+        document.getElementById('settingsSkillsBody').addEventListener('input', (e) => {
+            if (!e.target || e.target.id !== 'skQuery') return;
+            const pos = e.target.selectionStart;
+            skSyncForm();
+            skState.q = e.target.value;
+            renderSkillsTab();
+            const q = document.getElementById('skQuery');
+            if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+        });
+
+        // ---------------- 抽屉入口 ----------------
+        // 从卡片上下文 / 注入预览的警告跳转：打开设置抽屉并定位到某个提示词条目或技能
+        function openSettingsAt(tab, opts) {
+            const o = opts || {};
+            const panel = document.getElementById('settingsDrawer');
+            if (!panel.classList.contains('show')) openSettingsDrawer();
+            if (tab === 'prompts' && o.prompt) {
+                if (promptsLoaded && ppState.items.some(x => x.id === o.prompt)) { ppState.sel = o.prompt; ppState.diff = false; ppState.three = false; ppLoadDetail(o.prompt); }
+                else { ppState.pending = o.prompt; promptsLoaded = false; }
+            }
+            if (tab === 'skills' && o.skill) { skState.pending = o.skill; skillsLoaded = false; }
+            switchSettingsTab(tab);
+        }
+        // 全局信息 tab 的角色表：每行补「注入预览」按钮（服务端片段不改，前端按首列角色 id 装饰）
+        function decorateRoleRows(root) {
+            (root.querySelectorAll('table.sd-roles tr') || []).forEach((tr, i) => {
+                if (tr.dataset.pvDecorated) return;
+                tr.dataset.pvDecorated = '1';
+                const code = tr.querySelector('td code');
+                if (i === 0 || !code) { const th = document.createElement('th'); th.textContent = '注入预览'; tr.appendChild(th); return; }
+                const td = document.createElement('td');
+                td.innerHTML = `<button type="button" class="btn btn-sm" data-ctx-preview-role="${escapeAttr(code.textContent.trim())}">注入预览</button>`;
+                tr.appendChild(td);
+            });
+        }
+        document.getElementById('settingsBody').addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest('[data-ctx-preview-role]') : null;
+            if (t) openContextPreview({role: t.dataset.ctxPreviewRole});
+        });
+        document.getElementById('sdTabPrompts').addEventListener('click', () => switchSettingsTab('prompts'));
+        document.getElementById('sdTabSkills').addEventListener('click', () => switchSettingsTab('skills'));
         // ==================== #4 模型调参抽屉（右侧；角色×模型主表 + 角色×模型统计） ====================
         // 触发：信息条机器人位（#projectBar 容器事件委托，innerHTML 重绘不失联）；仅具体项目可点。
         // 数据：打开时 GET 项目 models（四层链生效值 + 别名池）与 model-stats（角色×模型分组），
@@ -4322,7 +5683,7 @@ void main() {
                     selectedAgentSession = null;
                     selectedSid = null;
                     pane.innerHTML = detailHtml(item);
-                    loadReviews(item.id);
+                    afterDetailRender(item);
                 }
             } else if (agentDraft && agentDraft.reqId === item.id && item.status !== 'done'
                        && !selectedSid && !selectedDispatcher && !selectedArtifact && !selectedReqChat) {
@@ -4343,7 +5704,7 @@ void main() {
                 refreshDispatcherEvents(item.id);
             } else {
                 pane.innerHTML = detailHtml(item);
-                loadReviews(item.id);
+                afterDetailRender(item);   // 概要分页拉评审记录；上下文分页挂载执行档案（55-context.js）
             }
         }
 
@@ -4369,6 +5730,19 @@ void main() {
             // #386 merge 冲突待处理（doing + 冲突表命中）：渲染「重试合并 / 人工接管」，与卡片头部按钮同机制
             const mergeActions = (i.status === 'doing' && mergeConflicts[i.id])
                 ? `<div class="detail-actions"><button class="btn" onclick="decideMerge(${i.id},'retry')">重试合并</button><button class="btn" onclick="decideMerge(${i.id},'takeover')">人工接管</button></div>` : '';
+            // 上下文分页（55-context.js）：头部与元信息共用，正文换成执行档案视图 #ctxPane
+            if (detailTab === 'context') {
+                return `
+            <div class="detail-pane">
+                <div class="detail-head">
+                    ${statusBadgeHtml(i)}
+                    <div class="detail-title">${escapeHtml(i.title)}</div>
+                </div>
+                <div class="detail-meta">${meta.join(' · ')}</div>
+                ${detailTabsHtml(i)}
+                <div class="cx-pane" id="ctxPane" data-req="${i.id}"></div>
+            </div>`;
+            }
             return `
             <div class="detail-pane">
                 <div class="detail-head">
@@ -4376,6 +5750,7 @@ void main() {
                     <div class="detail-title">${escapeHtml(i.title)}</div>
                 </div>
                 <div class="detail-meta">${meta.join(' · ')}</div>
+                ${detailTabsHtml(i)}
                 ${mergeActions}
                 <div class="detail-section-label">需求详情</div>
                 <div class="detail-notes${i.notes ? '' : ' empty'}">${notes}</div>
