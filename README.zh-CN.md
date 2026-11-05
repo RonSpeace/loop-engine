@@ -97,6 +97,7 @@ cp projects.example.json projects.json      # 指向你要让 agent 开发的 gi
 | `kimi`（默认） | 全部 | kimi-code CLI（`kimi acp`），可接任意 OpenAI / Anthropic / Gemini 兼容模型 |
 | `claude-code` | 开发 | 经 `@zed-industries/claude-code-acp` 接 Claude Code，用你已登录的 `claude` CLI |
 | `codex` | 开发 | 经 `@zed-industries/codex-acp` 接 Codex，用你已登录的 `codex` CLI |
+| `opencode` | 流水线全部角色 | [OpenCode](https://opencode.ai)（`opencode acp`，开源）。可接**任意 OpenAI 兼容接口**：设 `LOOP_OPENAI_BASE_URL`、`LOOP_OPENAI_API_KEY`、`LOOP_OPENCODE_MODEL`，或沿用 OpenCode 自己配好的服务商 |
 
 ```json
 {"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}
@@ -105,8 +106,10 @@ cp projects.example.json projects.json      # 指向你要让 agent 开发的 gi
 选择顺序：`projects.json` 的 `<项目>.runtimes.<角色>` → `<项目>.runtime` → `flows.json` 的
 `roles.<id>.runtime` → `LOOP_AGENT_RUNTIME` → `kimi`。未知运行体在启动前就会被拒绝。
 
-Claude Code 和 Codex 目前只开放给**开发**角色：Loop Engine 会复核它们申请执行的每条命令和每次写文件，
-但还不能证明评审类角色的只读限制在这两个运行体上同样生效，所以宁可拒绝启动，也不在没有约束的情况下运行。
+只读和受限角色只能跑在通过**运行体约束认证**（[`tests/test_runtime_certification.py`](tests/test_runtime_certification.py)）的运行体上：
+用我们真实的 ACP 客户端驱动真实运行体，模型换成按脚本逐条越权的假模型（写文件、执行命令、读项目外文件、派子 agent），
+每一次尝试都必须被拦下。OpenCode 已通过（子 agent 与自带技能加载已关闭）；Claude Code 和 Codex 通过同一套认证前仍只开放给开发角色。
+聊天建卡与看板助手会话仍只用 kimi。
 详见 [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择)。
 
 ### Linux

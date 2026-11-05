@@ -67,3 +67,25 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python -m pytest -q -p no:cacheprovider tests
+
+  runtime-cert:
+    name: Runtime certification (OpenCode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          npm install -g opencode-ai@1.19.5
+      - name: Certify OpenCode against the scripted fake model
+        run: python -m pytest -q -p no:cacheprovider tests/test_runtime_certification.py

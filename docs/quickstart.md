@@ -133,6 +133,7 @@ KIMI_CODE_HOME=~/.kimi-code-deepseek kimi      # 可选：交互问一句，确�
 | `kimi`（默认） | 全部 | kimi-code CLI，模型按上文第 2 节配置 |
 | `claude-code` | 仅 dev | 优先用 PATH 上的 `claude-code-acp`，否则 `npx -y @zed-industries/claude-code-acp@0.16.2`；需先登录 `claude` CLI |
 | `codex` | 仅 dev | 优先用 PATH 上的 `codex-acp`，否则 `npx -y @zed-industries/codex-acp@0.16.0`；需先登录 `codex` CLI |
+| `opencode` | 流水线全部角色 | `npm i -g opencode-ai`；可接任意 OpenAI 兼容接口（见下方「用 OpenCode 接任意模型」） |
 
 后两者需要 Node.js / npm。选择顺序：`projects.json` 的 `<项目>.runtimes.<角色>` → `<项目>.runtime` →
 `flows.json` 的 `roles.<角色>.runtime` → 环境变量 `LOOP_AGENT_RUNTIME` → `kimi`。未知或空的运行体 ID 会在启动前被拒绝。
@@ -142,8 +143,25 @@ KIMI_CODE_HOME=~/.kimi-code-deepseek kimi      # 可选：交互问一句，确�
 ```
 
 - Claude Code / Codex 使用各自适配器的默认模型，不读 kimi 的模型别名。
-- 它们目前**只开放给开发角色**：还不能证明只读限制在这两个运行体上同样成立，所以分析、评审、验收、
-  冲突解决和助手会话在启动前就会被拒绝。这些角色请保持 `kimi`；把全局运行体改掉会让这些阶段停住。
+- 只读和受限角色只能跑在通过**运行体约束认证**（`tests/test_runtime_certification.py`）的运行体上：
+  用真实客户端驱动真实运行体，假模型按脚本逐条越权，每次尝试都必须被拦下。OpenCode 已通过；Claude Code / Codex
+  通过前只开放给开发角色（分析、评审、验收、冲突解决在它们上面会拒绝启动）。聊天建卡和助手会话只用 kimi。
+
+### 用 OpenCode 接任意模型
+
+```bash
+npm i -g opencode-ai
+# 在 .env 或启动环境里：
+LOOP_AGENT_RUNTIME=opencode
+LOOP_OPENAI_BASE_URL=https://api.deepseek.com/v1     # 任意 OpenAI 兼容接口（DeepSeek、Qwen、GLM、OpenRouter、自建网关……）
+LOOP_OPENAI_API_KEY=sk-...                            # 只经环境变量传给 OpenCode，不写进任何配置文件
+LOOP_OPENCODE_MODEL=deepseek-chat                     # 全部角色的默认模型
+LOOP_OPENCODE_MODEL_CODE_REVIEW=deepseek-reasoner     # 可选：按角色覆盖（角色名大写）
+```
+
+不设 `LOOP_OPENAI_BASE_URL` 时沿用 OpenCode 本机已配好的服务商（`opencode auth login`），模型写 OpenCode 的
+`服务商/模型` 形式即可。Loop Engine 每个会话给 OpenCode 注入权限配置：写文件、执行命令、访问项目外目录一律经
+Loop Engine 按角色审批；子 agent 与 OpenCode 自带的技能加载关闭（技能由 Loop Engine 的技能库管理）。
 - 要指定启动命令，用 `LOOP_AGENT_CMD_KIMI`、`LOOP_AGENT_CMD_CLAUDE_CODE`、`LOOP_AGENT_CMD_CODEX`，
   值按 shell 引号语法拆成参数（不经 shell 执行；kimi 需自行带上 `acp`），如 `LOOP_AGENT_CMD_CODEX='/opt/bin/codex-acp'`。
 - 改 `.env` 或 `flows.json` 后重启看板与调度器；项目级选择从下一个新会话开始生效。

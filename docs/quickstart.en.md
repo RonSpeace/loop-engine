@@ -134,6 +134,7 @@ Each role drives an agent runtime over ACP. The registry is `acp_shared.AGENT_RU
 | `kimi` (default) | all | kimi-code CLI, models configured as in section 2 |
 | `claude-code` | dev only | uses `claude-code-acp` from PATH, otherwise `npx -y @zed-industries/claude-code-acp@0.16.2`; log in to the `claude` CLI first |
 | `codex` | dev only | uses `codex-acp` from PATH, otherwise `npx -y @zed-industries/codex-acp@0.16.0`; log in to the `codex` CLI first |
+| `opencode` | all pipeline roles | `npm i -g opencode-ai`; works with any OpenAI-compatible API (see "Any model via OpenCode" below) |
 
 The last two need Node.js / npm. Selection order: `projects.json` `<project>.runtimes.<role>` → `<project>.runtime` →
 `flows.json` `roles.<role>.runtime` → environment variable `LOOP_AGENT_RUNTIME` → `kimi`. Unknown or empty runtime ids are
@@ -144,9 +145,27 @@ refused before anything starts.
 ```
 
 - Claude Code and Codex use their adapters' default models; kimi model aliases do not apply to them.
-- They are **limited to the dev role** for now: it cannot yet be proven that the read-only limits hold on those runtimes,
-  so analysis, review, acceptance, conflict resolution and assistant sessions refuse to start on them. Keep those roles
-  on `kimi`; switching the global runtime would stall those stages.
+- Read-only and restricted roles only run on runtimes that pass the **runtime certification suite**
+  (`tests/test_runtime_certification.py`): the real client drives the real runtime while a scripted fake model attempts
+  every violation, and each attempt must be stopped. OpenCode passes; Claude Code and Codex stay dev-only until they do
+  (analysis, review, acceptance and conflict resolution refuse to start on them). Card-creation and assistant sessions use kimi.
+
+### Any model via OpenCode
+
+```bash
+npm i -g opencode-ai
+# in .env or the launch environment:
+LOOP_AGENT_RUNTIME=opencode
+LOOP_OPENAI_BASE_URL=https://api.deepseek.com/v1     # any OpenAI-compatible endpoint (DeepSeek, Qwen, GLM, OpenRouter, your gateway...)
+LOOP_OPENAI_API_KEY=sk-...                            # passed to OpenCode only via the environment, never written to a config file
+LOOP_OPENCODE_MODEL=deepseek-chat                     # default model for every role
+LOOP_OPENCODE_MODEL_CODE_REVIEW=deepseek-reasoner     # optional per-role override (role name upper-cased)
+```
+
+Without `LOOP_OPENAI_BASE_URL`, OpenCode's own configured providers are used (`opencode auth login`); write models as
+OpenCode's `provider/model`. Every session gets an injected permission config: file writes, commands and access outside
+the project all go through Loop Engine's per-role approval; sub-agents and OpenCode's own skill loader are disabled
+(skills come from Loop Engine's skill library).
 - To override the launch command, set `LOOP_AGENT_CMD_KIMI`, `LOOP_AGENT_CMD_CLAUDE_CODE` or `LOOP_AGENT_CMD_CODEX`.
   The value is split into arguments using shell quoting rules (it is not run through a shell; for kimi include `acp`
   yourself), e.g. `LOOP_AGENT_CMD_CODEX='/opt/bin/codex-acp'`.

@@ -103,6 +103,7 @@ Each role runs on an ACP agent runtime, chosen per role and per project:
 | `kimi` (default) | all | kimi-code CLI (`kimi acp`); point it at any OpenAI / Anthropic / Gemini-compatible model |
 | `claude-code` | dev | Claude Code via `@zed-industries/claude-code-acp`; uses your logged-in `claude` CLI |
 | `codex` | dev | Codex via `@zed-industries/codex-acp`; uses your logged-in `codex` CLI |
+| `opencode` | all pipeline roles | [OpenCode](https://opencode.ai) (`opencode acp`, open source). Works with **any OpenAI-compatible API**: set `LOOP_OPENAI_BASE_URL`, `LOOP_OPENAI_API_KEY`, `LOOP_OPENCODE_MODEL` — or use OpenCode's own provider setup |
 
 ```json
 {"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}
@@ -111,9 +112,12 @@ Each role runs on an ACP agent runtime, chosen per role and per project:
 Selection order: `projects.json` `<project>.runtimes.<role>` → `<project>.runtime` → `flows.json`
 `roles.<id>.runtime` → `LOOP_AGENT_RUNTIME` → `kimi`. Unknown runtimes are refused before anything starts.
 
-Claude Code and Codex are limited to the **dev** role for now: Loop Engine re-checks every command and
-file write they ask to run, but it can't yet prove the read-only limits of the reviewer roles hold on
-those runtimes, so it refuses to start them there rather than run them unconstrained.
+Read-only and restricted roles only run on runtimes that pass the **runtime certification suite**
+([`tests/test_runtime_certification.py`](tests/test_runtime_certification.py)): our real ACP client drives the
+real runtime against a scripted fake model that tries to write files, run commands, read outside the project
+and spawn sub-agents, and every attempt must be stopped. OpenCode passes (sub-agents and its own skill loader
+are switched off). Claude Code and Codex are limited to the **dev** role until they pass the same suite.
+The chat card-creation and board-assistant sessions stay on kimi.
 Details: [docs/quickstart.md](docs/quickstart.md#agent-runtimes运行体选择).
 
 ### Linux

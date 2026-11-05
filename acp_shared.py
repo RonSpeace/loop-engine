@@ -79,7 +79,18 @@ AGENT_RUNTIMES = {
               "supports_model_option": False, "supports_usage_command": False,
               "supports_permission_mode": False, "supports_authenticate": False, "supports_model_pool": False,
               "supports_restricted_roles": False, "session_dir_resolver": None},
+    # OpenCode（开源、原生 ACP、可接任意 OpenAI 兼容接口）。约束经认证套件实测
+    # （tests/test_runtime_certification.py）：写/改/命令/外部目录读取都经 session/request_permission，
+    # 子 agent（task）与自带 skill 关闭（子 agent 的审批不转发给客户端，会挂死）。
+    # 每会话配置经 OPENCODE_CONFIG_CONTENT 注入（opencode_session_config），与用户本机配置合并。
+    "opencode": {"display_name": "OpenCode", "argv": ("opencode", "acp"), "env": {},
+                 "protected_process_names": ("opencode",),
+                 "supports_model_option": False, "supports_usage_command": False,
+                 "supports_permission_mode": False, "supports_authenticate": False, "supports_model_pool": False,
+                 "supports_restricted_roles": True, "session_dir_resolver": None},
 }
+# 建卡会话 / 看板助手这类特殊档位（禁内置写、工具档位、禁 fs 写）依赖拒绝内置读等运行体细节，只开放给 kimi
+SPECIAL_PROFILE_RUNTIMES = ("kimi",)
 _RUNTIME_SKIPS = set()
 
 
@@ -113,6 +124,39 @@ def runtime_argv(runtime_id, kimi_bin=None):
     return [binary] if binary else list(runtime["argv"])
 
 
+OPENCODE_PROVIDER_ID = "loop"
+
+
+def opencode_session_config(model=None, *, readonly=False, role=None, project=None):
+    """OpenCode 每会话配置（经 OPENCODE_CONFIG_CONTENT 注入，与用户本机 opencode 配置合并）。
+
+    权限：写/改、命令、外部目录一律 ask（由 Loop Engine 审批按角色裁决）；子 agent 与自带 skill
+    关闭（子 agent 的审批不转发给客户端）；只读角色另关 webfetch。
+    模型（不复用 kimi 的模型别名，两套命名不混用）：
+    - LOOP_OPENCODE_MODEL_<角色大写> > LOOP_OPENCODE_MODEL > 不指定（用本机 opencode 配置的默认模型）；
+    - 设置了 LOOP_OPENAI_BASE_URL 时注入 OpenAI 兼容服务商 "loop"（Key 走 {env:LOOP_OPENAI_API_KEY}，
+      不写进配置文本），模型名不带「服务商/」前缀时补成 loop/<模型>。"""
+    perm = {"edit": "ask", "bash": "ask", "external_directory": "ask", "webfetch": "deny" if readonly else "ask",
+            "task": "deny", "skill": "deny"}
+    cfg = {"$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled", "permission": perm}
+    base_url = os.environ.get("LOOP_OPENAI_BASE_URL", "").strip()
+    if base_url:
+        cfg["provider"] = {OPENCODE_PROVIDER_ID: {
+            "npm": "@ai-sdk/openai-compatible", "name": "Loop Engine (OpenAI compatible)",
+            "options": {"baseURL": base_url, "apiKey": "{env:LOOP_OPENAI_API_KEY}"}}}
+    chosen = ""
+    if role:
+        chosen = os.environ.get("LOOP_OPENCODE_MODEL_" + str(role).upper().replace("-", "_"), "").strip()
+    chosen = chosen or os.environ.get("LOOP_OPENCODE_MODEL", "").strip()
+    if chosen:
+        if base_url and "/" not in chosen:
+            chosen = f"{OPENCODE_PROVIDER_ID}/{chosen}"
+        if base_url and chosen.startswith(OPENCODE_PROVIDER_ID + "/"):
+            cfg["provider"][OPENCODE_PROVIDER_ID]["models"] = {chosen.split("/", 1)[1]: {}}
+        cfg["model"] = chosen
+    return cfg
+
+
 def normalize_permission_tool(runtime_id, tool_call):
     """适配器的展示标题不可信；只从完整结构化参数识别命令/写路径。
 
@@ -124,6 +168,7 @@ def normalize_permission_tool(runtime_id, tool_call):
         return tool_call
     tc = dict(tool_call)
     tc.pop("writePaths", None)  # 仅允许本函数从结构化参数派生，不能采信远端附加字段
+    tc.pop("accessPaths", None)
     raw = tc.get("rawInput")
     if not isinstance(raw, dict):
         return dict(tc, title="Unknown", content=[])
@@ -147,6 +192,15 @@ def normalize_permission_tool(runtime_id, tool_call):
                     return dict(tc, title="Unknown", content=[])
                 paths.append(change["move_path"])
         tc.update(title="Patch", writePaths=paths)
+    elif (runtime_id == "opencode" and tc.get("kind") == "edit" and isinstance(raw.get("filepath"), str)
+          and raw["filepath"]):
+        # OpenCode write/edit 审批：rawInput = {filepath, diff}；locations 不可信，只认 filepath
+        tc.update(title="Edit", writePaths=[raw["filepath"]],
+                  content=[{"content": {"type": "text", "text": "Writing " + raw["filepath"]}}])
+    elif (runtime_id == "opencode" and tc.get("kind") == "other" and isinstance(raw.get("filepath"), str)
+          and raw["filepath"] and set(raw) <= {"filepath", "parentDir"}):
+        # OpenCode「外部目录」审批：访问会话 cwd 之外的路径前先问（读写都会触发；写还会再走一次 Edit 审批）
+        tc.update(title="ExternalDirectory", accessPaths=[raw["filepath"]])
     elif isinstance(raw.get("file_path"), str) and any(k in raw for k in ("content", "old_string", "edits")):
         path = raw["file_path"]
         tc.update(title="Write" if "content" in raw else "Edit",
@@ -1350,10 +1404,10 @@ class ACPSession:
                  activity_sink=None, tool_profile=None, output_guard=None, runtime=None):
         self.runtime_id = runtime if runtime is not None else role_runtime(role, project)
         self.runtime = agent_runtime(self.runtime_id)
-        if not self.runtime["supports_restricted_roles"] and (
-                readonly or role_capability(role, "readonly")
-                or role_capability(role, "bash") != "allow" or tool_profile
-                or deny_builtin_write or not allow_fs_write):
+        restricted = bool(readonly or role_capability(role, "readonly") or role_capability(role, "bash") != "allow")
+        special = bool(tool_profile or deny_builtin_write or not allow_fs_write)
+        if (restricted and not self.runtime["supports_restricted_roles"]) or (
+                special and self.runtime_id not in SPECIAL_PROFILE_RUNTIMES):
             raise ValueError(f"运行体 {self.runtime_id} 尚未验证受限工具等价约束，拒绝启动受限/只读角色 {role}")
         self.req_id = req_id
         self.workdir = Path(workdir)
@@ -1405,9 +1459,14 @@ class ACPSession:
         self._extra_mcp_servers = list(extra_mcp_servers)  # 追加注入会话的 MCP server 条目
         self.mysql_config = mysql_config  # 可选的每项目 MySQL 只读查询配置（None = 不暴露 mysql_query）
         self._mcp = None  # 只读角色受限工具 HTTP MCP server（start 时创建，close 时销毁）
+        spawn_env = dict(self.runtime["env"])
+        if self.runtime_id == "opencode":
+            spawn_env["OPENCODE_CONFIG_CONTENT"] = json.dumps(
+                opencode_session_config(readonly=self._is_readonly(), role=role, project=project),
+                ensure_ascii=False)
         self.proc = subprocess.Popen(
             runtime_argv(self.runtime_id, kimi_bin), cwd=str(self.workdir),
-            **({"env": dict(os.environ, **self.runtime["env"])} if self.runtime["env"] else {}),
+            **({"env": dict(os.environ, **spawn_env)} if spawn_env else {}),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logf,
             start_new_session=True)
         self._next_id = 0
@@ -2151,6 +2210,16 @@ class ACPSession:
             return f"非 http(s) URL {viol}"
         return None
 
+    def _runtime_read_allowed(self, path):
+        """异构适配器读路径：限会话只读根（readonly_roots，缺省 = 会话 cwd），解析软链。"""
+        if not isinstance(path, str) or not path or "\x00" in path:
+            return False
+        workdir = Path(self.workdir).resolve()
+        target = Path(path)
+        target = (target if target.is_absolute() else workdir / target).resolve()
+        roots = getattr(self, "readonly_roots", None) or [workdir]
+        return any(target == Path(root).resolve() or Path(root).resolve() in target.parents for root in roots)
+
     def _runtime_write_allowed(self, path):
         """异构适配器写路径按会话 cwd 解析，包含相对路径、移动源/目标与软链。"""
         if not isinstance(path, str) or not path or "\x00" in path:
@@ -2158,7 +2227,13 @@ class ACPSession:
         workdir = Path(self.workdir).resolve()
         target = Path(path)
         target = (target if target.is_absolute() else workdir / target).resolve()
-        roots = getattr(self, "write_roots", None) or [workdir, self.artifact_root]
+        ro = getattr(self, "readonly", None)
+        if ro is None and getattr(self, "role", None):
+            ro = role_capability(self.role, "readonly")
+        if ro:
+            roots = [self.artifact_root]      # 只读角色只能写自己的产物（与 kimi 审批同口径）
+        else:
+            roots = getattr(self, "write_roots", None) or [workdir, self.artifact_root]
         return any(target == Path(root).resolve() or Path(root).resolve() in target.parents
                    for root in roots)
 
@@ -2184,6 +2259,11 @@ class ACPSession:
             elif tc.get("title") in ("Write", "Edit", "Patch"):
                 paths = tc.get("writePaths") or [tc["rawInput"]["file_path"]]
                 if not all(self._runtime_write_allowed(path) for path in paths):
+                    return {"outcome": {"outcome": "cancelled"}}
+            elif tc.get("title") == "ExternalDirectory":
+                # 只放行本角色可写根 ∪ 只读根之内的路径；真正的写入随后还要过 Edit 审批
+                if not all(self._runtime_write_allowed(path) or self._runtime_read_allowed(path)
+                           for path in tc.get("accessPaths") or [None]):
                     return {"outcome": {"outcome": "cancelled"}}
             else:
                 return {"outcome": {"outcome": "cancelled"}}
