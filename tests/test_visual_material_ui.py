@@ -207,7 +207,7 @@ class VisualMaterialTest(unittest.TestCase):
                           + _rule(".health.warn .dot") + _rule(".health.warn"), token)
         self.assertIn("--health-ok-dot: #16a34a", LIGHT)
         self.assertIn("--health-bad-dot: #dc2626", LIGHT)
-        self.assertIn("--health-warn-dot: #f59e0b", LIGHT)
+        self.assertIn("--health-warn-dot: #3b82f6", LIGHT)  # 提示档改蓝：橙色只留给「需要你决定」
 
     # ---- T9 摘要条（验收 3） ----
     def test_T9_project_bar(self):

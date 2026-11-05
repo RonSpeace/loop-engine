@@ -225,7 +225,7 @@ class BtnSolidTiersTest(unittest.TestCase):
 
     # ---- B15 无新增动画 ----
     def test_B15_no_new_animation(self):
-        self.assertEqual(frontend_css().count("animation:"), 6, "基线 6 处 animation 声明不得增减（#20 页头 headline-sweep + reduced-motion 关闭各 +1）")
+        self.assertEqual(frontend_css().count("animation:"), 9, "基线 9 处 animation 声明不得增减（#20 页头 headline-sweep + reduced-motion 关闭各 +1；卡片流程进度条 +3）")
         self.assertEqual(frontend_css().count("will-change"), 0)
 
     # ---- B16 悬停文字色不丢（口径限定为按钮档位 9 条） ----

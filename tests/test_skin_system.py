@@ -116,7 +116,7 @@ class SkinTokensTest(unittest.TestCase):
                      ("--cf-green-bg", "#f0fdf4"), ("--cf-slate-bg", "#f8fafc"),
                      ("--toast-bg", "#ffffff"), ("--warn-fg", "#b45309"),
                      ("--health-ok-dot", "#16a34a"), ("--health-bad-dot", "#dc2626"),
-                     ("--health-warn-dot", "#f59e0b")):
+                     ("--health-warn-dot", "#3b82f6")):  # 提示档改蓝：橙色只留给「需要你决定」
             self.assertIn("%s: %s" % (t, v), LIGHT, "浅色表 C 偏离：%s" % t)
         # 两表令牌名集合互不重叠（表 A/B 通用 vs 表 C 语义前缀不冲突）
         self.assertTrue(any(x in ROOT for x in ("--st-open-bg:",)))
