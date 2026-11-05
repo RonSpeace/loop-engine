@@ -282,7 +282,7 @@
                 chatEvents = [];
                 chatLastId = 0;
                 chatFetchAt = 0;
-                initChatPanel(project);
+                initChatPanel(project).catch(() => renderChatStatus(interactionText('聊天暂不可用，可以直接建卡')));
             }
         }
 

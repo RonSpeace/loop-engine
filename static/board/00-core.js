@@ -436,6 +436,7 @@
             selectedProject = project;
             selectedStatus = null;  // 进入建卡页同样重置状态筛选（与 selectProject 一致）
             addMode = true;
+            if (typeof interactionOpenDetail === 'function') interactionOpenDetail();
             selectedId = null;
             selectedSid = null;
             selectedAgentSession = null;
