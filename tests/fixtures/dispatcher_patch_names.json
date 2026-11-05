@@ -71,6 +71,7 @@
     "_mount_file_logger",
     "_note_review_model",
     "_on_message",
+    "_project_git_sync",
     "_project_repos",
     "_purge_ghost_confirm",
     "_queue_auto_restart",
@@ -192,5 +193,5 @@
     "workdir_for",
     "write_heartbeat"
   ],
-  "count": 191
+  "count": 192
 }

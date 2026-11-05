@@ -250,12 +250,34 @@ def _merge_preflight(req, repo):
     return None
 
 
+# 合并失败原因是「没有 git 提交身份」的仓库：{仓库路径: 原因}。这不是冲突，不能拉 merge_resolve
+# （真实运行中出现过：误判为冲突，冲突解决角色两轮都说没有冲突）。merge_dev_branches 写、_merge_guard_blockers 取。
+_IDENTITY_BLOCKED = {}
+GIT_IDENTITY_HINT = ("没有配置 git 提交身份（user.name / user.email），自动合并要创建合并提交："
+                     "在该仓库执行 git config user.name \"…\" 与 git config user.email \"…\"（或配置全局身份）后重试合并")
+_IDENTITY_ERRORS = ("empty ident", "please tell me who you are", "unable to auto-detect email address",
+                    "committer identity unknown", "author identity unknown")
+
+
+def _identity_error(stderr):
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode(errors="replace")
+    return isinstance(stderr, str) and any(k in stderr.lower() for k in _IDENTITY_ERRORS)
+
+
 def _merge_guard_blockers(req, failed):
-    """合并失败仓库复核主干守卫：{仓库路径: 原因}；git_sync 未启用时恒 {}（失败路径零开销）。"""
-    if not _project_git_sync(req.get("project")):
-        return {}
+    """合并失败仓库复核守卫：{仓库路径: 原因}。先看 git 身份缺失（任何项目），再看 git_sync 主干守卫
+    （git_sync 未启用时跳过，失败路径零额外 git 调用）。"""
     out = {}
     for repo in failed or []:
+        why = _IDENTITY_BLOCKED.pop(str(repo), None)
+        if why:
+            out[str(repo)] = why
+    if not D._project_git_sync(req.get("project")):
+        return out
+    for repo in failed or []:
+        if str(repo) in out:
+            continue
         try:
             why = _merge_preflight(req, repo)
         except Exception as e:  # noqa: BLE001 - 复核失败按非守卫原因处理（沿用旧文案）
@@ -396,7 +418,7 @@ def ensure_dev_worktrees(req):
     # git_sync.before_card：仅当本轮确有 worktree 需新建时同步一次主工作区
     # （fetch 档只更新远端引用；pull 档才在干净且同主干时快进/判定分叉）。
     # 已有 worktree 的复用/重试路径不重复同步——避免每次 spawn 都打扰主工作区。
-    sync = _project_git_sync(req.get("project"))
+    sync = D._project_git_sync(req.get("project"))
     if sync and sync.get("before_card") in ("fetch", "pull"):
         pending_repos = [p for p in cfg["paths"]
                          if not (D.dev_worktree_path(req, p) / ".git").exists()]
@@ -551,7 +573,7 @@ def merge_dev_branches(req):
     不得误报「工作区脏」）。未配置 git_sync = 零额外校验、行为逐字不变。"""
     branch = D.dev_branch(req)
     failed = []
-    sync_enabled = bool(_project_git_sync(req.get("project")))
+    sync_enabled = bool(D._project_git_sync(req.get("project")))
     for p in D.PROJECTS[req["project"]]["paths"]:
         if sync_enabled:
             why = _merge_preflight(req, p)
@@ -576,6 +598,13 @@ def merge_dev_branches(req):
             continue
         if r.returncode != 0:
             failed.append(str(p))
+            if _identity_error(getattr(r, "stderr", None)):
+                _IDENTITY_BLOCKED[str(p)] = GIT_IDENTITY_HINT
+                log.warning(f"需求 #{req['id']} 仓库 {p} 合并失败：{GIT_IDENTITY_HINT}")
+                D.post_dispatcher_event(int(req["id"]), f"自动合并失败：{Path(p).name} {GIT_IDENTITY_HINT}",
+                                        kind="merge")
+                if (Path(p) / ".git" / "MERGE_HEAD").exists():   # 身份缺失可能停在待提交的合并现场
+                    subprocess.run(["git", "merge", "--abort"], cwd=p, capture_output=True, timeout=D.GIT_TIMEOUT)
     return (not failed), failed
 
 

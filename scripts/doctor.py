@@ -194,6 +194,14 @@ def check_projects():
                 fail(f"项目 {name} 不是 git 仓库（无 .git）：{pp}")
             else:
                 ok(f"项目 {name}：{pp}（git 仓库）")
+                # 自动合并要创建合并提交：没有 git 提交身份时 done 收尾会合并失败
+                try:
+                    ident = subprocess.run(["git", "var", "GIT_COMMITTER_IDENT"], cwd=pp, capture_output=True, timeout=10)
+                    if ident.returncode != 0:
+                        warn(f"项目 {name}：{pp} 没有 git 提交身份（user.name / user.email），自动合并会失败；"
+                             f"在该仓库执行 git config user.name \"…\" 与 git config user.email \"…\"（或配置全局身份）")
+                except Exception as e:  # noqa: BLE001 - 体检不因探测失败中断
+                    warn(f"项目 {name}：检查 git 提交身份失败：{e}")
 
 
 def check_env_feishu():

@@ -422,3 +422,23 @@ class MergeResolvePromptTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MergeIdentityMissingTest(unittest.TestCase):
+    """没有 git 提交身份导致的合并失败不是冲突：记为守卫原因（转人工并写明修法），不拉 merge_resolve。"""
+
+    def setUp(self):
+        d._IDENTITY_BLOCKED.clear()
+
+    def test_identity_error_detected(self):
+        self.assertTrue(d._identity_error(b"fatal: empty ident name (for <x@y>) not allowed"))
+        self.assertTrue(d._identity_error("*** Please tell me who you are."))
+        self.assertFalse(d._identity_error(b"CONFLICT (content): Merge conflict in a.py"))
+        self.assertFalse(d._identity_error(None))
+
+    def test_identity_block_reported_as_guard_even_without_git_sync(self):
+        d._IDENTITY_BLOCKED["/r/a"] = d.GIT_IDENTITY_HINT
+        with mock.patch.object(d, "_project_git_sync", return_value=None):
+            guard = d._merge_guard_blockers({"id": 1, "project": "p"}, ["/r/a", "/r/b"])
+        self.assertEqual(guard, {"/r/a": d.GIT_IDENTITY_HINT})
+        self.assertNotIn("/r/a", d._IDENTITY_BLOCKED)
