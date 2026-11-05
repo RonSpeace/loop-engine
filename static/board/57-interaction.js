@@ -1,6 +1,6 @@
         // 交互层只消费既有数据与 API，不参与调度状态流转。
         function interactionText(key) {
-            const en = window.LOOP_INTERACTION_EN || {};
+            const en = (window.LOOP_I18N_EN || {}).phrases || {};
             return window.loopI18nLang === 'en' ? (en[key] || key) : key;
         }
         let interactionHealth = null;

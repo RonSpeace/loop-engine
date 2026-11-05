@@ -42,7 +42,7 @@ def _translate(lang, cases):
 class I18nDictionaryTest(unittest.TestCase):
     def test_I1_generated_file_in_sync(self):
         js = (REPO / "static" / "i18n.en.js").read_text(encoding="utf-8")
-        body = js.split("// ==== interaction dictionary ====", 1)[0].split("window.LOOP_I18N_EN = ", 1)[1].rstrip().rstrip(";")
+        body = js.split("window.LOOP_I18N_EN = ", 1)[1].rstrip().rstrip(";")
         self.assertEqual(json.loads(body)["phrases"], i18n_en_source.PHRASES,
                          "static/i18n.en.js 与词典源不同步：运行 .venv/bin/python scripts/i18n_en_source.py")
         self.assertEqual(json.loads(body)["labels"], i18n_en_source.LABELS)

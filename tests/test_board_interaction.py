@@ -46,9 +46,9 @@ def test_external_and_failed_final_checks_and_health():
 def test_interaction_dictionary_covers_labels_and_reasons():
     import re
     source = (ROOT / 'static/board/57-interaction.js').read_text()
-    dictionary = (ROOT / 'static/i18n.en.js').read_text().split('window.LOOP_INTERACTION_EN = ', 1)[1]
-    dictionary = json.loads(dictionary.strip().rstrip(';'))
+    dictionary = (ROOT / 'static/i18n.en.js').read_text().split('window.LOOP_I18N_EN = ', 1)[1]
+    dictionary = json.loads(dictionary.strip().rstrip(';'))['phrases']
     labels = set(re.findall(r"interactionText\('([^']+)'\)", source))
     labels.update(re.findall(r"reason = '([^']+)'", source))
     assert labels <= dictionary.keys()
-    assert all(not re.search('[一-鿿]', value) for value in dictionary.values())
+    assert all(not re.search('[一-鿿]', value) for key, value in dictionary.items() if key in labels)
