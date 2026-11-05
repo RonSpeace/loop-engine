@@ -112,7 +112,7 @@
                     const id = String(it.id || '');
                     const isOpen = !!open[id];
                     const btn = `<button type="button" class="cx-item-btn" data-cx-act="toggle" data-cx-arg="${escapeAttr(id)}" aria-expanded="${isOpen}">`
-                        + `<span class="cx-caret" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>`
+                        + `<span class="cx-caret" aria-hidden="true">${isOpen ? '▼' : '▶'}</span>`
                         + `<b class="cx-item-title">${escapeHtml(it.title || id)}</b>`
                         + `<span class="cx-mono cx-src" data-i18n-skip title="${escapeAttr(it.src || '')}">${escapeHtml(it.src || '')}</span>`
                         + ctxItemBadges(it, mark(id))
