@@ -37,7 +37,7 @@ Loop Engine 是一个对话驱动的闭环：**需求 → 开发 → 评审 → 
 
 ## 30 秒看懂工作方式
 
-[![Loop Engine 应用架构](docs/diagrams/loop-architecture.svg)](docs/diagrams/loop-architecture.html)
+[![Loop Engine 应用架构](docs/diagrams/loop-architecture.svg)](docs/diagrams/loop-architecture.svg)
 
 1. **看板**（`board.py`，Flask + SQLite）：需求卡、聊天、实时会话、设置。只在本机 8899 端口。
 2. **调度器**（`dispatcher.py`）：每 15 秒捞一次「待开发」的卡，建 worktree，按卡上的流程逐个节点推进，
@@ -48,9 +48,9 @@ Loop Engine 是一个对话驱动的闭环：**需求 → 开发 → 评审 → 
 
 一张卡从建卡到合并：
 
-[![一张卡的调用链路](docs/diagrams/loop-dispatch-flow.svg)](docs/diagrams/loop-dispatch-flow.html)
+[![一张卡的调用链路](docs/diagrams/loop-dispatch-flow.svg)](docs/diagrams/loop-dispatch-flow.svg)
 
-点图打开交互版（可缩放、搜索、切换明暗）。
+点图查看大图。交互版（可缩放、搜索、切换明暗）在 [`docs/diagrams/`](docs/diagrams/)：本地打开对应 `.html`，或看板「操作指南」里的图表页。
 
 ## 快速开始
 

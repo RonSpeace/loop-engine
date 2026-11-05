@@ -44,7 +44,7 @@ and still fails quietly. Loop Engine takes the other route:
 
 ## How it works in 30 seconds
 
-[![Loop Engine application architecture](docs/diagrams/app-architecture.svg)](docs/diagrams/app-architecture.html)
+[![Loop Engine application architecture](docs/diagrams/app-architecture.svg)](docs/diagrams/app-architecture.svg)
 
 1. **Board** (`board.py`, Flask + SQLite): cards, chat, live sessions, settings. Local only, port 8899.
 2. **Dispatcher** (`dispatcher.py`): picks up `open` cards every 15 seconds, creates a worktree, runs the
@@ -56,9 +56,9 @@ and still fails quietly. Loop Engine takes the other route:
 
 One card, from chat to merge:
 
-[![Call chain of one card](docs/diagrams/call-chain.svg)](docs/diagrams/call-chain.html)
+[![Call chain of one card](docs/diagrams/call-chain.svg)](docs/diagrams/call-chain.svg)
 
-Click either picture for the interactive version (zoom, search, light/dark).
+Click a picture to open it full size. Interactive versions (zoom, search, light/dark) are in [`docs/diagrams/`](docs/diagrams/) — open the `.html` files locally, or the Diagrams tab of the in-app guide.
 
 ## Quick start
 
