@@ -82,6 +82,10 @@ class ToolError(Exception):
     """工具级错误（退出码 2）：找不到浏览器、页面不可达、契约非法等，与闸门失败区分。"""
 
 
+class _StartTimeout(Exception):
+    """Chromium 在等待时间内没写出 DevTools 端口（_launch 内部重试用）。"""
+
+
 # ====================================================================
 # 纯函数：颜色 / 对比度
 # ====================================================================
@@ -688,6 +692,18 @@ class Browser:
         self.close()
 
     def _launch(self):
+        """冷启动慢的机器（CI 首次启动 Chrome）偶尔超过等待时间：超时则清掉这次进程与 profile 再试一次。
+        等待时间：VISUAL_GATE_START_TIMEOUT 秒，缺省本机 20s、CI 60s。"""
+        timeout = float(os.environ.get("VISUAL_GATE_START_TIMEOUT") or (60 if os.environ.get("CI") else 20))
+        for attempt in (1, 2):
+            try:
+                return self._launch_once(timeout)
+            except _StartTimeout:
+                if attempt == 2:
+                    raise ToolError("Chromium 未在 %ds 内给出 DevTools 端口（已重试一次）" % timeout)
+                self.close()
+
+    def _launch_once(self, timeout):
         from websockets.sync.client import connect
         self.profile = tempfile.mkdtemp(prefix="visual-gate-chrome-")
         args = [self.chrome, "--remote-debugging-port=0", "--user-data-dir=" + self.profile,
@@ -706,7 +722,7 @@ class Browser:
         except OSError as e:
             raise ToolError("Chromium 启动失败: %s" % e)
         port_file = Path(self.profile) / "DevToolsActivePort"
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + timeout
         lines = []
         while time.monotonic() < deadline:
             if self.proc.poll() is not None:
@@ -719,7 +735,7 @@ class Browser:
                 break
             time.sleep(0.05)
         if len(lines) < 2:
-            raise ToolError("Chromium 未在 20s 内给出 DevTools 端口")
+            raise _StartTimeout()
         try:
             self.ws = connect("ws://127.0.0.1:%s%s" % (lines[0], lines[1]), max_size=None, open_timeout=10)
         except Exception as e:  # noqa: BLE001 - 连接失败统一归工具错误
