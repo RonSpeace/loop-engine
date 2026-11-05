@@ -134,8 +134,12 @@ def api_context_run(req_id, run_key):
     if err:
         return err
     m, _d = manifests[run_key]
-    same_role = sorted(k for k, (mm, _) in manifests.items() if mm.get("role") == m.get("role") and k < run_key)
-    prev_key = same_role[-1] if same_role else None
+    # 续接轮（followup）只是同一会话里补发的一条短消息，完整上下文沿用父轮：不做对比（否则父轮条目全显示为「已移除」）；
+    # 完整轮只和同角色更早的完整轮（new / resume）对比
+    full = ("new", "resume")
+    same_role = sorted(k for k, (mm, _) in manifests.items()
+                       if mm.get("role") == m.get("role") and k < run_key and mm.get("kind", "new") in full)
+    prev_key = same_role[-1] if (same_role and m.get("kind", "new") in full) else None
     out = dict(m)
     out["status"] = _status_of(run_key, manifests, _run_statuses(req_id))
     out["prev_run_key"] = prev_key

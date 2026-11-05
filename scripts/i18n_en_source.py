@@ -650,7 +650,8 @@ PHRASES = {
     "重启调度器后生效": "Takes effect after restarting the dispatcher",
     "上次退出异常终止（无正常关闭标记）": "Last exit was abnormal (no clean shutdown marker)",
     "仅本地仓库": "Local-only repository",
-    "结果总结": "Summary", "运行记录": "Run log",
+    "结果总结": "Summary", "运行记录": "Run log", "补交提醒": "Result reminder",
+    "这一轮是在同一会话里补发的一条提醒（上一轮结束时没有提交结果）；完整上下文沿用上一轮，这里只列出补发的内容。": "This round is a reminder sent in the same session because the previous turn ended without a result. The full context carries over from that turn; only the reminder is listed here.",
     # ---- 设置：外观 ----
     "外观": "Appearance", "动态背景": "Animated background",
     "流体动画，较耗电；关闭时显示静态底纹。切换后刷新页面生效": "Fluid animation, uses more power; when off a static backdrop is shown. The page reloads to apply",

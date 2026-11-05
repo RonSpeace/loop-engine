@@ -4115,7 +4115,7 @@ void main() {
         };
         const CTX_LAYER_ORDER = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'runtime'];
         const CTX_STABLE_LAYERS = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'];
-        const CTX_KIND_LABEL = {new: '新会话', resume: '续跑', followup: '续接轮', preview: '预览'};
+        const CTX_KIND_LABEL = {new: '新会话', resume: '续跑', followup: '补交提醒', preview: '预览'};
         const CTX_STATUS = {
             running: ['进行中', 'cx-tone-blue'], done: ['完成', 'cx-tone-green'], failed: ['失败', 'cx-tone-red'],
             timed_out: ['超时', 'cx-tone-red'], aborted: ['中止', 'cx-tone-amber'],
@@ -4475,6 +4475,9 @@ void main() {
             h += ctxStatsHtml(m, prev);
             h += ctxCompositionHtml(groups);
             h += ctxWarningsHtml(m.warnings);
+            if (m.kind === 'followup') {
+                h += '<div class="cx-banner cx-banner-ok"><span>这一轮是在同一会话里补发的一条提醒（上一轮结束时没有提交结果）；完整上下文沿用上一轮，这里只列出补发的内容。</span></div>';
+            }
             if (m.context_update && m.context_update.sent) {
                 h += `<div class="cx-banner cx-banner-ok"><span>续跑补发：与上一轮相比 ${(m.context_update.changed || []).length} 项有变化，已在续跑消息前附「上下文更新」。</span></div>`;
             }

@@ -275,6 +275,14 @@ class BoardContextApi(unittest.TestCase):
         self.assertEqual(det["diff"], {"changed": ["a"], "added": ["c"], "removed": ["b"]})
         first = self.c.get(f"/api/requirements/61/context/runs/{k1}").get_json()
         self.assertIsNone(first["prev_run_key"])
+        # 续接轮只是补发的一条短消息：不做对比（否则父轮条目会全部显示为「已移除」）
+        fu = self.c.get(f"/api/requirements/61/context/runs/{k3}").get_json()
+        self.assertIsNone(fu["prev_run_key"])
+        self.assertEqual(fu["diff"], {"changed": [], "added": [], "removed": []})
+        # 完整轮跳过中间的续接轮，和更早的完整轮对比
+        k4 = "20261105-130000-dev-eeee"
+        self._manifest(k4, items=[{"id": "a", "hash": "2"}])
+        self.assertEqual(self.c.get(f"/api/requirements/61/context/runs/{k4}").get_json()["prev_run_key"], k2)
         r = self.c.get(f"/api/requirements/61/context/runs/{k2}/prompt")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.content_type.startswith("text/plain"))
