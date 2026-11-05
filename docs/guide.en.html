@@ -106,6 +106,11 @@
             padding: 12px 14px; overflow-x: auto; line-height: 1.6; font-size: 13px; white-space: pre-wrap;
         }
         pre code { padding: 0; background: none; overflow-wrap: normal; }
+        kbd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+            border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px;
+            padding: 0 6px; background: var(--code-bg);
+        }
         details { margin: 10px 0; }
         summary { cursor: pointer; font-weight: 600; }
         ul, ol { margin: 8px 0 8px 22px; padding: 0; }
@@ -159,216 +164,308 @@
             </div>
         </div>
         <h1>Loop Engine Guide</h1>
-        <p class="subtitle">How cards move, what each agent does, and when you need to step in.</p>
+        <p class="subtitle">From first start to merge: where to look at each step, and when the engine needs you.</p>
 
         <div class="tabs" role="tablist" aria-label="Guide contents">
             <button class="tab-btn" id="tab-guide" role="tab" aria-selected="true" aria-controls="pane-guide" type="button">Guide</button>
-            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">Architecture diagrams</button>
+            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">Diagrams</button>
             <button class="tab-btn" id="tab-prompts" role="tab" aria-selected="false" aria-controls="pane-prompts" type="button">Project setup</button>
         </div>
 
         <div class="tab-pane" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide">
         <nav class="toc" aria-label="Contents">
-            <a href="#intro">Overview</a><a href="#status">Card statuses</a><a href="#flows-roles">Flows &amp; roles</a>
-            <a href="#review">Review &amp; rejection</a><a href="#confirm">Answering agents</a><a href="#flow">Feishu replies</a>
-            <a href="#create">Creating cards</a><a href="#merge">Worktrees &amp; merge</a><a href="#view">Artifacts &amp; sessions</a>
-            <a href="#config">Settings &amp; models</a><a href="#runtimes">Agent runtimes</a><a href="#troubleshooting">Troubleshooting</a>
-            <a href="#agents-live">Built-in agents</a>
+            <a href="#start">First start</a><a href="#create">Creating cards</a><a href="#card">Reading a card</a>
+            <a href="#inbox">Needs you</a><a href="#review">Review &amp; acceptance</a><a href="#config">Settings</a>
+            <a href="#troubleshooting">FAQ</a><a href="#agents-live">Built-in agents</a>
         </nav>
 
-        <h2 id="intro">What Loop Engine is</h2>
-        <p>Loop Engine is a requirements board backed by a team of role-specialised AI agents. You write a requirement as a card; the dispatcher then runs the card's <b>flow</b>, starting one <b>role</b> after another: analysis, tech design, design review, development, code review, acceptance, and finally an automatic merge.</p>
+        <h2 id="start">First start</h2>
+        <p><b>In short: pass the self-check, start both processes, connect a project. When the header badge says "Running", you can create cards.</b></p>
+        <p>Loop Engine is a requirements board with a team of AI agents behind it. You describe what you want in a chat and it becomes a card. The dispatcher then runs the card through its flow — analysis, development, review, acceptance — and merges once every gate has passed. Because every step is checked, inexpensive models are enough to get steady results.</p>
+        <ol>
+            <li>Follow <code>docs/quickstart.en.md</code> in the repository to install dependencies and set up a model and a runtime.</li>
+            <li>Run the self-check: <code>.venv/bin/python scripts/doctor.py</code>. It passes when it reports 0 hard failures (「硬失败 0 项」).</li>
+            <li>Start: <code>./scripts/run_local.sh</code> launches the <b>board</b> (the web app serving this page) and the <b>dispatcher</b> (the background process that moves cards forward).</li>
+            <li>Click <code>+</code> at the top of the left column to connect a project: name, repository path(s), base branch and a one-line goal.</li>
+            <li>Check the badge in the top-right corner. "Running" means the dispatcher is working.</li>
+        </ol>
+        <div class="note">The board listens on <code>127.0.0.1:8899</code> only and has no login. Do not expose it to your network or the internet.</div>
+
+        <h3 id="glossary">Key terms</h3>
+        <table>
+            <tr><th>Term</th><th>Meaning</th></tr>
+            <tr><td>Card</td><td>One requirement: a title, notes (what to build), a status and its position in the flow.</td></tr>
+            <tr><td>Flow</td><td>The sequence of nodes a card goes through, e.g. dev → code review → accept → finish.</td></tr>
+            <tr><td>Role</td><td>One kind of agent work: analysis, tech design, design review, development, code review, acceptance, conflict resolution.</td></tr>
+            <tr><td>Gate</td><td>A check that can stop a card: tool approval, review verdicts, the exit check, and questions for you.</td></tr>
+            <tr><td>Runtime</td><td>The agent CLI that actually runs a role: <code>kimi</code>, <code>opencode</code>, <code>claude-code</code> or <code>codex</code>.</td></tr>
+            <tr><td>Worktree</td><td>A separate checkout and branch for each card, so development never touches your main working copy.</td></tr>
+            <tr><td>Artifact</td><td>A file an agent leaves behind: analysis, design, self-test report, review notes, <code>result.json</code>.</td></tr>
+            <tr><td><code>need_confirm</code></td><td>A question from an agent or the dispatcher that needs your decision. It shows up under "Needs you".</td></tr>
+        </table>
+
+        <h3 id="layout">The screen at a glance</h3>
         <ul>
-            <li><b>Reviewers are read-only and can reject.</b> Rejected work goes back to the previous step for a redo; after repeated rejections it comes to you.</li>
-            <li><b>Every card gets its own git worktree and branch</b>, merged into the main branch only after every gate has passed.</li>
-            <li><b>When something is wrong, it stops</b> (fail-closed): invalid config, a missing review verdict or a failed exit check means no progress and no merge — it leaves a record and waits for a human.</li>
-            <li><b>When a decision is needed</b>, the agent asks a question (<code>need_confirm</code>). Answer it on the board (or in Feishu) and the work continues.</li>
-        </ul>
-        <p>The board is a local tool: it listens on <code>127.0.0.1:8899</code> only and has no login.</p>
-
-        <h2 id="status">Card lifecycle and statuses</h2>
-        <pre class="lifecycle">Deferred later ──(set to open)──▶ Open open ──(picked up)──▶ In progress doing ──▶ Done done
-Not doing it: any unfinished card ──▶ Dropped dropped</pre>
-        <table>
-            <tr><th>Status</th><th>Label</th><th>Meaning</th></tr>
-            <tr><td><code>later</code></td><td>Deferred</td><td>Recorded but not worked on. Cards created by chatting on the board start here. Set it to open to start automatic development.</td></tr>
-            <tr><td><code>open</code></td><td>Open</td><td>The only status the dispatcher picks up. A card is started once it has been left unedited for about a minute.</td></tr>
-            <tr><td><code>doing</code></td><td>In progress</td><td>An agent is working on it. Cards also stay here while waiting for your answer or while being merged.</td></tr>
-            <tr><td><code>done</code></td><td>Done</td><td>The flow finished and the work was merged (or the branch was pushed).</td></tr>
-            <tr><td><code>dropped</code></td><td>Dropped</td><td>Abandoned. Only later / open / dropped cards can be deleted.</td></tr>
-        </table>
-        <div class="note">If an agent process fails (crash, timeout, no result written), it is retried once automatically. If it fails again the card moves to <b>Deferred</b> with the reason in its summary. Fix the cause and set the card back to open to rerun it.</div>
-
-        <h2 id="flows-roles">Flows and roles</h2>
-        <p>When a card is picked up, the <b>Analysis</b> role (<code>analysis</code>) reads the requirement and the code, recommends a flow and lists the repositories involved. The card then moves through that flow node by node:</p>
-        <table>
-            <tr><th>Flow</th><th>Steps</th><th>Use it for</th></tr>
-            <tr><td><code>quick</code> Quick</td><td>dev → finalize</td><td>Tiny changes such as wording or config values. Touching a high-risk path declared by the project upgrades the card to standard.</td></tr>
-            <tr><td><code>standard</code> Standard</td><td>dev → code review → acceptance → finalize</td><td>Routine changes whose approach is obvious.</td></tr>
-            <tr><td><code>heavy</code> Complex</td><td>tech design → design review → dev → code review → acceptance → finalize</td><td>Changes that need design trade-offs, span repositories, or carry high risk. Also the fallback when analysis gives no valid recommendation.</td></tr>
-        </table>
-        <table>
-            <tr><th>Role</th><th>What it does</th><th>Permissions</th></tr>
-            <tr><td><code>analysis</code> Analysis</td><td>Investigates the requirement and code, writes <code>analysis.md</code>, recommends a flow and repositories</td><td>Read-only</td></tr>
-            <tr><td><code>tech</code> Tech design</td><td>Writes the technical design <code>tech.md</code></td><td>Read-only</td></tr>
-            <tr><td><code>tech_review</code> Design review</td><td>Reviews the design and returns pass / reject</td><td>Read-only</td></tr>
-            <tr><td><code>dev</code> Development</td><td>Changes code in the worktree, tests it, commits, writes <code>self-test.md</code></td><td>Writes to this card's worktree, runs commands</td></tr>
-            <tr><td><code>code_review</code> Code review</td><td>Reviews the diff and returns pass / reject</td><td>Read-only</td></tr>
-            <tr><td><code>accept</code> Acceptance</td><td>Runs the real thing on an isolated test instance, writes <code>accept.md</code></td><td>Runs tests; cannot edit source or commit</td></tr>
-            <tr><td><code>merge_resolve</code> Conflict resolution</td><td>Started automatically on a merge conflict to try to resolve it</td><td>Restricted git commands</td></tr>
-        </table>
-        <p>Flows, role names and models come from <code>flows.json</code> and <code>prompts/*.md</code> at the repository root; the "Built-in agents" section at the end of this page shows the live configuration. Restart the board and the dispatcher after changing either.</p>
-        <div class="note">There is no separate product-spec step, so the card's notes are the only place the scope is defined. Writing down the background, the scope and the <b>acceptance criteria</b> is the most effective way to avoid rejections.</div>
-
-        <h2 id="review">Review, rejection and escalation</h2>
-        <ul>
-            <li>A reviewer (design review or code review) that returns <code>pass</code> moves the card on; <code>reject</code> sends it back to the previous producing step together with the review comments.</li>
-            <li>For the same review step, <b>rejections 1–3 are redone automatically</b>. On the 3rd one, if the project sets <code>escalation_model</code>, the author role is switched to that stronger model first.</li>
-            <li><b>A 4th rejection</b> becomes a <code>need_confirm</code> question for you, listing the points raised in each round: reply y to let it through, n to send it back for one more round.</li>
-            <li>A missing or malformed verdict counts as a rejection — it is never merged by default.</li>
+            <li><b>Left column</b>: projects. Click one to filter its cards; <code>+</code> next to a name opens card chat; the gear at the bottom opens settings.</li>
+            <li><b>Middle</b>: the card list, with search, "+ New" and status filters on top.</li>
+            <li><b>Right column</b>: card details, live sessions and the chat box.</li>
+            <li><b>Header</b>: the "Needs you" inbox, the engine status badge and a link to this guide.</li>
+            <li><b>Phone</b>: narrow screens switch to one column. Tap a card for details, "← Back to board" to return, and ☰ in the header for the project list.</li>
         </ul>
 
-        <h2 id="confirm">Answering agent questions (need_confirm)</h2>
-        <p>When a human decision is needed, the card stays in doing and shows the pending question. The usual cases: an agent asks something (usually with a suggested answer); a review step was rejected a 4th time; you need to confirm the flow that analysis recommended.</p>
+        <h3 id="shortcuts">Keyboard shortcuts</h3>
+        <p>Shortcuts are off while you are typing in a field.</p>
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><kbd>N</kbd></td><td>New card (opens chat for the current project)</td></tr>
+            <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+            <tr><td><kbd>J</kbd> / <kbd>K</kbd></td><td>Next / previous card</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Open the focused card</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Close a dialog, the inbox or the detail panel</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Show the shortcut list</td></tr>
+        </table>
+
+        <h2 id="create">Creating cards</h2>
+        <p><b>In short: describe the requirement in chat and confirm the draft. New cards start as "Deferred"; switch them to "Open" to start work.</b></p>
+        <ol>
+            <li>Click "+ New" (or press <kbd>N</kbd>, or the <code>+</code> next to a project name) to open card chat.</li>
+            <li>Describe what you need. The agent drafts a title and notes; you review and confirm. You can attach a local HTML prototype for reference (paste, drag, or "Reference files").</li>
+            <li>New cards start as <b>Deferred</b>. Set the status to <b>Open</b> when you want development to begin.</li>
+        </ol>
+        <p><b>When chat is unavailable</b>, expand "Fill in a form" above the chat and enter a title, project, details and status. If the configured runtime cannot run chat (not installed, or not certified for chat), the form opens by itself and the chat area tells you what to change under Settings → Models.</p>
+        <p><b>Writing notes:</b> say <b>what to build</b> — goal, scope, acceptance criteria, references. Leave out the discussion. Write exclusions as "Not provided: X, Y". Notes go into every role's prompt; clear acceptance criteria are the best way to avoid rejections.</p>
         <ul>
-            <li><b>On the board</b>: open the card and type your answer in the chat box on the right, or click one of the buttons on the card. Your answer is passed to the agent, which resumes the same session; it is also recorded in the card summary so later sessions see it and do not ask again.</li>
-            <li><b>In Feishu</b> (optional): reply <code>y &lt;id&gt; [note]</code> to agree or <code>n &lt;id&gt; &lt;reason&gt;</code> to reject. Board buttons and Feishu y/n go through the same logic and have the same effect.</li>
+            <li>For multi-repository projects, add <code>repos: repo-a, repo-b</code> to name the repositories involved.</li>
+            <li>Add <code>timeout: 120</code> to change the per-run time limit (minutes, 15–480, default 240).</li>
+        </ul>
+        <h3 id="assistant">Requirement assistant</h3>
+        <p>Every card's session list starts with a "Requirement assistant" entry, available in any status. It is a separate conversation about this card: ask about progress, have artifacts explained, edit the notes, move the card from Deferred to Open. It is read-only unless you explicitly ask for a change.</p>
+
+        <h2 id="card">Reading a card</h2>
+        <p><b>In short: the status tells you which stage a card is in, the bar on top tells you where it is in its flow, and orange means it is waiting for you.</b></p>
+
+        <h3 id="status">Card statuses</h3>
+        <pre class="lifecycle">later (Deferred) ──(set to open)──▶ open ──(picked up)──▶ doing ──▶ done
+Not doing it: any unfinished card ──▶ dropped</pre>
+        <table>
+            <tr><th>Status</th><th>Name</th><th>Meaning</th></tr>
+            <tr><td><code>later</code></td><td>Deferred</td><td>Recorded, not developed. New cards start here; set them to open to start.</td></tr>
+            <tr><td><code>open</code></td><td>Open</td><td>The only status the dispatcher picks up, after the card has sat unedited for about a minute.</td></tr>
+            <tr><td><code>doing</code></td><td>Doing</td><td>An agent is running, the card is waiting for your answer, or it is being merged.</td></tr>
+            <tr><td><code>done</code></td><td>Done</td><td>The flow finished and the work was merged (or the branch pushed).</td></tr>
+            <tr><td><code>dropped</code></td><td>Dropped</td><td>Not doing it. Only later, open and dropped cards can be deleted.</td></tr>
+        </table>
+        <div class="note">If an agent run fails (crash, timeout, no result file), it is retried once. If it fails again, the card moves to <b>Deferred</b> with the reason in its summary. Fix the cause and set it back to open.</div>
+
+        <h3 id="progress">The progress bar</h3>
+        <p>Once a card has started, a thin bar runs across its top, split into the card's flow: the first segment is analysis, then one segment per flow node (the finish step has no segment of its own).</p>
+        <ul>
+            <li><b>Lit segments</b>: finished steps. A done card is fully lit.</li>
+            <li><b>Pulsing segment</b>: the step in progress.</li>
+            <li><b>Orange segment</b>: the card is stuck here waiting for you — an open question, a blocked merge, or a card deferred after it started. Across the board, orange only ever means "you need to decide".</li>
+            <li>Deferred and open cards that have not started show no bar. Hover the bar to see every step and the current one.</li>
+        </ul>
+
+        <h3 id="flows-roles">Flows and roles</h3>
+        <p>When a card is picked up, the <b>analysis</b> role reads the requirement and the code, suggests a flow and lists the repositories involved. The card then moves node by node:</p>
+        <table>
+            <tr><th>Flow</th><th>Nodes</th><th>Use for</th></tr>
+            <tr><td><code>quick</code></td><td>dev → finish</td><td>Copy or config tweaks. Touching a project's high-risk paths upgrades it to standard.</td></tr>
+            <tr><td><code>standard</code></td><td>dev → code review → accept → finish</td><td>Routine changes with an obvious approach.</td></tr>
+            <tr><td><code>heavy</code></td><td>tech design → design review → dev → code review → accept → finish</td><td>Design trade-offs, several repositories or high risk. Also the fallback when analysis gives no valid suggestion.</td></tr>
+        </table>
+        <table>
+            <tr><th>Role</th><th>Does</th><th>Permissions</th></tr>
+            <tr><td><code>analysis</code></td><td>Studies the requirement and code, writes <code>analysis.md</code>, suggests flow and repositories</td><td>Read-only</td></tr>
+            <tr><td><code>tech</code></td><td>Writes the technical design <code>tech.md</code></td><td>Read-only</td></tr>
+            <tr><td><code>tech_review</code></td><td>Reviews the design: pass / reject</td><td>Read-only</td></tr>
+            <tr><td><code>dev</code></td><td>Changes code in the worktree, tests, commits, writes <code>self-test.md</code></td><td>Writes this card's worktree, runs commands</td></tr>
+            <tr><td><code>code_review</code></td><td>Reviews the diff: pass / reject</td><td>Read-only</td></tr>
+            <tr><td><code>accept</code></td><td>Runs the real thing on a separate test instance, writes <code>accept.md</code></td><td>Runs tests; cannot edit source or commit</td></tr>
+            <tr><td><code>merge_resolve</code></td><td>Started on a merge conflict to resolve it</td><td>Restricted git commands</td></tr>
+        </table>
+        <p>Flows, role names and models come from <code>flows.json</code> and <code>prompts/*.md</code> at the repository root. "Built-in agents" at the end of this page shows the live configuration.</p>
+
+        <h3 id="view">Artifacts, sessions and context</h3>
+        <ul>
+            <li><b>Artifacts</b> live in <code>~/.req-board/artifacts/&lt;project&gt;/req-&lt;id&gt;/</code>: <code>analysis.md</code>, <code>tech.md</code>, <code>self-test.md</code>, <code>code_review.md</code>, <code>accept.md</code> and so on. The folder is outside every repository, so cleaning branches never loses it. Open them from the card's "Artifacts" row.</li>
+            <li><b>Result file</b>: each role writes <code>result.json</code> before it ends (<code>status</code> done / blocked / need_confirm, plus a summary and a question). The dispatcher moves the card based on it. Follow-up items the agent declares (<code>todos</code>) appear in the completion notice and the card summary.</li>
+            <li><b>Sessions</b>: every agent session of the card is listed below it. Open one to watch messages, thinking, tool calls and diffs live.</li>
+            <li><b>Stepping in</b>: type in the chat box under a session. The dispatcher resumes that session and hands your message to the agent. Always continue sessions this way.</li>
+            <li><b>Session status line</b>: the line above the chat box shows whether a session is alive. Green: working. Amber: slow to respond. Red: probably stuck — a "Restart dispatcher" button appears.</li>
+            <li><b>Context tab</b>: next to "Overview" in the card details. For every role and round it lists the prompt layers the session actually received (platform rules, role template, project conventions, skills, card data), the model and runtime, and what changed since the previous round. When you wonder why an agent did something, start here.</li>
+        </ul>
+
+        <h2 id="inbox">Handling "Needs you"</h2>
+        <p><b>In short: when "Needs you" in the header shows a number, open it and work through the rows. Clicking a row opens that card.</b></p>
+        <table>
+            <tr><th>You see</th><th>Meaning</th><th>What to do</th></tr>
+            <tr><td>A question needs your confirmation</td><td>An agent asked something, or the suggested flow needs approval</td><td>Answer in the card's chat box or use the confirm buttons (below)</td></tr>
+            <tr><td>Review rejected several times</td><td>The same review node failed for the 4th time</td><td>Read each round's points, then let it through or send it back once more</td></tr>
+            <tr><td>Exit check needs your ruling</td><td>The agent reported done, the exit check failed, and the agent asked for a waiver</td><td>"Waive and finish" or "Back to open"</td></tr>
+            <tr><td>Merge blocked</td><td>A conflict could not be resolved automatically, or git has no commit identity</td><td>Fix it, then "Retry merge" — or "Take over manually"</td></tr>
+            <tr><td>Waiting for an external role</td><td>The project hands one role to an outside agent</td><td>Once the artifact is in place, point the card at the next node and set it to open</td></tr>
+            <tr><td>Dispatcher problem</td><td>The dispatcher is not reporting a heartbeat</td><td>See "Status badge and dispatcher health" below</td></tr>
+        </table>
+
+        <h3 id="confirm">Answering agent questions</h3>
+        <p>When a decision is needed, the card stays in doing, the current segment of its bar turns orange, and the question (usually with the agent's own recommendation) appears in the details.</p>
+        <ul>
+            <li><b>On the board</b>: open the card and answer in the chat box on the right, or use the confirm buttons. Your answer goes to the agent and into the card summary, so later sessions see it and do not ask again.</li>
+            <li><b>In Feishu/Lark</b> (optional): reply <code>y &lt;id&gt; [note]</code> to approve or <code>n &lt;id&gt; &lt;reason&gt;</code> to reject. Web buttons and Feishu y/n run the same logic.</li>
         </ul>
         <h3 id="format">Reply format</h3>
         <table>
             <tr><th>Intent</th><th>Format</th><th>Notes</th></tr>
-            <tr><td>Agree / continue</td><td><code>y 116 [note]</code> (or <code>同意 116 [note]</code>)</td><td>The id may be prefixed with <code>#</code>; the note is passed to the agent</td></tr>
-            <tr><td>Reject / send back</td><td><code>n 116 reason</code> (or <code>拒绝 116 reason</code>)</td><td>The reason is written to the card summary and timeline — please include one</td></tr>
+            <tr><td>Approve / continue</td><td><code>y 116 [note]</code> or <code>同意 116 [note]</code></td><td>The id may start with <code>#</code>; the note is passed to the agent</td></tr>
+            <tr><td>Reject / send back</td><td><code>n 116 reason</code> or <code>拒绝 116 reason</code></td><td>The reason goes into the card summary and timeline; please give one</td></tr>
         </table>
         <ul>
-            <li>Only replies starting with <code>y / yes / 同意</code> or <code>n / no / 拒绝</code> are recognised; anything else does not change the card.</li>
-            <li>Use the id of the <b>card the question belongs to</b>. If the id and the question do not match, the reply is refused and nothing changes — resend with the id given in the notice.</li>
+            <li>Only replies starting with <code>y / yes / 同意</code> or <code>n / no / 拒绝</code> trigger anything.</li>
+            <li>Use the id of <b>the card the question belongs to</b>. If id and question do not match, the reply is refused and nothing changes; resend with the id from the prompt.</li>
         </ul>
 
-        <h3 id="flow">Feishu replies and status changes</h3>
+        <h3 id="flow">Feishu replies and what they do</h3>
         <table>
-            <tr><th>Pending item</th><th>When it appears</th><th>Reply y (or an "agree" button)</th><th>Reply n (or a "send back" button)</th></tr>
+            <tr><th>Pending type</th><th>When</th><th>Reply y (or a web "approve" button)</th><th>Reply n (or a web "send back" button)</th></tr>
             <tr>
                 <td>Needs confirmation<br><code>need_confirm</code></td>
-                <td>An agent asks; a review step failed a 4th time; the recommended flow needs confirming</td>
-                <td>Card stays doing and the agent resumes with your answer; review limit = let it through to the next step; flow confirmation = adopt the recommended flow</td>
-                <td>Card goes back to open and reruns the current step about a minute later (the reason is passed on); review limit = send back for one more round; flow confirmation = defer for manual handling</td>
+                <td>An agent question; the 4th review rejection; confirming the suggested flow</td>
+                <td>Card stays doing and the agent resumes with your answer; review limit = pass to the next node; flow confirmation = adopt the suggested flow</td>
+                <td>Card goes back to open and reruns from the current node in about a minute (with your reason); review limit = one more rework round; flow confirmation = defer for manual handling</td>
             </tr>
             <tr>
                 <td>Merge conflict<br><code>merge_conflict</code></td>
-                <td>Merging at finalize hit a conflict the conflict-resolution role could not fix</td>
-                <td>"Retry merge": success → done; still conflicting → keeps waiting</td>
+                <td>The final merge conflicts and the conflict-resolution role could not fix it</td>
+                <td>"Retry merge": success → done; still conflicting → keep waiting</td>
                 <td>"Take over manually": card is deferred; branch and worktree are kept</td>
             </tr>
             <tr>
                 <td>Review rejection<br><code>verdict: "reject"</code></td>
-                <td>Design review or code review did not pass</td>
-                <td colspan="2">The first 3 rejections are redone automatically with no reply needed; the 4th becomes a "Needs confirmation" item above</td>
+                <td>Design review or code review fails</td>
+                <td colspan="2">The first 3 rejections go back to the previous node automatically — no reply needed. The 4th becomes "Needs confirmation" above.</td>
             </tr>
             <tr>
                 <td>Exit-check waiver<br><code>need_confirm</code></td>
-                <td>An agent reported done but the exit check failed (for example, no code change) and the agent asked for a waiver (<code>waive_gate</code>)</td>
+                <td>The agent reports done but the exit check fails (e.g. no code change) and it asked for a waiver (<code>waive_gate</code>)</td>
                 <td>"Waive and finish": recorded, then done</td>
-                <td>"Back to open": card reruns; a reason starting with <code>later</code> defers it instead</td>
+                <td>"Back to open": rerun; a reason starting with <code>later</code> defers it instead</td>
             </tr>
         </table>
-        <div class="note">Only three replies move a card to <b>Deferred</b>: n on a merge conflict, <code>n &lt;id&gt; later …</code> on a waiver, and rejecting a recommended flow. Every other n simply sends the card back to open to rerun. The board also offers a "Stop asking and defer" button for when an agent keeps asking.</div>
+        <div class="note">Only three replies defer a card (<b>Deferred</b>): n on a merge conflict, <code>n &lt;id&gt; later …</code> on a waiver, and rejecting a suggested flow. Every other n just sends the card back to open for an automatic rerun. If an agent keeps asking, the web "Stop asking and defer" button halts it.</div>
 
-        <h3 id="feishu-chat">Feishu card creation and the board assistant (optional)</h3>
-        <p>With a Feishu bot connected, plain messages sent to the bot are answered by the cross-project <b>board assistant</b>: it can look up projects, cards and service status, or create a card once you have confirmed the project. Ids and statuses in its answers come from the server's data; if it cannot find something it says so. Four extra abilities are switched on one by one under Settings → Feishu bot → assistant abilities, and <b>all four are off by default</b>:</p>
+        <h3 id="feishu-chat">Feishu chat cards and the board assistant (optional)</h3>
+        <p>With the Feishu/Lark bot connected, plain text you send the bot in a private chat is answered by the cross-project <b>board assistant</b>: projects, cards, service status, or creating a card once you pick a project. Card ids and statuses come from server data; if it cannot find something it says so. Four more capabilities must be switched on one by one under Settings → Notifications → Feishu bot → Assistant capabilities, and <b>all four are off by default</b>:</p>
         <ol>
-            <li>Read-only code analysis: reads and searches files across projects, citing files and line numbers;</li>
-            <li>Status change: only from Deferred to Open;</li>
-            <li>Card list: sends a project's cards as an interactive card, paginated when long;</li>
-            <li>Pull and commit: you name the project; it pulls the latest code of the current branch and pauses with options on a conflict; commits are previewed first and only made <b>in the next turn</b> after you confirm. It never pushes or switches branches.</li>
+            <li>Read-only code analysis: read and search files across projects, with file and line references;</li>
+            <li>Status changes: only Deferred → Open;</li>
+            <li>Card list messages: send a project's card list, paginated when long;</li>
+            <li>Pull and commit: pick a project, pull the latest code for its current branch, pause with options on conflicts; commits are previewed first and only made <b>in the next turn</b> after you confirm — no push, no branch switching.</li>
         </ol>
         <table>
             <tr><th>Command / message</th><th>Effect</th></tr>
-            <tr><td><code>确认建卡</code> (confirm card)</td><td>Creates the card from the current draft via <code>/api/chat/&lt;id&gt;/confirm</code> (status Deferred by default). Without a draft it only replies that there is no draft yet.</td></tr>
-            <tr><td><code>结束建卡</code> (end)</td><td>Ends the current card-creation session.</td></tr>
-            <tr><td><code>新建建卡</code> (new)</td><td>Closes the current session; the next message starts over by choosing a project.</td></tr>
-            <tr><td>Group messages</td><td>Only text and rich-text messages that @mention the bot are handled, by the board assistant, with the reply sent to that group. Groups never take part in y/n or card creation.</td></tr>
-            <tr><td>Images / document links</td><td>Passed to the assistant or the card-creation session as attachments (≤ 20 MB each, at most 5 per turn).</td></tr>
+            <tr><td><code>确认建卡</code> (confirm card)</td><td>Creates the card from the current draft via <code>/api/chat/&lt;id&gt;/confirm</code> (status Deferred). Without a draft it just says there is none yet.</td></tr>
+            <tr><td><code>结束建卡</code> (end)</td><td>Ends the current card chat.</td></tr>
+            <tr><td><code>新建建卡</code> (new)</td><td>Closes the current chat; your next message starts a new one with project selection.</td></tr>
+            <tr><td>Group messages</td><td>Only text and rich messages that @mention the bot are handled, by the assistant, with replies in the group. Groups do not take part in y/n or card creation.</td></tr>
+            <tr><td>Images / document links</td><td>Passed to the assistant or card chat as attachments (≤20 MB per file, up to 5 per turn).</td></tr>
         </table>
-        <p><b>Matching rule (whole line)</b>: the three commands only work when the whole message, after trimming spaces and punctuation, is exactly the command, and only while a card-creation session is active — mentioning the phrase inside a sentence does nothing. y/n replies take priority over these commands.</p>
+        <p><b>Matching (whole line)</b>: after trimming whitespace and punctuation, a message must equal the command exactly, and only counts while a card chat is active. Mentioning 「确认建卡」 inside a sentence does nothing. y/n replies take priority over these commands.</p>
+        <p>Card chat and the board assistant run on <code>kimi</code> or <code>opencode</code>; both pass the runtime certification suite (see "Runtimes").</p>
 
-        <h2 id="create">Creating cards</h2>
+        <h2 id="review">Review and acceptance</h2>
+        <p><b>In short: a failed review sends the work back automatically and only reaches you on the 4th rejection; acceptance runs the real thing on a separate test instance; when everything passes the card merges by itself.</b></p>
+        <ul>
+            <li>A reviewer (design review, code review) that returns <code>pass</code> moves the card on; <code>reject</code> sends it back to the previous producing node along with the review notes.</li>
+            <li>The <b>first 3 rejections</b> at the same review node are redone automatically. On the 3rd, if the project sets an <code>escalation_model</code>, the author role switches to that stronger model first.</li>
+            <li>On the <b>4th rejection</b> the card becomes a <code>need_confirm</code> for you, with every round's rejection points: y lets it through, n sends it back once more.</li>
+            <li>A missing or malformed verdict counts as a rejection; nothing merges on it. Review notes stay in the review records and artifacts, never in the card notes.</li>
+        </ul>
+        <h3 id="accept">Acceptance</h3>
+        <p>The acceptance role (<code>accept</code>) checks the acceptance criteria in the notes by running the real thing on its own test instance and writes <code>accept.md</code>. It can run tests and commands but cannot edit source or commit. Browser-facing changes are checked in a real browser; when that is not possible it lists what was not covered so you can check it by hand. How to start a test instance is declared in the project's <code>.loop/project.json</code> (see the "Project setup" tab).</p>
+        <h3 id="merge">Worktrees, branches and merging</h3>
+        <ul>
+            <li>The first time a card runs, the dispatcher creates a worktree from the base branch for each repository (under <code>~/.req-board/worktrees/</code>) on branch <code>f-YYYYMMDD-&lt;id&gt;</code>. Every role of the card works there; your main working copy is untouched.</li>
+            <li>At the <b>finish</b> step the dispatcher runs the <b>exit check</b> first: a dev node must have changed code, other nodes must have written their artifact. Then it merges with <code>--no-ff</code> and removes the worktree and branch.</li>
+            <li>For PR / CI repositories, set <code>branch_only: true</code> in <code>projects.json</code> to push the branch instead of merging locally. <code>git_sync</code> controls pulling before work and pushing after; without it the remote is never touched. Local-only repositories (no remote) are fine.</li>
+            <li>On a merge conflict, the conflict-resolution role tries first; if it cannot, the card lands in "Needs you". A missing git commit identity is reported as such, with the fix, rather than as a conflict.</li>
+            <li>Services with a <code>restart</code> recipe in the project config are restarted and health-checked when the card completes.</li>
+        </ul>
+
+        <h2 id="config">Settings</h2>
+        <p><b>In short: most settings live in the drawer behind the gear at the bottom left. Changes to <code>flows.json</code>, <code>.env</code> or the default files in <code>prompts/</code> need a restart of the board and dispatcher; prompt and skill edits made in the drawer apply to the next session.</b></p>
+        <p>The drawer has five tabs: Overview, Models, Notifications, Prompts and Skills.</p>
+        <h3 id="settings-project">Projects (left column)</h3>
+        <p>Click <code>+</code> at the top of the left column to connect a project; its goal is given to the analysis role. Hover a project to edit or disconnect it. Disconnecting only hides it — past cards stay — and is blocked while a card is in progress.</p>
+        <h3 id="settings-models">Models</h3>
+        <ul>
+            <li><b>Models tab</b>: edits the <code>config.toml</code> the kimi runtime reads (in the harness home, default <code>~/.kimi-code-deepseek</code>): providers, API keys, model aliases, default model. It is validated before saving; nothing is written if validation fails.</li>
+            <li><b>Per-project tuning</b> (far right of the project bar): pick a model per project and role. It applies from the next card, no restart needed.</li>
+        </ul>
+        <p>A role's model is the first one set in this order:</p>
         <ol>
-            <li>Click <code>+</code> next to a project name in the left sidebar to open its chat-to-create panel.</li>
-            <li>Describe the requirement in the chat; the agent drafts a title and notes, you preview and confirm. You can attach a local HTML prototype for reference (paste, drag in, or use the reference-file button).</li>
-            <li>New cards start as <b>Deferred</b>. Change the status to <b>Open</b> to start development.</li>
-        </ol>
-        <p>Writing notes: describe only <b>what to build</b> — goal, scope, acceptance criteria, references — not the discussion that led there; write exclusions as "Not provided: X, Y". Notes and the summary go into every role's prompt. For multi-repo projects, <code>repos: repo-a, repo-b</code> pins the repositories; <code>timeout: 120</code> changes the per-run time limit (minutes, 15–480).</p>
-        <h3 id="assistant">Card assistant</h3>
-        <p>Every card has an "Assistant" entry at the top of its session list, available in any status. It is a separate conversation about that card: ask about progress, have artifacts explained, edit the notes, or move the card from Deferred to Open. It is read-only by default and only writes when you explicitly ask it to.</p>
-
-        <h2 id="merge">Worktrees, branches and merging</h2>
-        <ul>
-            <li>The first time a card starts, the dispatcher creates a worktree from the main branch for each of the project's repositories (under <code>~/.req-board/worktrees/</code>), on branch <code>f-YYYYMMDD-&lt;id&gt;</code>. Every role for that card works there; your main working copy is untouched.</li>
-            <li>At <b>finalize</b>, the dispatcher checks that there is a real code change (or the expected artifact), merges with <code>--no-ff</code> into the main branch, and removes the worktree and branch.</li>
-            <li>For PR / CI-based repositories, set <code>branch_only: true</code> in <code>projects.json</code>: the branch is pushed to the remote and nothing is merged locally. <code>git_sync</code> configures remote sync (fetch/pull before a card, push after done); without it the remote is never touched.</li>
-            <li>On a merge conflict the conflict-resolution role runs first; if it cannot fix it, the card comes to you (see "Merge conflict" above).</li>
-            <li>Services with a <code>restart</code> recipe in <code>projects.json</code> are restarted and health-checked by the dispatcher when the card is done.</li>
-        </ul>
-
-        <h2 id="view">Artifacts, sessions and the timeline</h2>
-        <ul>
-            <li><b>Artifact directory</b>: <code>~/.req-board/artifacts/&lt;project&gt;/req-&lt;id&gt;/</code>, holding <code>analysis.md</code>, <code>tech.md</code>, <code>tech_review.md</code>, <code>self-test.md</code>, <code>code_review.md</code>, <code>accept.md</code> and so on. It lives outside every repository, so cleaning up branches never loses it. Open any artifact from the card's artifact row.</li>
-            <li><b>Result file</b>: before finishing, each role writes <code>result.json</code> (<code>status</code> done / blocked / need_confirm, plus a summary and any question); the dispatcher moves the card on from it. Agents can list follow-ups that need a human (<code>todos</code>); they appear in the done notice and the card summary.</li>
-            <li><b>Sessions</b>: the bottom of the card lists every agent session for it (model, context usage, branch). Open one to see its live timeline on the right: messages, thoughts, tool calls, diffs.</li>
-            <li><b>Continuing a session</b>: send a message in the chat box under the session; the dispatcher resumes that session and hands your message to the agent. Always continue sessions this way.</li>
-            <li><b>Status line</b>: the line above the chat box shows whether the session is alive. Green means working; amber means responses are slow; red means it looks stuck, and a "restart dispatcher" action appears.</li>
-        </ul>
-
-        <h2 id="config">Settings and models</h2>
-        <h3>Projects (left sidebar)</h3>
-        <p>The <code>+</code> at the top of the sidebar adds a project: name, repository paths (one or more), main branch and a one-line goal (given to the analysis role). Hover a project to edit it or disconnect it; disconnecting only hides it, and its cards are kept. A project with cards in progress cannot be disconnected.</p>
-        <h3>Settings drawer (gear at the bottom left)</h3>
-        <ul>
-            <li><b>Overview</b>: read-only view of flows, roles, runtime environment and tools.</li>
-            <li><b>Models</b>: edits the <code>config.toml</code> read by the kimi runtime (in the harness home, <code>~/.kimi-code-deepseek</code> by default): providers, API keys, model aliases and the default model. Changes are validated before saving; nothing is written if validation fails.</li>
-            <li><b>Notifications</b>: the Feishu bot (App ID / App Secret, connectivity test, assistant capability switches; restart the dispatcher after changing credentials), plus outbound Webhook and Slack notifications (enable, send a test, choose events; saved changes apply immediately).</li>
-        </ul>
-        <h3>Per-project model tuning (right end of the project bar)</h3>
-        <p>Pick a model per project and role. Saved changes apply from the next card on, with no restart. A role's model is the first value found in this order:</p>
-        <ol>
-            <li>Project level (<code>models</code> in <code>projects.json</code> — this panel);</li>
-            <li>Role level (<code>roles.&lt;role&gt;.model</code> in <code>flows.json</code>);</li>
+            <li>Project (<code>models</code> in <code>projects.json</code>, i.e. the tuning above);</li>
+            <li>Role (<code>roles.&lt;role&gt;.model</code> in <code>flows.json</code>);</li>
             <li>Environment variable <code>KIMI_MODEL_&lt;ROLE&gt;</code>;</li>
             <li>Global <code>KIMI_MODEL</code> (default <code>deepseek/v4.1-flash</code>).</li>
         </ol>
-        <h3>Project conventions: <code>.loop/project.json</code></h3>
-        <p>Each connected repository can carry a <code>.loop/project.json</code> declaring its test commands, test-instance start/stop commands, guide files and skills per role, and high-risk paths. These go into the "project conventions" layer of the prompts and take effect the next time a prompt is built. See the "Project setup" tab for how to write them.</p>
-        <h3>Budgets</h3>
-        <p>A single run is limited to 240 minutes by default. Tool-call step limits default to dev 1000, accept and code_review 500, merge_resolve 200, and 400 for the rest. A run that hits a limit is stopped and given one final turn to wrap up. Adjust per role with <code>budgets</code> in <code>projects.json</code>, e.g. <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>.</p>
-
-        <h2 id="runtimes">Agent runtimes</h2>
-        <p>Each role drives an agent runtime over ACP (Agent Client Protocol):</p>
+        <h3 id="runtimes">Runtimes</h3>
+        <p>Each role drives a runtime subprocess over ACP (Agent Client Protocol). Loop Engine approves every tool call according to the role, so read-only roles cannot change code.</p>
         <table>
-            <tr><th>Runtime</th><th>Roles</th><th>Notes</th></tr>
-            <tr><td><code>kimi</code> (default)</td><td>all</td><td>kimi-code CLI (<code>kimi acp</code>); models are configured in the harness home's <code>config.toml</code></td></tr>
-            <tr><td><code>claude-code</code></td><td>dev only</td><td>Via <code>@zed-industries/claude-code-acp</code>, using your logged-in <code>claude</code> CLI</td></tr>
-            <tr><td><code>codex</code></td><td>dev only</td><td>Via <code>@zed-industries/codex-acp</code>, using your logged-in <code>codex</code> CLI</td></tr>
+            <tr><th>Runtime</th><th>Pipeline roles</th><th>Chat &amp; assistant</th><th>Notes</th></tr>
+            <tr><td><code>kimi</code> (default)</td><td>all</td><td>yes</td><td>kimi-code CLI (<code>kimi acp</code>); models set in the harness home's <code>config.toml</code></td></tr>
+            <tr><td><code>opencode</code></td><td>all</td><td>yes</td><td>OpenCode (<code>opencode acp</code>); works with any OpenAI-compatible API (GLM, DeepSeek, …): set <code>LOOP_OPENAI_BASE_URL</code>, <code>LOOP_OPENAI_API_KEY</code>, <code>LOOP_OPENCODE_MODEL</code></td></tr>
+            <tr><td><code>claude-code</code></td><td>dev only</td><td>no</td><td>via <code>@zed-industries/claude-code-acp</code>; uses your logged-in <code>claude</code> CLI</td></tr>
+            <tr><td><code>codex</code></td><td>dev only</td><td>no</td><td>via <code>@zed-industries/codex-acp</code>; uses your logged-in <code>codex</code> CLI</td></tr>
         </table>
         <p>Selection order: <code>projects.json</code> <code>&lt;project&gt;.runtimes.&lt;role&gt;</code> → <code>&lt;project&gt;.runtime</code> → <code>flows.json</code> <code>roles.&lt;role&gt;.runtime</code> → environment variable <code>LOOP_AGENT_RUNTIME</code> → <code>kimi</code>. Unknown runtimes are refused before anything starts.</p>
         <pre><code>{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}</code></pre>
-        <div class="warn">Claude Code and Codex are limited to the dev role for now: it cannot yet be proven that the read-only limits hold on those runtimes, so analysis, review, acceptance, conflict resolution and assistant sessions refuse to start on them. Keep those roles on <code>kimi</code>.</div>
-
-        <h2 id="troubleshooting">Troubleshooting</h2>
-        <table>
-            <tr><th>Symptom</th><th>What to do</th></tr>
-            <tr><td>A card is never picked up</td><td>Check that it is open, has not been edited for at least a minute, and that its project name matches a key in <code>projects.json</code> exactly. The health badge in the header should not be red.</td></tr>
-            <tr><td>Sessions do not start / model errors / 401</td><td>Check the API key and model names in the harness home's <code>config.toml</code> and align <code>KIMI_MODEL</code> with them; set <code>KIMI_BIN</code> if kimi is not found.</td></tr>
-            <tr><td>Agent says the directory is not trusted</td><td>Run kimi interactively once in that directory with the same harness home and accept: <code>KIMI_CODE_HOME=~/.kimi-code-deepseek kimi</code>.</td></tr>
-            <tr><td>Worktree creation fails</td><td>The project path must be a git repository with at least one commit on its main branch; set <code>base_branch</code> if needed.</td></tr>
-            <tr><td>Browser verification reports no tools</td><td>Add an MCP server named exactly <code>playwright</code> to <code>mcp.json</code> in the harness home.</td></tr>
-            <tr><td>Changes to <code>flows.json</code> / <code>prompts/</code> have no effect</td><td>There is no hot reload: restart the board and the dispatcher (in foreground mode, Ctrl-C and rerun <code>scripts/run_local.sh</code>).</td></tr>
-            <tr><td>Card moved to Deferred with a failure reason</td><td>Fix the cause and set the card back to open, or give instructions in the session chat box to continue.</td></tr>
-        </table>
-        <h3 id="dispatcher-state">Dispatcher health</h3>
-        <p>The badge at the top right of the board shows the dispatcher's state. Every poll (about every 15 seconds) the dispatcher updates the heartbeat file <code>data/dispatcher_heartbeat.json</code>; if it has not been updated for 180 seconds the badge shows "Heartbeat stale", which usually means the dispatcher is hung or not running. Its pending work (open questions, retry counts, worktree bases and so on) is kept in <code>data/dispatcher_state.json</code>.</p>
+        <div class="warn">Read-only roles, card chat and the board assistant only run on runtimes that pass the <b>runtime certification suite</b> (<code>tests/test_runtime_certification.py</code>): a scripted fake model tries to write files, run commands, read outside the project and spawn sub-agents, and every attempt must be stopped. kimi and opencode pass. claude-code and codex are limited to the dev role until they do; other roles refuse to start on them.</div>
+        <h3 id="settings-prompts">Prompts</h3>
+        <p>Every prompt is built in layers: platform rules → role template → project conventions → conditional notes → skills → card data. The Prompts tab lists each piece of engine text:</p>
         <ul>
-            <li>Environment self-check: <code>.venv/bin/python scripts/doctor.py</code> (passes when it exits 0 and reports 0 hard failures — 「硬失败 0 项」).</li>
+            <li>Saved edits go to <code>prompts.local/</code> (not in git) and apply to the next session start — no restart.</li>
+            <li>"Restore default" deletes your override. If an upgrade changes a default, the item shows "default updated" and you choose whether to adopt it or keep yours.</li>
+            <li>Sentences the dispatcher parses (such as the result contract) are locked; edits that remove them are refused. Project conventions are read-only here — change them in the project's repository.</li>
+            <li>"Injection preview": pick a project and a role (and optionally a card) to see the full prompt from the same compiler the dispatcher uses — no session, no tokens.</li>
+        </ul>
+        <h3 id="settings-skills">Skills</h3>
+        <p>A skill is a reusable procedure (say, "take a screenshot before changing UI") attached to roles. The Skills tab lets you create, edit and deprecate skills and shows how often each was loaded in the last 30 days.</p>
+        <ul>
+            <li><b>Activation</b>: Always (inlined whenever the role matches), Auto (inlined when a path or keyword matches), On demand (listed in a catalog; the agent fetches it), Manual (loaded only when the card notes name it).</li>
+            <li><b>Role × skill matrix</b>: click a cell to cycle a role's activation for that skill.</li>
+            <li>New skills start as <b>drafts</b> and never reach a real session until set to active. Local edits go to <code>prompts.local/skills/</code>; skills shipped in a project repository are read-only.</li>
+        </ul>
+        <h3 id="settings-notify">Notifications</h3>
+        <ul>
+            <li><b>Feishu/Lark bot</b> (optional): App ID / App Secret, connection test and assistant capability switches. Restart the dispatcher after changing credentials. It works both ways: it sends notices and accepts y/n replies and card chat.</li>
+            <li><b>Webhook / Slack</b>: outbound only. Enable, send a test and subscribe per event (needs confirmation, done, failed, blocked, merge conflict). Saving applies immediately.</li>
+        </ul>
+        <h3 id="settings-look">Appearance</h3>
+        <p>Under "Appearance" at the bottom of the Overview tab you can turn on the <b>animated background</b>. It is off by default (a static backdrop saves power); the page reloads to apply. Light and dark mode use the theme toggle, shared between the board and this guide.</p>
+        <h3 id="budget">Time limits and budgets</h3>
+        <p>A single run lasts at most 240 minutes by default. Tool-call step limits default to dev 1000, accept and code_review 500, merge_resolve 200, everything else 400. At the limit the run is stopped and given one turn to wrap up. Adjust per role with <code>budgets</code> in <code>projects.json</code>, e.g. <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>.</p>
+        <h3>Project conventions: <code>.loop/project.json</code></h3>
+        <p>Each connected repository can have a <code>.loop/project.json</code> declaring test commands, test-instance start/stop commands, guides and skills per role, and high-risk paths. See the "Project setup" tab for examples.</p>
+
+        <h2 id="troubleshooting">FAQ</h2>
+        <table>
+            <tr><th>Symptom</th><th>Fix</th></tr>
+            <tr><td>A card is never picked up</td><td>Check that it is open, has been left unedited for over a minute, its project name matches a key in <code>projects.json</code> exactly, and the header badge says "Running".</td></tr>
+            <tr><td>Card chat will not start</td><td>Follow the hint in the chat area and check runtime and model under Settings → Models. In a hurry, use "Fill in a form" to create the card.</td></tr>
+            <tr><td>Sessions fail to start / model errors / 401</td><td>Check the API key and model names in the harness home's <code>config.toml</code> and keep them in line with <code>KIMI_MODEL</code>; set <code>KIMI_BIN</code> if kimi is not found. With opencode, check the <code>LOOP_OPENAI_*</code> variables.</td></tr>
+            <tr><td>Agent says the directory is not trusted</td><td>Run kimi once interactively in that directory with the same harness home and accept: <code>KIMI_CODE_HOME=~/.kimi-code-deepseek kimi</code>.</td></tr>
+            <tr><td>Worktree creation fails</td><td>The project path must be a git repository with commits and a base branch; set <code>base_branch</code> if needed.</td></tr>
+            <tr><td>Merge fails: no git identity</td><td>Set <code>user.name</code> and <code>user.email</code> for that repository, then "Retry merge". <code>scripts/doctor.py</code> checks this up front.</td></tr>
+            <tr><td>Browser checks say no tool is available</td><td>Add an MCP server named exactly <code>playwright</code> to the harness home's <code>mcp.json</code>.</td></tr>
+            <tr><td>Edits to <code>flows.json</code> / <code>prompts/</code> have no effect</td><td>There is no hot reload for these files: restart the board and the dispatcher (in foreground mode, Ctrl-C and rerun <code>scripts/run_local.sh</code>). Overrides saved in the settings drawer need no restart.</td></tr>
+            <tr><td>Card deferred with a failure reason</td><td>Fix the cause and set it back to open, or give instructions in the session chat to continue.</td></tr>
+        </table>
+        <h3 id="dispatcher-state">Status badge and dispatcher health</h3>
+        <p>The header badge answers one question: <b>is the engine running?</b> Green "Running" means the dispatcher heartbeat is fresh; red means it is stale or missing, and no work will be picked up. Feishu/Lark is optional: not configured or switched off is normal and only shown in the tooltip; it is flagged on the badge only when configured but broken.</p>
+        <p>The dispatcher updates <code>data/dispatcher_heartbeat.json</code> on every poll (about every 15 seconds); after 180 seconds without an update the heartbeat counts as stale. Its pending work (open questions, retry counts, worktree baselines) is kept in <code>data/dispatcher_state.json</code>.</p>
+        <ul>
+            <li>Self-check: <code>.venv/bin/python scripts/doctor.py</code> (passes when it exits 0 and reports 0 hard failures — 「硬失败 0 项」).</li>
             <li>Restart the dispatcher: <code>scripts/dispatcher-restart.sh &lt;pid&gt;</code>; make sure no agent is running first.</li>
             <li>More detail: <code>docs/quickstart.en.md</code> and <code>docs/dispatcher.md</code> in the repository.</li>
         </ul>
@@ -381,10 +478,10 @@ Not doing it: any unfinished card ──▶ Dropped dropped</pre>
         <div class="tab-pane" id="pane-diagrams" role="tabpanel" aria-labelledby="tab-diagrams" hidden>
             <div class="sub-tabs">
                 <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-architecture.html" aria-pressed="true">Architecture</button>
-                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">Dispatch flow</button>
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">Call chain</button>
             </div>
-            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine architecture and dispatch diagrams"></iframe>
-            <p class="subtitle" style="margin-top:10px;">Zoom, search and switch themes inside the diagram. Labels are in Chinese; sources are in <code>docs/diagrams/src/*.json</code>.</p>
+            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine architecture and call-chain diagrams"></iframe>
+            <p class="subtitle" style="margin-top:10px;">Architecture: how the board, dispatcher, ACP client, runtimes and stores connect. Call chain: every step and gate a card passes from chat to merge. Zoom, search and switch themes inside the diagram. The labels here are in Chinese; English versions are <code>docs/diagrams/app-architecture.html</code> and <code>docs/diagrams/call-chain.html</code> in the repository. Sources: <code>docs/diagrams/src/*.json</code>.</p>
         </div>
 
         <div class="tab-pane prompt-guide" id="pane-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
@@ -578,11 +675,11 @@ Takes effect: migration, backend deploy and frontend release follow the project'
             <p><code>AGENTS.md</code> is the project's own rule file (many coding agents recognise the name). Put one at the repo root for project-wide conventions; when a subdirectory has special rules, add another one in that directory — <b>the one nearest to the change wins</b>.</p>
             <ul>
                 <li><b>Pointers, not copies</b>: the project-conventions layer tells the agent to read the root <code>AGENTS.md</code> first; if a directory this card touches has its own <code>AGENTS.md</code>, the card input lists "read <code>src/api/AGENTS.md</code> before changing files under <code>src/api/</code>". Before development, "touches" means paths named in the notes, analysis and technical design; at review and acceptance it means the real diff.</li>
-                <li><b>Which version was read</b>: every session start records each <code>AGENTS.md</code> it pointed to with a content hash (read from the agent's own worktree), so you can tell later which rules were in force. Runtimes that load <code>AGENTS.md</code> on their own (Codex) get the record but no duplicate pointer.</li>
+                <li><b>Which version was read</b>: every session start records each <code>AGENTS.md</code> it pointed to with a content fingerprint (read from the agent's own worktree), so you can tell later which rules were in force. Runtimes that load <code>AGENTS.md</code> on their own (Codex) get the record but no duplicate pointer.</li>
                 <li><b>Versus <code>.loop/guides</code></b>: <code>AGENTS.md</code> holds short rules that people and any agent read; <code>.loop/guides</code> are project facts Loop Engine selects per role and puts into the prompt (up to 4000 characters each). Write each fact in one place only.</li>
                 <li><b>Precedence</b>: Loop Engine platform policy (result contract, write boundaries, process safety) &gt; nearest subdirectory <code>AGENTS.md</code> &gt; root <code>AGENTS.md</code> &gt; role template (on facts such as commands, ports, paths). Permissions are always enforced by tool allowlists; no text at any layer can change them.</li>
                 <li><b>Keep them short</b>: <code>scripts/doctor.py</code> checks the length of the root and every nested <code>AGENTS.md</code>, and warns when a nested file copies large chunks of the root file.</li>
-                <li><b>Where to see them</b>: the project section of the "Prompts" tab in the settings drawer (read-only) and the card's "Context" page will list them (UI coming; the <code>GET /api/prompts</code> endpoint already returns them).</li>
+                <li><b>Where to see them</b>: the project section of the "Prompts" tab in the settings drawer (read-only) and the card's "Context" page list them (the <code>GET /api/prompts</code> endpoint returns the same data).</li>
             </ul>
             <p>The full layer picture, from stable to changing: platform policy → role template → project conventions (manifest, guides, <code>AGENTS.md</code> pointers) → conditional notes (branch-only, auto-restart, …) → always-on skills → skill catalog → this card's data (title, notes, upstream artifacts, rework issue list — fenced with <code>&lt;card-data&gt;</code>: data, not instructions) → run parameters. The first layers stay the same across cards, which helps model caching.</p>
 

@@ -106,6 +106,11 @@
             padding: 12px 14px; overflow-x: auto; line-height: 1.6; font-size: 13px; white-space: pre-wrap;
         }
         pre code { padding: 0; background: none; overflow-wrap: normal; }
+        kbd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+            border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px;
+            padding: 0 6px; background: var(--code-bg);
+        }
         details { margin: 10px 0; }
         summary { cursor: pointer; font-weight: 600; }
         ul, ol { margin: 8px 0 8px 22px; padding: 0; }
@@ -157,48 +162,110 @@
             </div>
         </div>
         <h1>Loop Engine 使用指南</h1>
-        <p class="subtitle">需求卡如何流转、agent 各做什么、什么时候需要你介入。</p>
+        <p class="subtitle">从第一次启动到合并：每一步看哪里、什么时候需要你。</p>
 
         <div class="tabs" role="tablist" aria-label="指南内容">
             <button class="tab-btn" id="tab-guide" role="tab" aria-selected="true" aria-controls="pane-guide" type="button">使用指南</button>
-            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">架构与调度流程图</button>
+            <button class="tab-btn" id="tab-diagrams" role="tab" aria-selected="false" aria-controls="pane-diagrams" type="button">架构与调用链路图</button>
             <button class="tab-btn" id="tab-prompts" role="tab" aria-selected="false" aria-controls="pane-prompts" type="button">项目配置指引</button>
         </div>
 
         <div class="tab-pane" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide">
         <nav class="toc" aria-label="目录">
-            <a href="#intro">简介</a><a href="#status">卡片状态</a><a href="#flows-roles">流程与角色</a>
-            <a href="#review">评审与打回</a><a href="#confirm">回答 agent 提问</a><a href="#flow">飞书回复</a>
-            <a href="#create">建卡</a><a href="#merge">worktree 与合并</a><a href="#view">产物与会话</a>
-            <a href="#config">设置与模型</a><a href="#runtimes">运行体</a><a href="#troubleshooting">排障</a>
-            <a href="#agents">内置 agent 定义</a>
+            <a href="#start">第一次启动</a><a href="#create">建卡</a><a href="#card">看懂任务卡</a>
+            <a href="#inbox">处理「待你处理」</a><a href="#review">评审与验收</a><a href="#config">设置</a>
+            <a href="#troubleshooting">常见问题</a><a href="#agents">内置 agent 定义</a>
         </nav>
 
-        <h2 id="intro">Loop Engine 是什么</h2>
-        <p>Loop Engine 是一块需求看板，后面接着一组分工明确的 AI agent。你把需求写成一张卡片，调度器就按卡片选定的<b>流程</b>依次拉起不同<b>角色</b>：分析、技术方案、方案评审、开发、代码审查、验收，最后自动合并。</p>
-        <ul>
-            <li><b>评审角色只读，可以打回。</b>被打回的工作自动退给上一步重做，多次打回后交给你裁决。</li>
-            <li><b>每张卡一个独立的 git worktree 和分支</b>，全部关卡通过后才合并回主干。</li>
-            <li><b>出问题就停下</b>（fail-closed）：配置非法、评审结论缺失、收尾校验不过时不推进、不合并，留下记录等人处理。</li>
-            <li><b>需要你拍板时</b>，agent 会提问（<code>need_confirm</code>），你在看板上（或飞书里）回答即可继续。</li>
-        </ul>
-        <p>看板是本机工具，只监听 <code>127.0.0.1:8899</code>，没有登录鉴权。</p>
+        <h2 id="start">第一次启动</h2>
+        <p><b>结论：跑通自检、启动两个进程、接入一个项目，页头角标显示「运行中」就可以建卡了。</b></p>
+        <p>Loop Engine 是一块需求看板，后面接着一组分工明确的 AI agent。你在聊天里说清要做什么，它变成一张需求卡；调度器按卡上的流程依次拉起分析、开发、评审、验收等角色，全部关卡通过后自动合并。每一步都有检查，所以便宜的模型也能稳定产出。</p>
+        <ol>
+            <li>按仓库里的 <code>docs/quickstart.md</code> 装好依赖、配好模型和运行体。</li>
+            <li>运行环境自检：<code>.venv/bin/python scripts/doctor.py</code>，输出「硬失败 0 项」即通过。</li>
+            <li>启动：<code>./scripts/run_local.sh</code> 同时拉起<b>看板</b>（本页所在的网页服务）和<b>调度器</b>（后台推进卡片的进程）。</li>
+            <li>左栏顶部点 <code>+</code> 接入项目：填项目名、仓库路径（可多个）、主干分支和一句话项目目标。</li>
+            <li>看页头右上角的角标：显示「运行中」说明调度器在工作。</li>
+        </ol>
+        <div class="note">看板只监听 <code>127.0.0.1:8899</code>，没有登录鉴权。不要把它暴露到局域网或公网。</div>
 
-        <h2 id="status">卡片的一生与状态</h2>
+        <h3 id="glossary">先认识几个词</h3>
+        <table>
+            <tr><th>词</th><th>意思</th></tr>
+            <tr><td>需求卡</td><td>一条需求。卡上有标题、notes（要做什么）、状态和走到哪一步。</td></tr>
+            <tr><td>流程</td><td>卡片要走的一串节点，比如「开发 → 代码审查 → 验收 → 收尾」。</td></tr>
+            <tr><td>角色</td><td>一类 agent 工作：需求分析、技术方案、方案评审、开发、代码审查、验收、冲突解决。</td></tr>
+            <tr><td>闸门</td><td>能让卡片停下的检查：工具审批、评审结论、收尾校验、需要你拍板的提问。</td></tr>
+            <tr><td>运行体</td><td>实际跑 agent 的命令行工具：<code>kimi</code>、<code>opencode</code>、<code>claude-code</code>、<code>codex</code>。</td></tr>
+            <tr><td>worktree</td><td>每张卡独立的代码副本和分支，开发不碰你的主工作区。</td></tr>
+            <tr><td>产物</td><td>agent 写下的文件：分析报告、方案、自测报告、评审意见、<code>result.json</code> 等。</td></tr>
+            <tr><td><code>need_confirm</code></td><td>agent 或调度器需要你决定时发出的提问，会出现在「待你处理」。</td></tr>
+        </table>
+
+        <h3 id="layout">界面一览</h3>
+        <ul>
+            <li><b>左栏</b>：项目列表。点项目只看它的卡；项目名旁的 <code>+</code> 打开建卡聊天；底部齿轮是设置。</li>
+            <li><b>中间</b>：卡片列表，上方有搜索框、「+ 新建」和状态筛选。</li>
+            <li><b>右栏</b>：卡片详情、会话过程和聊天框。</li>
+            <li><b>页头</b>：「待你处理」收件箱、引擎运行状态角标、本指南入口。</li>
+            <li><b>手机</b>：窄屏自动切成单栏。点卡片进入详情，点「← 返回看板」回到列表，页头的 ☰ 打开项目栏。</li>
+        </ul>
+
+        <h3 id="shortcuts">键盘快捷键</h3>
+        <p>光标在输入框里时快捷键不生效。</p>
+        <table>
+            <tr><th>按键</th><th>作用</th></tr>
+            <tr><td><kbd>N</kbd></td><td>新建需求（打开当前项目的建卡聊天）</td></tr>
+            <tr><td><kbd>/</kbd></td><td>聚焦搜索框</td></tr>
+            <tr><td><kbd>J</kbd> / <kbd>K</kbd></td><td>下一张 / 上一张卡片</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>打开当前卡片的详情</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>关闭弹层、收件箱或详情</td></tr>
+            <tr><td><kbd>?</kbd></td><td>显示快捷键帮助</td></tr>
+        </table>
+
+        <h2 id="create">建卡</h2>
+        <p><b>结论：在聊天里说清需求，确认后落卡；新卡默认「暂缓」，改成「待开发」才会开工。</b></p>
+        <ol>
+            <li>点「+ 新建」（或按 <kbd>N</kbd>，或点项目名旁的 <code>+</code>），打开该项目的建卡聊天。</li>
+            <li>用对话描述需求。agent 整理出标题和 notes 草稿，你预览后确认建卡。可以附上本机 HTML 原型作参考（粘贴、拖拽或点「参考文件」）。</li>
+            <li>新卡默认<b>暂缓</b>。想让它开始开发，把状态改成<b>待开发</b>。</li>
+        </ol>
+        <p><b>聊天用不了时</b>：展开聊天上方的「直接填表」，填标题、项目、需求详情和状态即可建卡。当前运行体起不了聊天（没装、或不支持聊天会话）时，表单会自动展开，聊天区也会提示去「设置 → 模型设置」改哪里。</p>
+        <p><b>notes 怎么写</b>：只写<b>要做什么</b>——目标、范围、验收标准、参考资料；不写讨论过程。排除项写成「不提供：X、Y」。notes 会进入每个角色的提示词，写清验收标准是减少打回最有效的办法。</p>
+        <ul>
+            <li>多仓库项目可写 <code>repos: 仓库A, 仓库B</code> 指定涉及的仓库。</li>
+            <li>写 <code>timeout: 120</code> 调整单次运行时限（分钟，15–480，默认 240）。</li>
+        </ul>
+        <h3 id="assistant">需求助手</h3>
+        <p>每张卡的会话列表顶部都有「需求助手」入口，任何状态都能用。它是针对这张卡的独立对话：问进度、解释产物、改 notes、把暂缓改成待开发。默认只读，只有你明确要求时才写。</p>
+
+        <h2 id="card">看懂任务卡</h2>
+        <p><b>结论：状态告诉你卡在哪个阶段，顶部进度条告诉你走到流程哪一步；看到橙色，就是在等你决定。</b></p>
+
+        <h3 id="status">卡片状态</h3>
         <pre class="lifecycle">暂缓 later ──(改为 open)──▶ 待开发 open ──(调度器捞起)──▶ 进行中 doing ──▶ 已完成 done
 不做了：任何未完成的卡 ──▶ 已废弃 dropped</pre>
         <table>
             <tr><th>状态</th><th>名称</th><th>含义</th></tr>
-            <tr><td><code>later</code></td><td>暂缓</td><td>只记录，不开发。在看板上聊天建的卡默认是这个状态。改成 open 就会进入自动开发。</td></tr>
-            <tr><td><code>open</code></td><td>待开发</td><td>调度器只会捞取这个状态的卡。卡片静置约 1 分钟没人编辑后被拉起。</td></tr>
-            <tr><td><code>doing</code></td><td>进行中</td><td>有 agent 在跑；等你回答问题、或在收尾合并时也停在这里。</td></tr>
+            <tr><td><code>later</code></td><td>暂缓</td><td>只记录，不开发。新建的卡默认在这里；改成 open 才进入自动开发。</td></tr>
+            <tr><td><code>open</code></td><td>待开发</td><td>调度器只捞这个状态的卡。卡片静置约 1 分钟没人编辑后被拉起。</td></tr>
+            <tr><td><code>doing</code></td><td>进行中</td><td>有 agent 在跑；等你回答或正在合并时也停在这里。</td></tr>
             <tr><td><code>done</code></td><td>已完成</td><td>流程走完并已合并（或已推送分支）。</td></tr>
             <tr><td><code>dropped</code></td><td>已废弃</td><td>不做了。只有 later / open / dropped 的卡可以删除。</td></tr>
         </table>
-        <div class="note">agent 进程级失败（崩溃、超时、没写结果）会自动重试 1 次；仍失败则卡片转为 <b>暂缓</b>，原因写在卡片摘要里。修好后把卡改回 open 即可重跑。</div>
+        <div class="note">agent 运行失败（崩溃、超时、没写结果文件）会自动重试 1 次；仍失败，卡片转为<b>暂缓</b>，原因写在卡片摘要里。修好后改回 open 即可重跑。</div>
 
-        <h2 id="flows-roles">流程与角色</h2>
-        <p>卡片被捞起后，先由<b>需求分析</b>（<code>analysis</code>）角色读需求和代码，推荐一条流程并列出涉及的仓库。之后按流程逐个节点推进：</p>
+        <h3 id="progress">顶部进度条</h3>
+        <p>开跑过的卡片顶部有一条细线，按这张卡的流程分段：第一段是需求分析，后面每段对应一个流程节点（收尾不单独占段）。</p>
+        <ul>
+            <li><b>亮色段</b>：已完成的步骤。已完成的卡整条点亮。</li>
+            <li><b>呼吸的段</b>：正在进行的步骤。</li>
+            <li><b>橙色段</b>：这一步卡住了，在等你决定（有待确认的问题、合并受阻、或开跑后被停成暂缓）。整个看板里，橙色只用来表示「需要你决定」。</li>
+            <li>还没开跑的暂缓 / 待开发卡不显示进度条。鼠标悬停可以看到完整步骤和当前位置。</li>
+        </ul>
+
+        <h3 id="flows-roles">流程与角色</h3>
+        <p>卡片被捞起后，先由<b>需求分析</b>（<code>analysis</code>）读需求和代码，推荐一条流程并列出涉及的仓库，之后按流程逐个节点推进：</p>
         <table>
             <tr><th>流程</th><th>节点</th><th>适合</th></tr>
             <tr><td><code>quick</code> 快速</td><td>开发 → 收尾</td><td>文案、配置值等极小改动。改到项目声明的高风险路径会自动升级为标准流程。</td></tr>
@@ -215,22 +282,35 @@
             <tr><td><code>accept</code> 测试验证</td><td>在独立测试实例上跑真实链路，写 <code>accept.md</code></td><td>可跑测试，不能改源码或提交</td></tr>
             <tr><td><code>merge_resolve</code> 冲突解决</td><td>合并冲突时自动拉起，尝试解决冲突</td><td>受限 git 命令</td></tr>
         </table>
-        <p>流程、角色名称、模型都来自仓库根目录的 <code>flows.json</code> 和 <code>prompts/*.md</code>，本页最后的「内置 agent 定义」按当前配置实时显示。改这两处后需要重启看板和调度器。</p>
-        <div class="note">流程里没有单独的产品方案环节，需求边界全靠卡片 notes。把背景、范围和<b>验收标准</b>写清楚，是减少打回最有效的办法。</div>
+        <p>流程、角色名和模型都来自仓库根目录的 <code>flows.json</code> 与 <code>prompts/*.md</code>；本页最后的「内置 agent 定义」按当前配置实时显示。</p>
 
-        <h2 id="review">评审、打回与升级</h2>
+        <h3 id="view">产物、会话与上下文</h3>
         <ul>
-            <li>评审角色（方案评审、代码审查）给出 <code>pass</code> 就进入下一节点；给出 <code>reject</code> 就把卡退回上一个产出节点，并把评审意见交给它重做。</li>
-            <li>同一个评审节点<b>第 1–3 次打回自动重做</b>。第 3 次时，如果项目配置了 <code>escalation_model</code>，会先把作者角色换成更强的模型。</li>
-            <li><b>第 4 次仍未通过</b>，转成 <code>need_confirm</code> 交给你裁决，问题里附有每一轮的打回要点：回 y 放行，回 n 再打回修一轮。</li>
-            <li>评审结论缺失或格式不对，一律按打回处理，不会直接合并。</li>
+            <li><b>产物目录</b>：<code>~/.req-board/artifacts/&lt;项目&gt;/req-&lt;编号&gt;/</code>，存放 <code>analysis.md</code>、<code>tech.md</code>、<code>self-test.md</code>、<code>code_review.md</code>、<code>accept.md</code> 等。它不在任何仓库里，清理分支也不会丢。卡片详情的「产物」行可以直接点开。</li>
+            <li><b>结果文件</b>：每个角色结束前写 <code>result.json</code>（<code>status</code> 为 done / blocked / need_confirm，外加摘要和问题），调度器据此推进卡片。agent 声明的遗留待办（<code>todos</code>）会显示在完成通知和卡片摘要里。</li>
+            <li><b>会话</b>：卡片下方列出这张卡的所有 agent 会话。点开一条，右栏实时显示消息、思考、工具调用和 diff。</li>
+            <li><b>插话 / 续跑</b>：在会话下方的聊天框发消息，调度器会恢复该会话并把你的话交给 agent。人工续跑一律走这个聊天框。</li>
+            <li><b>会话状态行</b>：聊天框上方的一行字说明会话是否活着。绿色在工作；琥珀色表示响应偏慢；红色表示疑似卡死，此时会出现「重启调度器」入口。</li>
+            <li><b>「上下文」页签</b>：卡片详情里与「概要」并列。按角色和轮次列出每次会话实际收到的提示词分层（平台规则、角色模板、项目约定、技能、本卡数据）、用的模型和运行体，以及和上一轮相比改了什么。想知道 agent 为什么这么做，先看这里。</li>
         </ul>
 
-        <h2 id="confirm">回答 agent 的提问（need_confirm）</h2>
-        <p>需要人拍板时，卡片停在 doing 并显示待确认的问题，常见三种：agent 主动提问（通常附带倾向建议）；评审第 4 次未通过；需要你确认分析推荐的流程。</p>
+        <h2 id="inbox">处理「待你处理」</h2>
+        <p><b>结论：页头「待你处理」有数字，就点开逐条处理；点一行会直接打开那张卡。</b></p>
+        <table>
+            <tr><th>你会看到</th><th>意思</th><th>怎么处理</th></tr>
+            <tr><td>有一个问题需要你确认</td><td>agent 主动提问，或需要你确认推荐流程</td><td>在卡片右栏回答，或点确认按钮（见下文）</td></tr>
+            <tr><td>评审多次打回，需要人工决定</td><td>同一评审节点第 4 次仍未通过</td><td>看每轮打回要点，放行或再打回一轮</td></tr>
+            <tr><td>收尾校验需要你裁决</td><td>agent 报完成，但收尾校验不过，且申请了豁免</td><td>「豁免完成」或「退回待开发」</td></tr>
+            <tr><td>合并受阻，请检查冲突或 Git 身份</td><td>合并冲突没能自动解决，或本机没有 git 提交身份</td><td>按提示修好后「重试合并」，或「人工接管」</td></tr>
+            <tr><td>等待外部角色提交产物</td><td>项目把某个角色交给外部 agent 负责</td><td>外部写好产物后，把卡指向下一节点并改回待开发</td></tr>
+            <tr><td>调度器异常</td><td>调度器没有正常上报心跳</td><td>见下文「页头角标与调度器健康」</td></tr>
+        </table>
+
+        <h3 id="confirm">回答 agent 的提问</h3>
+        <p>需要人拍板时，卡片停在 doing，顶部进度条当前段变橙，详情里显示待确认的问题（通常附带 agent 的倾向建议）。</p>
         <ul>
-            <li><b>在看板上回答</b>：打开卡片，在右栏聊天框输入答复，或点卡片上的确认按钮。你的答复会注入给 agent 并续跑原会话，同时记进卡片摘要，之后的会话也能看到，不会重复问。</li>
-            <li><b>在飞书里回答</b>（可选）：回复 <code>y 编号 [补充说明]</code> 同意，回复 <code>n 编号 原因</code> 否决。网页按钮与飞书 y/n 走同一套逻辑，效果相同。</li>
+            <li><b>在看板上回答</b>：打开卡片，在右栏聊天框输入答复，或点卡片上的确认按钮。答复会交给 agent 续跑，同时记进卡片摘要，之后的会话也看得到，不会重复问。</li>
+            <li><b>在飞书里回答</b>（可选）：回复 <code>y 编号 [补充说明]</code> 同意，<code>n 编号 原因</code> 否决。网页按钮与飞书 y/n 走同一套逻辑。</li>
         </ul>
         <h3 id="format">回复格式</h3>
         <table>
@@ -240,7 +320,7 @@
         </table>
         <ul>
             <li>只识别 <code>y / yes / 同意</code> 与 <code>n / no / 拒绝</code> 开头的回复，其它内容不触发流转。</li>
-            <li>编号要用<b>问题所属卡片</b>的编号。编号和问题对不上时，回复会被拒绝、不改动任何卡，按提示里给出的编号重发即可。</li>
+            <li>编号要用<b>问题所属卡片</b>的编号。编号和问题对不上时，回复会被拒绝、不改动任何卡，按提示里的编号重发即可。</li>
         </ul>
 
         <h3 id="flow">飞书回复与状态流转</h3>
@@ -270,10 +350,10 @@
                 <td>「退回待开发」：卡退回 open 重跑；原因以 <code>later</code> 开头则转暂缓</td>
             </tr>
         </table>
-        <div class="note">会让卡变成<b>暂缓</b>的回复只有三种：合并冲突时回 n、豁免时回 <code>n 编号 later …</code>、否决推荐流程。其余 n 都只是退回 open，稍后自动重跑。网页上还有「停止追问转暂缓」按钮，用于 agent 反复追问时直接停下。</div>
+        <div class="note">会让卡变成<b>暂缓</b>的回复只有三种：合并冲突时回 n、豁免时回 <code>n 编号 later …</code>、否决推荐流程。其余 n 都只是退回 open，稍后自动重跑。agent 反复追问时，网页上的「停止追问转暂缓」按钮可以直接让它停下。</div>
 
         <h3 id="feishu-chat">飞书聊天建卡与看板助手（可选）</h3>
-        <p>接了飞书机器人后，私聊机器人的普通文字由跨项目的<b>看板助手</b>回答：查项目、需求卡、服务状态，或确认项目后建卡。回答里的卡号和状态都来自服务端数据，查不到会直说。另有四项能力需要在「设置 → 飞书机器人 → 看板助手能力」里逐项开启，<b>四项默认关闭</b>：</p>
+        <p>接了飞书机器人后，私聊机器人的普通文字由跨项目的<b>看板助手</b>回答：查项目、需求卡、服务状态，或确认项目后建卡。回答里的卡号和状态都来自服务端数据，查不到会直说。另有四项能力需要在「设置 → 通知渠道 → 飞书机器人 → 看板助手能力」里逐项开启，<b>四项默认关闭</b>：</p>
         <ol>
             <li>代码只读分析：跨项目读文件、检索代码，结论附文件与行号；</li>
             <li>状态变更：仅支持把卡从暂缓改为待开发；</li>
@@ -289,86 +369,103 @@
             <tr><td>图片 / 文档链接</td><td>作为附件交给助手或建卡会话（单文件 ≤20MB，每轮最多 5 个）。</td></tr>
         </table>
         <p><b>匹配规则（整行全等）</b>：三条建卡指令去掉首尾空白和标点后必须与指令完全相同才生效，并且只在有进行中的建卡会话时生效；句子里顺带提到「确认建卡」不会触发。y/n 回复的优先级高于这些指令。</p>
+        <p>建卡会话和看板助手可以跑在 <code>kimi</code> 或 <code>opencode</code> 上，两者都经过运行体认证套件验证（见「运行体」）。</p>
 
-        <h2 id="create">建卡</h2>
-        <ol>
-            <li>左栏项目名右侧点 <code>+</code>，打开该项目的聊天建卡面板。</li>
-            <li>用对话描述需求，agent 整理出标题和 notes 草稿，你预览后确认建卡。可以附上本机 HTML 原型作参考（粘贴、拖拽或点「参考文件」）。</li>
-            <li>新卡默认<b>暂缓</b>。想让它开始开发，把状态改成<b>待开发</b>。</li>
-        </ol>
-        <p>写 notes 的要点：只写<b>要做什么</b>（目标、范围、验收标准、参考资料），不写讨论过程；排除项写成「不提供：X、Y」。notes 和摘要会进入每个角色的提示词。多仓库项目可写 <code>repos: 仓库A, 仓库B</code> 指定仓库，写 <code>timeout: 120</code> 调整单次运行时限（分钟，15–480）。</p>
-        <h3 id="assistant">需求助手</h3>
-        <p>每张卡的会话列表顶部都有「需求助手」入口，任何状态都能用。它是针对这张卡的独立对话：问进度、解释产物、修改 notes、把暂缓改成待开发等。默认只读，写操作只在你明确要求时进行。</p>
-
-        <h2 id="merge">worktree、分支与合并</h2>
+        <h2 id="review">评审与验收</h2>
+        <p><b>结论：评审不过会自动打回重做，第 4 次才交给你；验收在独立测试实例上跑真实链路；全部通过后自动合并。</b></p>
+        <ul>
+            <li>评审角色（方案评审、代码审查）给出 <code>pass</code> 就进入下一节点；给出 <code>reject</code> 就把卡退回上一个产出节点，并把评审意见交给它重做。</li>
+            <li>同一个评审节点<b>第 1–3 次打回自动重做</b>。第 3 次时，如果项目配置了 <code>escalation_model</code>，会先给作者角色换更强的模型。</li>
+            <li><b>第 4 次仍未通过</b>，转成 <code>need_confirm</code> 交给你裁决，问题里附有每一轮的打回要点：回 y 放行，回 n 再打回修一轮。</li>
+            <li>评审结论缺失或格式不对，一律按打回处理，不会直接合并。评审意见只存在评审记录和产物里，不进卡片 notes。</li>
+        </ul>
+        <h3 id="accept">验收</h3>
+        <p>验收角色（<code>accept</code>）按 notes 里的验收标准，在独立测试实例上跑真实链路，结果写进 <code>accept.md</code>。它可以跑测试和命令，但不能改源码或提交。涉及浏览器的改动需要真开浏览器验证；工具不可用时会写明「未覆盖项」，留给你人工验收。测试实例怎么起，由项目的 <code>.loop/project.json</code> 声明（见「项目配置指引」页签）。</p>
+        <h3 id="merge">worktree、分支与合并</h3>
         <ul>
             <li>卡片第一次被拉起时，调度器为项目的每个仓库从主干建一个 worktree（位于 <code>~/.req-board/worktrees/</code>），分支名 <code>f-YYYYMMDD-&lt;编号&gt;</code>。本卡所有角色都在这里工作，主工作区不受影响。</li>
-            <li>流程走到<b>收尾</b>时，调度器检查确实有代码变更（或对应产物），然后用 <code>--no-ff</code> 合并回主干并清理 worktree 与分支。</li>
-            <li>走 PR / CI 的仓库可在 <code>projects.json</code> 配 <code>branch_only: true</code>：只把分支推到远端，不在本地合并。<code>git_sync</code> 可配置开工前拉取、完成后推送等远端同步行为，不配置就完全不碰远端。</li>
-            <li>合并冲突时，先自动拉起冲突解决角色；解决不了就转人工（见上文「合并冲突」）。</li>
-            <li>项目配置了 <code>restart</code> 配方的服务，在卡片完成时由调度器自动重启并检查就绪。</li>
+            <li>流程走到<b>收尾</b>时，调度器先做<b>收尾校验</b>：开发节点必须有代码变更，其它节点必须有产物。通过后用 <code>--no-ff</code> 合并回主干，清理 worktree 与分支。</li>
+            <li>走 PR / CI 的仓库可在 <code>projects.json</code> 配 <code>branch_only: true</code>：只把分支推到远端，不在本地合并。<code>git_sync</code> 可配开工前拉取、完成后推送；不配置就完全不碰远端。纯本地仓库（没有远端）是正常形态。</li>
+            <li>合并冲突时，先自动拉起冲突解决角色；解决不了就进「待你处理」。本机没有 git 提交身份时不会误判成冲突，会提示你怎么配。</li>
+            <li>项目配置了 <code>restart</code> 配方的服务，卡片完成时由调度器自动重启并检查就绪。</li>
         </ul>
 
-        <h2 id="view">产物、会话与执行过程</h2>
+        <h2 id="config">设置</h2>
+        <p><b>结论：大多数设置在左栏底部齿轮打开的设置抽屉里；改 <code>flows.json</code>、<code>.env</code> 或 <code>prompts/</code> 默认文件需要重启看板和调度器，抽屉里的提示词和技能改动下一次拉起会话就生效。</b></p>
+        <p>设置抽屉有五个页签：全局信息、模型设置、通知渠道、提示词、技能库。</p>
+        <h3 id="settings-project">接入与管理项目（左栏）</h3>
+        <p>左栏顶部 <code>+</code> 接入新项目；项目目标会提供给需求分析角色。项目行悬停可编辑或移除接入；移除只是不再显示，历史卡片保留；还有进行中的卡时不能移除。</p>
+        <h3 id="settings-models">模型</h3>
         <ul>
-            <li><b>产物目录</b>：<code>~/.req-board/artifacts/&lt;项目&gt;/req-&lt;编号&gt;/</code>，存放 <code>analysis.md</code>、<code>tech.md</code>、<code>tech_review.md</code>、<code>self-test.md</code>、<code>code_review.md</code>、<code>accept.md</code> 等。它不在任何仓库里，清理分支也不会丢。卡片详情里的「产物」行可以直接点开查看。</li>
-            <li><b>结果文件</b>：每个角色结束前写 <code>result.json</code>（<code>status</code> 为 done / blocked / need_confirm，外加摘要和问题），调度器读到后据此推进卡片。agent 可声明需要人工处理的遗留待办（<code>todos</code>），会显示在完成通知和卡片摘要里。</li>
-            <li><b>会话</b>：卡片底部列出这张卡的所有 agent 会话（模型、上下文占比、分支）。点开一条会话，右栏实时显示执行过程：消息、思考、工具调用、diff。</li>
-            <li><b>续跑会话</b>：在会话下方的聊天框发消息，调度器会恢复该会话并把你的话交给 agent。人工续跑一律走这个聊天框。</li>
-            <li><b>状态行</b>：聊天框上方的状态行显示会话是否活着。绿色表示正在工作；琥珀表示响应偏慢；红色表示疑似卡死，此时会出现「重启调度器」入口。</li>
+            <li><b>模型设置页签</b>：编辑 kimi 运行体读取的 <code>config.toml</code>（位于 harness home，默认 <code>~/.kimi-code-deepseek</code>）：厂商、API Key、模型别名、默认模型。保存前会校验，失败不写入。</li>
+            <li><b>项目级调参</b>（项目信息条最右侧）：按「项目 × 角色」指定模型，下一张卡生效，无需重启。</li>
         </ul>
-
-        <h2 id="config">设置与模型</h2>
-        <h3>项目管理（左栏）</h3>
-        <p>左栏顶部 <code>+</code> 接入新项目：填项目名、仓库路径（可多个）、主干分支和一句话项目目标（会提供给需求分析角色）。项目行悬停可编辑或移除接入；移除只是不再显示，历史卡片保留。还有进行中的卡时不能移除。</p>
-        <h3>设置抽屉（左栏底部齿轮）</h3>
-        <ul>
-            <li><b>全局信息</b>：只读查看流程、角色、运行时环境与工具。</li>
-            <li><b>模型设置</b>：编辑 kimi 运行体读取的 <code>config.toml</code>（位于 harness home，默认 <code>~/.kimi-code-deepseek</code>）：厂商、API Key、模型别名、默认模型。保存前会校验，失败不写入。</li>
-            <li><b>通知渠道</b>：飞书机器人（App ID / App Secret、测试连通性、看板助手能力开关；改凭据后需重启调度器），以及 Webhook、Slack 出站通知（启用、发送测试、按事件订阅，保存即生效）。</li>
-        </ul>
-        <h3>项目级模型调参（项目信息条最右侧）</h3>
-        <p>按「项目 × 角色」指定模型，保存后从下一张卡开始生效，无需重启。角色模型按以下顺序取第一个有值的：</p>
+        <p>角色模型按以下顺序取第一个有值的：</p>
         <ol>
-            <li>项目级（<code>projects.json</code> 的 <code>models</code>，即这里的调参）；</li>
+            <li>项目级（<code>projects.json</code> 的 <code>models</code>，即上面的调参）；</li>
             <li>角色级（<code>flows.json</code> 的 <code>roles.&lt;角色&gt;.model</code>）；</li>
             <li>环境变量 <code>KIMI_MODEL_&lt;角色大写&gt;</code>；</li>
             <li>全局 <code>KIMI_MODEL</code>（默认 <code>deepseek/v4.1-flash</code>）。</li>
         </ol>
-        <h3>项目约定 <code>.loop/project.json</code></h3>
-        <p>每个接入的仓库可以在根目录放 <code>.loop/project.json</code>，声明测试命令、测试实例启停命令、给各角色看的指引文件和技能、高风险路径。这些内容会进入提示词的「项目约定」层，下次构建提示词时生效。写法与示例见「项目配置指引」页签。</p>
-        <h3>预算</h3>
-        <p>单次运行默认最长 240 分钟；工具调用步数上限默认 dev 1000、accept 与 code_review 500、merge_resolve 200、其余 400。到上限会被截停并给一轮收尾机会。可在 <code>projects.json</code> 的 <code>budgets</code> 按角色调整，如 <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>。</p>
-
-        <h2 id="runtimes">Agent 运行体</h2>
-        <p>每个角色都通过 ACP（Agent Client Protocol）驱动一个 agent 运行体：</p>
+        <h3 id="runtimes">运行体</h3>
+        <p>每个角色通过 ACP（Agent Client Protocol）驱动一个运行体子进程。每次工具调用都由 Loop Engine 按角色审批，只读角色改不了代码。</p>
         <table>
-            <tr><th>运行体</th><th>可用角色</th><th>说明</th></tr>
-            <tr><td><code>kimi</code>（默认）</td><td>全部</td><td>kimi-code CLI（<code>kimi acp</code>），模型在 harness home 的 <code>config.toml</code> 配置</td></tr>
-            <tr><td><code>claude-code</code></td><td>仅 dev</td><td>经 <code>@zed-industries/claude-code-acp</code>，使用你已登录的 <code>claude</code> CLI</td></tr>
-            <tr><td><code>codex</code></td><td>仅 dev</td><td>经 <code>@zed-industries/codex-acp</code>，使用你已登录的 <code>codex</code> CLI</td></tr>
+            <tr><th>运行体</th><th>流水线角色</th><th>建卡与助手</th><th>说明</th></tr>
+            <tr><td><code>kimi</code>（默认）</td><td>全部</td><td>支持</td><td>kimi-code CLI（<code>kimi acp</code>），模型在 harness home 的 <code>config.toml</code> 配置</td></tr>
+            <tr><td><code>opencode</code></td><td>全部</td><td>支持</td><td>OpenCode（<code>opencode acp</code>），可接任意 OpenAI 兼容接口（如 GLM、DeepSeek）：设 <code>LOOP_OPENAI_BASE_URL</code>、<code>LOOP_OPENAI_API_KEY</code>、<code>LOOP_OPENCODE_MODEL</code></td></tr>
+            <tr><td><code>claude-code</code></td><td>仅 dev</td><td>不支持</td><td>经 <code>@zed-industries/claude-code-acp</code>，使用已登录的 <code>claude</code> CLI</td></tr>
+            <tr><td><code>codex</code></td><td>仅 dev</td><td>不支持</td><td>经 <code>@zed-industries/codex-acp</code>，使用已登录的 <code>codex</code> CLI</td></tr>
         </table>
-        <p>选择顺序：<code>projects.json</code> 的 <code>&lt;项目&gt;.runtimes.&lt;角色&gt;</code> → <code>&lt;项目&gt;.runtime</code> → <code>flows.json</code> 的 <code>roles.&lt;角色&gt;.runtime</code> → 环境变量 <code>LOOP_AGENT_RUNTIME</code> → <code>kimi</code>。未知运行体会在启动前被拒绝。</p>
+        <p>选择顺序：<code>projects.json</code> 的 <code>&lt;项目&gt;.runtimes.&lt;角色&gt;</code> → <code>&lt;项目&gt;.runtime</code> → <code>flows.json</code> 的 <code>roles.&lt;角色&gt;.runtime</code> → 环境变量 <code>LOOP_AGENT_RUNTIME</code> → <code>kimi</code>。未知运行体在启动前就被拒绝。</p>
         <pre><code>{"my-project": {"paths": ["/path/to/repo"], "runtimes": {"dev": "claude-code"}}}</code></pre>
-        <div class="warn">Claude Code 和 Codex 目前只开放给开发角色：还无法证明只读角色的限制在这两个运行体上同样成立，所以分析、评审、验收、冲突解决和助手会话在启动前就会被拒绝。这些角色请保持 <code>kimi</code>。</div>
+        <div class="warn">只读角色、建卡会话和看板助手只开放给通过<b>运行体认证套件</b>（<code>tests/test_runtime_certification.py</code>）的运行体：套件让一个脚本化的假模型尝试写文件、跑命令、读项目外文件、开子 agent，每一次都必须被拦下。kimi 和 opencode 已通过；claude-code 和 codex 通过前只开放开发角色，其它角色会在启动前被拒绝。</div>
+        <h3 id="settings-prompts">提示词</h3>
+        <p>每次发给 agent 的提示词按层拼成：平台规则 → 角色模板 → 项目约定 → 条件说明 → 技能 → 本卡数据。「提示词」页签列出引擎自带的每一段文案：</p>
+        <ul>
+            <li>编辑后保存，写进不进 git 的 <code>prompts.local/</code>，下一次拉起会话就生效，无需重启。</li>
+            <li>「恢复默认」= 删除本机覆盖。升级后默认文本变了，该项标「默认已更新」，由你决定采用新默认还是保留覆盖。</li>
+            <li>调度器要解析的句子（如结果契约）被锁定，删改会被拒绝保存。项目约定部分只读，改它要去项目仓库。</li>
+            <li>「在注入预览里看效果」：选项目和角色（可再选一张卡），用和调度器同一个编译器预览完整提示词，不拉会话、不花 token。</li>
+        </ul>
+        <h3 id="settings-skills">技能库</h3>
+        <p>技能是可复用的操作步骤（比如「改 UI 前先截图」），按角色挂载。「技能库」页签可以新建、编辑、废弃技能，并查看近 30 天加载次数。</p>
+        <ul>
+            <li><b>激活方式</b>：始终（角色匹配就放进提示词）、自动（命中路径或关键词时放进）、按需（只列在目录里，agent 自己取）、手动（卡片 notes 点名才加载）。</li>
+            <li><b>角色 × 技能矩阵</b>：点格子循环切换某个角色对该技能的激活方式。</li>
+            <li>新建的技能是<b>草稿</b>，改成「启用」之前不会进入任何真实会话。本机修改写进 <code>prompts.local/skills/</code>，项目仓库自带的技能只读。</li>
+        </ul>
+        <h3 id="settings-notify">通知渠道</h3>
+        <ul>
+            <li><b>飞书机器人</b>（可选）：App ID / App Secret、测试连通性、看板助手能力开关。改凭据后需重启调度器。支持双向：推送通知，也能在飞书里回复 y/n、建卡。</li>
+            <li><b>Webhook / Slack</b>：只发出站通知。可启用、发送测试、按事件订阅（待确认、完成、失败、阻塞、合并冲突），保存即生效。</li>
+        </ul>
+        <h3 id="settings-look">外观</h3>
+        <p>「全局信息」页签底部的「外观」里可以打开<b>动态背景</b>。默认关闭（静态底纹，更省电），切换后刷新页面生效。明暗主题用页面上的明暗切换按钮，本指南与看板共用同一偏好。</p>
+        <h3 id="budget">时限与预算</h3>
+        <p>单次运行默认最长 240 分钟；工具调用步数上限默认 dev 1000、accept 与 code_review 500、merge_resolve 200、其余 400。到上限会被截停并给一轮收尾机会。可在 <code>projects.json</code> 的 <code>budgets</code> 按角色调整，如 <code>{"dev": {"max_steps": 800, "max_minutes": 120}}</code>。</p>
+        <h3>项目约定 <code>.loop/project.json</code></h3>
+        <p>每个接入的仓库可以在根目录放 <code>.loop/project.json</code>，声明测试命令、测试实例启停命令、给各角色看的指引和技能、高风险路径。写法与示例见「项目配置指引」页签。</p>
 
-        <h2 id="troubleshooting">排障</h2>
+        <h2 id="troubleshooting">常见问题</h2>
         <table>
             <tr><th>现象</th><th>处理</th></tr>
-            <tr><td>卡片一直不被捞起</td><td>确认状态是 open、建卡或编辑后已静置 1 分钟以上、卡片项目名与 <code>projects.json</code> 的键完全一致；页头健康角标应为非红色。</td></tr>
-            <tr><td>会话起不来 / 模型报错 / 401</td><td>检查 harness home 的 <code>config.toml</code> 里的 API Key 与模型名，并与 <code>KIMI_MODEL</code> 对齐；找不到 kimi 时设置 <code>KIMI_BIN</code>。</td></tr>
+            <tr><td>卡片一直不被捞起</td><td>确认状态是 open、编辑后已静置 1 分钟以上、卡片项目名与 <code>projects.json</code> 的键完全一致，并且页头角标是「运行中」。</td></tr>
+            <tr><td>聊天建卡起不来</td><td>按聊天区的提示去「设置 → 模型设置」检查运行体和模型；急用时展开「直接填表」先把卡建上。</td></tr>
+            <tr><td>会话起不来 / 模型报错 / 401</td><td>检查 harness home 的 <code>config.toml</code> 里的 API Key 与模型名，并与 <code>KIMI_MODEL</code> 对齐；找不到 kimi 时设置 <code>KIMI_BIN</code>。用 opencode 时检查 <code>LOOP_OPENAI_*</code> 变量。</td></tr>
             <tr><td>agent 报目录未被信任</td><td>用同一个 harness home 在该目录交互运行一次 kimi 并接受信任：<code>KIMI_CODE_HOME=~/.kimi-code-deepseek kimi</code>。</td></tr>
             <tr><td>worktree 创建失败</td><td>项目路径必须是有提交、有主干分支的 git 仓库；必要时在项目里配置 <code>base_branch</code>。</td></tr>
+            <tr><td>合并失败，提示没有 git 身份</td><td>在该仓库配置 <code>user.name</code> 与 <code>user.email</code> 后「重试合并」；<code>scripts/doctor.py</code> 会提前检查。</td></tr>
             <tr><td>浏览器验证提示没有工具</td><td>在 harness home 的 <code>mcp.json</code> 配置名为 <code>playwright</code> 的 MCP server（名字必须一致）。</td></tr>
-            <tr><td>改了 <code>flows.json</code> / <code>prompts/</code> 不生效</td><td>没有热加载：重启看板与调度器（前台直跑时 Ctrl-C 后重跑 <code>scripts/run_local.sh</code>）。</td></tr>
+            <tr><td>改了 <code>flows.json</code> / <code>prompts/</code> 不生效</td><td>这两处没有热加载：重启看板与调度器（前台直跑时 Ctrl-C 后重跑 <code>scripts/run_local.sh</code>）。设置抽屉里保存的提示词覆盖不需要重启。</td></tr>
             <tr><td>卡片转为暂缓、摘要里有失败原因</td><td>按原因修正后把卡改回 open；或在会话聊天框里给出指示续跑。</td></tr>
         </table>
-        <h3 id="dispatcher-state">调度器健康</h3>
-        <p>页头右上角的角标显示调度器状态。调度器每轮轮询（约 15 秒）都会更新心跳文件 <code>data/dispatcher_heartbeat.json</code>；超过 180 秒没有更新就显示「心跳过期」，通常意味着调度器挂住或没在运行。它手上的待办（待确认问题、重试计数、worktree 基线等）记录在 <code>data/dispatcher_state.json</code>。</p>
+        <h3 id="dispatcher-state">页头角标与调度器健康</h3>
+        <p>页头角标只回答一个问题：<b>引擎在不在跑</b>。绿色「运行中」= 调度器心跳正常；红色 = 心跳过期或调度器没有上报，卡片不会被领取。飞书是可选渠道：没配置或显式停用都是正常状态，只写在悬浮说明里；配置了但连不上才会在角标后面注明。</p>
+        <p>调度器每轮轮询（约 15 秒）更新心跳文件 <code>data/dispatcher_heartbeat.json</code>，超过 180 秒没有更新就视为「心跳过期」。它手上的待办（待确认问题、重试计数、worktree 基线等）记在 <code>data/dispatcher_state.json</code>。</p>
         <ul>
             <li>环境自检：<code>.venv/bin/python scripts/doctor.py</code>（退出码 0 且输出「硬失败 0 项」即通过）。</li>
             <li>重启调度器：<code>scripts/dispatcher-restart.sh &lt;pid&gt;</code>；重启前先确认没有正在跑的 agent。</li>
-            <li>详细说明见仓库 <code>docs/quickstart.md</code> 与 <code>docs/dispatcher.md</code>。</li>
+            <li>更多细节见仓库 <code>docs/quickstart.md</code> 与 <code>docs/dispatcher.md</code>。</li>
         </ul>
 
         <!-- builtin-agents-section -->
@@ -376,11 +473,11 @@
 
         <div class="tab-pane" id="pane-diagrams" role="tabpanel" aria-labelledby="tab-diagrams" hidden>
             <div class="sub-tabs">
-                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-architecture.html" aria-pressed="true">系统架构</button>
-                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">调度流程</button>
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-architecture.html" aria-pressed="true">应用架构</button>
+                <button class="sub-btn" type="button" data-src="/guide/diagrams/loop-dispatch-flow.html" aria-pressed="false">调用链路</button>
             </div>
-            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine 架构与调度流程图"></iframe>
-            <p class="subtitle" style="margin-top:10px;">图内可缩放、搜索、切换明暗主题。源文件在 <code>docs/diagrams/src/*.json</code>。</p>
+            <iframe class="diagram-frame" id="diagram-frame" title="Loop Engine 应用架构与调用链路图"></iframe>
+            <p class="subtitle" style="margin-top:10px;">应用架构：看板、调度器、ACP 客户端、运行体和各类存储如何连接。调用链路：一张卡从建卡到合并经过的每一步与每道闸门。图内可缩放、搜索、切换明暗；源文件在 <code>docs/diagrams/src/*.json</code>。</p>
         </div>
 
         <div class="tab-pane prompt-guide" id="pane-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
@@ -574,11 +671,11 @@ notes：
             <p><code>AGENTS.md</code> 是项目自己的规则文件（很多编码 agent 都认这个文件名）。仓库根放一份写全局约定；某个子目录有特殊约定时，在那个目录再放一份，<b>离改动越近的越优先</b>。</p>
             <ul>
                 <li><b>Loop Engine 只指路、不内联</b>：「项目约定」层提示 agent 先读仓库根的 <code>AGENTS.md</code>；这张卡涉及的子目录如果有自己的 <code>AGENTS.md</code>，卡片输入里会列出「改 <code>src/api/</code> 下的文件前先读 <code>src/api/AGENTS.md</code>」。涉及哪些目录，开发前看需求 notes、需求分析和技术方案里写到的路径，审查和验收时看真实 diff。</li>
-                <li><b>记录读的是哪一版</b>：每次拉起会话都会记下指向的每份 <code>AGENTS.md</code> 及其内容 hash（读的是 agent 实际所在的 worktree），事后能查清当时的规则版本。自带 <code>AGENTS.md</code> 加载能力的运行体（Codex）只记录、不重复指路。</li>
+                <li><b>记录读的是哪一版</b>：每次拉起会话都会记下指向的每份 <code>AGENTS.md</code> 及其内容指纹（读的是 agent 实际所在的 worktree），事后能查清当时的规则版本。自带 <code>AGENTS.md</code> 加载能力的运行体（Codex）只记录、不重复指路。</li>
                 <li><b>和 <code>.loop/guides</code> 的分工</b>：<code>AGENTS.md</code> 是人和任何 agent 都会读的短规则；<code>.loop/guides</code> 是 Loop Engine 按角色挑选、直接放进提示词的项目事实（每份 4000 字以内）。同一条事实只写一处。</li>
                 <li><b>谁说了算</b>：Loop Engine 平台约束（结果契约、写入边界、进程安全）&gt; 最近的子目录 <code>AGENTS.md</code> &gt; 仓库根 <code>AGENTS.md</code> &gt; 角色模板（仅限命令、端口、路径这类事实）。权限始终由工具白名单强制，任何一层的文字都改变不了。</li>
                 <li><b>保持精简</b>：<code>scripts/doctor.py</code> 会检查根和每个子目录 <code>AGENTS.md</code> 的长度，子目录文件大段照抄根文件时也会告警。</li>
-                <li><b>在哪看</b>：设置抽屉「提示词」页的项目约定部分（只读）和卡片详情的「上下文」页会列出这些文件（界面随后上线；接口 <code>GET /api/prompts</code> 已提供）。</li>
+                <li><b>在哪看</b>：设置抽屉「提示词」页的项目约定部分（只读）和卡片详情的「上下文」页会列出这些文件（接口 <code>GET /api/prompts</code> 返回同样的数据）。</li>
             </ul>
             <p>完整分层（从稳定到多变）：平台约束 → 角色模板 → 项目约定（清单、指引、<code>AGENTS.md</code> 指路）→ 条件说明（如仅推分支、自动重启）→ 常驻技能 → 技能目录 → 本卡数据（标题、notes、上游产物、返工问题清单，用 <code>&lt;card-data&gt;</code> 标出，是数据不是指令）→ 运行参数。前几层跨卡稳定，便于模型缓存。</p>
 
