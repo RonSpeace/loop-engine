@@ -5275,11 +5275,13 @@ void main() {
             const cell = document.querySelector(`#settingsSkillsBody [data-sk-arg="${CSS.escape(arg)}"]`);
             if (cell) cell.focus();
         }
+        // 新建草稿时预填一段正文骨架：服务端 lint 不接受空正文；建好后在详情里改写
+        const SK_BODY_STARTER = '什么时候用：\n- （触发这个技能的场景）\n\n怎么做：\n1. （步骤）\n\n注意：\n- （常见失误）\n';
         async function skCreate() {
             const name = (document.getElementById('skNewName') || {}).value || '';
             const desc = (document.getElementById('skNewDesc') || {}).value || '';
             const res = await fetch('/api/skills', {method: 'POST', headers: {'Content-Type': 'application/json'},
-                                                    body: JSON.stringify({name: name.trim(), description: desc.trim(), body: ''})});
+                                                    body: JSON.stringify({name: name.trim(), description: desc.trim(), body: SK_BODY_STARTER})});
             const r = await res.json().catch(() => ({}));
             if (!res.ok) {
                 skState.createErr = r.error || (r.errors || []).map(e => e.message).join('；') || ('HTTP ' + res.status);
