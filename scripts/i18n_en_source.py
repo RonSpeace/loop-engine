@@ -650,6 +650,7 @@ PHRASES = {
     "重启调度器后生效": "Takes effect after restarting the dispatcher",
     "上次退出异常终止（无正常关闭标记）": "Last exit was abnormal (no clean shutdown marker)",
     "仅本地仓库": "Local-only repository",
+    "结果总结": "Summary", "运行记录": "Run log",
     # ---- 设置：外观 ----
     "外观": "Appearance", "动态背景": "Animated background",
     "流体动画，较耗电；关闭时显示静态底纹。切换后刷新页面生效": "Fluid animation, uses more power; when off a static backdrop is shown. The page reloads to apply",

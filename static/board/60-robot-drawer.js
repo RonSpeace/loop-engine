@@ -258,6 +258,50 @@
         // 右栏：添加表单 / 需求详情视图 / 需求助手视图 / 会话执行过程视图 / 会话产物详情视图；
         // 当前可见列表为空（无需求/无项目）时列表列隐藏、右栏占满主内容区展示空态文案并居中；
         // 列表非空但选中项不存在或不在当前项目时回到空状态（显示选择提示）
+        // summary 字段是调度器追加写的运行日志（每条以 [auto] 开头，可多行）。展示时拆成两块：
+        //   结果总结：人工前言 + 各节点「完成总结」（按其后紧跟的「<节点> 完成」记录标注来自哪一步）；
+        //   运行记录：全部 [auto] 记录，每条只显示首行，默认折叠（无结果总结时展开）。
+        // 纯函数，供 node harness 单测。
+        function splitSummaryRecords(text) {
+            const preface = [], records = [];
+            for (const line of String(text || '').split('\n')) {
+                if (line.startsWith('[auto] ')) records.push([line.slice(7)]);
+                else if (records.length) records[records.length - 1].push(line);
+                else preface.push(line);
+            }
+            const results = [];
+            records.forEach((r, k) => {
+                if (!r[0].startsWith('完成总结：')) return;
+                const next = records.slice(k + 1).find(x => !x[0].startsWith('完成总结：'));
+                const m = next && next[0].match(/^(.+?) 完成[，；,]/);
+                results.push({stage: m ? m[1] : '', body: [r[0].slice(5)].concat(r.slice(1)).join('\n').trim()});
+            });
+            const log = records.map(r => {
+                const head = r[0];
+                const tone = /失败|冲突|未解决|未通过|超时|异常|⚠️/.test(head) ? 'bad'
+                    : /人工|用户/.test(head) ? 'human' : '';
+                return {text: head.startsWith('完成总结：') ? '提交完成总结' : head, tone};
+            });
+            return {preface: preface.join('\n').trim(), results, log};
+        }
+        function summarySectionsHtml(text) {
+            if (!text || !String(text).trim()) return '';
+            const s = splitSummaryRecords(text);
+            let h = '';
+            if (s.preface || s.results.length) {
+                h += '<div class="detail-section-label">结果总结</div><div class="detail-notes sum-results">';
+                if (s.preface) h += renderArtifactMd(s.preface);
+                h += s.results.map(r => `<div class="sum-result">${r.stage ? `<div class="sum-stage">${escapeHtml(r.stage)}</div>` : ''}${renderArtifactMd(r.body)}</div>`).join('');
+                h += '</div>';
+            }
+            if (s.log.length) {
+                const open = !(s.preface || s.results.length);
+                h += `<details class="sum-log"${open ? ' open' : ''}><summary>运行记录（${s.log.length}）</summary><ol>`
+                    + s.log.map(x => `<li${x.tone ? ` class="sum-${x.tone}"` : ''} data-i18n-skip>${escapeHtml(x.text)}</li>`).join('')
+                    + '</ol></details>';
+            }
+            return h;
+        }
         function renderDetailPane() {
             const pane = document.getElementById('detail');
             if (addMode) {
@@ -357,7 +401,7 @@
             // 需求详情/开发总结与产物详情、执行过程 message 事件共用增强 markdown 渲染
             // （先整体 escapeHtml 再语法转换，安全基线一致），列表/粗体/行内代码/表格不再以原文平铺
             const notes = i.notes ? renderArtifactMd(i.notes) : '暂无需求详情';
-            const summary = i.summary ? `<div class="detail-section-label">开发总结</div><div class="detail-notes">${renderArtifactMd(i.summary)}</div>` : '';
+            const summary = summarySectionsHtml(i.summary);
             // #342 评审记录区块：#346 起默认整体隐藏（内联 display:none），loadReviews 按结果决定是否显示；
             // 内容异步拉取避免详情主查询联 req_reviews 表；无记录不占位、失败时显示失败提示
             const reviews = `<div id="detailReviewsWrap" style="display:none"><div class="detail-section-label">评审记录</div><div id="detailReviews"></div></div>`;

@@ -2198,3 +2198,16 @@
     .interaction-status-tabs .btn { border-radius: 20px; padding: 0 14px; font-size: 13px; }
     .page-head .skin-toggle#interactionInboxButton { height: 40px; padding: 0 12px; }
 }
+
+/* 详情：结果总结 / 运行记录（summary 运行日志拆分展示） */
+.sum-result + .sum-result { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sum-stage { font-size: 11px; letter-spacing: .04em; color: var(--text-3); margin-bottom: 4px; }
+.sum-log { margin-top: 14px; font-size: 12.5px; color: var(--text-2); }
+.sum-log summary { cursor: pointer; color: var(--text-3); font-size: 12px; user-select: none; }
+.sum-log summary:hover { color: var(--text-2); }
+.sum-log ol { margin: 8px 0 0; padding: 0 0 0 14px; border-left: 1px solid var(--border); list-style: none; }
+.sum-log li { position: relative; padding: 3px 0 3px 10px; line-height: 1.55; }
+.sum-log li::before { content: ''; position: absolute; left: -18px; top: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.sum-log li.sum-bad { color: var(--err-fg); }
+.sum-log li.sum-bad::before { background: var(--danger); }
+.sum-log li.sum-human::before { background: var(--accent); }
