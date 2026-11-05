@@ -576,29 +576,29 @@ class BrowserLaunchRetryTest(unittest.TestCase):
     """CI 冷启动 Chrome 偶尔超时：超时重试一次；两次都超时才报工具错误。"""
 
     def _browser(self):
-        b = vg.Browser.__new__(vg.Browser)
-        b.ws = b.proc = None
-        b.profile = None
-        b.close = lambda: None
-        return b
+        br = vg.Browser.__new__(vg.Browser)
+        br.ws = br.proc = None
+        br.profile = None
+        br.close = lambda: None
+        return br
 
     def test_retries_once_after_start_timeout(self):
-        b = self._browser()
+        br = self._browser()
         calls = []
 
         def once(timeout):
             calls.append(timeout)
             if len(calls) == 1:
                 raise vg._StartTimeout()
-        b._launch_once = once
-        b._launch()
+        br._launch_once = once
+        br._launch()
         self.assertEqual(len(calls), 2)
 
     def test_two_timeouts_raise_tool_error(self):
-        b = self._browser()
+        br = self._browser()
 
         def once(timeout):
             raise vg._StartTimeout()
-        b._launch_once = once
+        br._launch_once = once
         with self.assertRaises(vg.ToolError):
-            b._launch()
+            br._launch()
