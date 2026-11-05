@@ -2182,7 +2182,7 @@
 .interaction-inbox-row .btn { padding: 3px 10px; font-size: 12px; }
 .interaction-toolbar { padding: 0 0 10px; gap: 6px; }
 .interaction-toolbar input { background: var(--glass-list-solid, transparent); border-color: var(--glass-border); border-radius: var(--radius-ctl, 8px); padding: 6px 12px; font-size: 13px; transition: border-color .15s; }
-.interaction-toolbar input:focus { border-color: var(--accent); outline: none; }
+.interaction-toolbar input:focus { border-color: var(--accent); }
 .interaction-toolbar .btn, .interaction-status-tabs .btn, .interaction-menu, .interaction-back {
     background: transparent; border-color: var(--glass-border); color: var(--text-2);
 }
