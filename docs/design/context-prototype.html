@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop Engine 上下文与技能原型</title>
+<style>
+:root{
+  --bg:#050d18;--glass:rgba(5,22,48,.72);--strong:rgba(4,18,40,.9);--surface:#041228;
+  --bd:rgba(141,203,255,.16);--bd2:rgba(141,203,255,.3);--text:#edf8ff;--t2:#b7cce0;--muted:#8da9c5;--t3:#718da7;
+  --accent:#3b82f6;--ok:#56e9b7;--warn:#fbbf24;--bad:#fca5a5;--info:#93c5fd;
+  --L0:#94a3b8;--L1:#3b82f6;--L2:#2dd4bf;--L3:#f59e0b;--L4:#a78bfa;--L5:#c4b5fd;--L6:#fb923c;--L7:#26d69a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+a{color:var(--info)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.page{max-width:1440px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.glass{border:1px solid var(--bd);border-radius:14px;background:var(--glass)}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 16px}
+.brand{font-size:15px;font-weight:600}
+.spacer{flex:1 1 auto}
+.note{color:var(--muted);font-size:12px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;border-radius:12px;background:var(--strong)}
+.seg button{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;padding:7px 14px;min-height:34px;border-radius:9px;cursor:pointer}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.btn{appearance:none;border:1px solid var(--bd2);background:var(--strong);color:var(--text);border-radius:10px;padding:0 14px;min-height:36px;font:inherit;cursor:pointer}
+.btn:hover{border-color:var(--accent)}.btn.primary{background:var(--accent);border-color:var(--accent)}
+.btn[disabled]{opacity:.5;cursor:default}.btn.on{border-color:var(--accent);background:rgba(59,130,246,.18)}
+.pick{appearance:none;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:10px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--strong)}
+.pick.on{border-color:var(--accent);background:rgba(59,130,246,.14)}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+.p-warn{background:rgba(245,158,11,.12);color:var(--warn);border-color:rgba(245,158,11,.32)}
+.p-ok{background:rgba(38,214,154,.14);color:var(--ok);border-color:rgba(38,214,154,.3)}
+.p-info{background:rgba(59,130,246,.15);color:var(--info);border-color:rgba(59,130,246,.3)}
+.p-bad{background:rgba(239,68,68,.15);color:var(--bad);border-color:rgba(239,68,68,.3)}
+.p-fence{background:rgba(251,146,60,.12);color:#fdba74;border-color:rgba(251,146,60,.3)}
+.p-violet{background:rgba(167,139,250,.15);color:#c4b5fd;border-color:rgba(167,139,250,.35)}
+.p-teal{background:rgba(45,212,191,.12);color:#5eead4;border-color:rgba(45,212,191,.32)}
+.p-gray{background:rgba(148,163,184,.13);color:#94a3b8}
+.banner{padding:10px 12px;border-radius:10px;border:1px solid}
+.b-warn{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.32);color:var(--warn)}
+.b-ok{background:rgba(38,214,154,.10);border-color:rgba(38,214,154,.3);color:var(--ok)}
+.b-info{background:rgba(59,130,246,.10);border-color:rgba(59,130,246,.3);color:var(--info)}
+.b-violet{background:rgba(167,139,250,.10);border-color:rgba(167,139,250,.3);color:#c4b5fd}
+.b-bad{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.3);color:var(--bad)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.col{display:flex;flex-direction:column;gap:8px}
+.split{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.side{flex:1 1 260px;max-width:320px;min-width:0;padding:12px}
+.main{flex:999 1 560px;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.card{padding:12px;border-radius:12px;border:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
+.card.on{border-color:var(--accent);background:rgba(59,130,246,.12)}
+.stats{display:flex;flex-wrap:wrap;gap:20px;padding:12px 14px;border-radius:12px;background:var(--strong);border:1px solid var(--bd)}
+.stats .k{color:var(--muted);font-size:11px}
+.bar{display:flex;height:22px;border-radius:8px;overflow:hidden;border:1px solid var(--bd)}
+.bar div{height:100%;border-right:1px solid rgba(5,13,24,.6)}
+.bar div.cut{border-right:3px solid var(--text)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+.group{border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.ghead{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--strong)}
+.item{border-top:1px solid rgba(141,203,255,.1)}
+.item>button{appearance:none;width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px}
+.item>button:hover{background:rgba(59,130,246,.06)}
+.src{color:var(--muted);font-size:12px;flex:1 1 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.num{color:var(--t2);width:64px;text-align:right}
+.detail{padding:0 12px 12px 34px;display:flex;flex-direction:column;gap:8px}
+pre{margin:0;padding:10px 12px;border-radius:10px;background:var(--surface);color:var(--t2);font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+.field{border:1px solid var(--bd2);background:var(--surface);color:var(--text);border-radius:10px;padding:8px 10px;font:inherit;min-height:36px;width:100%}
+textarea.field{resize:vertical}
+label.lbl{display:flex;flex-direction:column;gap:6px}
+label.lbl>span{color:var(--muted);font-size:12px}
+.chip{appearance:none;font:inherit;cursor:pointer;padding:6px 12px;min-height:34px;border-radius:999px;border:1px solid var(--bd2);background:transparent;color:var(--muted)}
+.chip.on{border-color:var(--accent);background:rgba(59,130,246,.15);color:#bfdbfe}
+.act{appearance:none;font:inherit;color:inherit;cursor:pointer;text-align:left;padding:8px 12px;border-radius:10px;border:1px solid var(--bd);background:transparent}
+.tablebox{overflow-x:auto;border:1px solid var(--bd);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:8px}
+thead tr{background:var(--strong)}
+th{color:var(--muted);font-weight:500}
+tbody tr{border-top:1px solid rgba(141,203,255,.1)}
+.cell{appearance:none;font:inherit;cursor:pointer;width:76px;min-height:36px;border-radius:8px;border:1px dashed rgba(141,203,255,.2);background:transparent;color:var(--t3)}
+.cell.p-info{background:rgba(59,130,246,.15);color:var(--info);border-color:rgba(59,130,246,.35)}.cell.p-violet{background:rgba(167,139,250,.15);color:#c4b5fd;border-color:rgba(167,139,250,.35)}.cell.p-teal{background:rgba(45,212,191,.12);color:#5eead4;border-color:rgba(45,212,191,.32)}.cell.p-warn{background:rgba(245,158,11,.12);color:var(--warn);border-color:rgba(245,158,11,.32)}
+.empty{padding:28px;border-radius:12px;border:1px dashed var(--bd2);color:var(--t2);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.vh{position:absolute;left:-9999px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--t2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="glass top">
+    <span class="brand">Loop Engine</span>
+    <span class="note">上下文与技能 · 交互原型（示例数据）</span>
+    <span class="spacer"></span>
+    <nav class="seg" aria-label="原型画面" id="screens"></nav>
+  </header>
+  <div id="app"></div>
+</div>
+<script>
+(function () {
+'use strict';
+var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+var fmt = function (n) { return Number(n).toLocaleString('zh-CN'); };
+
+var LAYERS = {
+  L0: { name: '平台策略', nature: '指令 · 稳定前缀' },
+  L1: { name: '角色', nature: '指令 · 稳定前缀' },
+  L2: { name: '项目约定', nature: '指令 · 稳定前缀' },
+  L3: { name: '条件片段', nature: '指令 · 稳定前缀' },
+  L4: { name: '常驻技能', nature: '指令 · 稳定前缀' },
+  L5: { name: '技能目录', nature: '索引 · 稳定前缀末尾' },
+  L6: { name: '任务数据', nature: '数据 · 围栏内，不是指令' },
+  L7: { name: '运行参数', nature: '指令 · 调度器生成' }
+};
+var ORDER = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
+var ROLES = [['analysis', '需求分析'], ['tech', '技术方案'], ['tech_review', '方案评审'], ['dev', '需求开发'], ['code_review', '代码审查'], ['accept', '测试验证'], ['merge_resolve', '冲突解决']];
+var roleName = function (id) { for (var i = 0; i < ROLES.length; i++) if (ROLES[i][0] === id) return ROLES[i][1]; return id; };
+
+var state = {
+  screen: (location.hash || '#context').slice(1),
+  ctx: { node: 'dev', run: 1842, open: 'rework', diff: true, full: false },
+  sk: { sel: 'browser-verify', view: 'list', scope: 'all', q: '', act: {}, roles: {}, matrix: {
+    'browser-verify': { dev: 'auto', accept: 'auto' }, 'render-assert': { dev: 'always' },
+    'visual-diff': { dev: 'on_demand', accept: 'on_demand' }, 'db-migration': { dev: 'manual' },
+    'api-contract': { tech: 'on_demand', code_review: 'on_demand' }, 'release-notes': { accept: 'manual' } } },
+  pv: { project: 'req-board', role: 'dev', card: '128', draft: false },
+  st: 'prompts',
+  pp: { sel: 'common', diff: false, three: false, draft: {}, saved: {}, status: {} }
+};
+if (state.screen === 'skills-matrix') { state.screen = 'skills'; state.st = 'skills'; state.sk.view = 'matrix'; }
+else if (state.screen === 'skills') { state.st = 'skills'; }
+else if (state.screen === 'prompts') { state.screen = 'skills'; state.st = 'prompts'; }
+else if (state.screen === 'prompts-dev') { state.screen = 'skills'; state.st = 'prompts'; state.pp.sel = 'role-dev'; state.pp.three = true; }
+if (['context', 'skills', 'preview'].indexOf(state.screen) < 0) state.screen = 'context';
+
+/* ---------------- ① 卡片上下文：示例数据 ---------------- */
+var I = {
+  tail: { id: 'tail', layer: 'L0', name: '通用约束 COMMON_TAIL', src: '引擎内置', why: '所有角色', chars: 1830, ver: 'c2f1a9', ex: '工作约束：\n1. 时间：本次运行有每轮时限（具体分钟数见文末卡片输入）……\n3. 结束前把结果 JSON 写入 result.json ……' },
+  redline: { id: 'redline', layer: 'L0', name: '进程安全红线（固定部分）', src: '引擎内置', why: '所有角色', chars: 260, ver: '41be07', ex: '禁止 kill / killpg / pkill 自己的 ACP 驱动进程及其进程组……' },
+  cmds: { id: 'cmds', layer: 'L2', name: '常用命令与测试实例', src: '.loop/project.json', why: '项目清单', chars: 420, ver: 'a9a99e3 · 0d77c1', ex: '项目约定（req-board，来源 .loop/project.json；与通用说明不一致时以此为准）：\n- 常用命令：全量测试 `.venv/bin/python -m pytest -q tests` ……' },
+  inst: { id: 'guide-instance', layer: 'L2', name: '项目指引：instance', src: '.loop/guides/instance.md', why: 'roles 未限定 = 全部角色', chars: 1581, ver: 'e5b1b71 · 5d1c0a', ex: '【项目指引：instance】\n测试实例只用 scripts/test_instance.sh 起停……' },
+  arch: { id: 'guide-arch', layer: 'L2', name: '项目指引：architecture', src: '.loop/guides/architecture.md', why: 'roles 含 dev', chars: 4000, ver: 'e5b1b71 · 9c2e44', ex: '【项目指引：architecture】\n……（第 4000 字处截断）\n全文 4812 字，见 .loop/guides/architecture.md', trunc: true },
+  restart: { id: 'frag-restart', layer: 'L3', name: '自动重启说明', src: 'prompts/fragments/auto-restart.md', why: 'when: project.restart 已配置', chars: 120, ver: '3f9a10', ex: '本项目服务由调度器自动重启（done 时按 restart 配方执行并做就绪校验）；todos 不要声明重启类待办。' },
+  render: { id: 'skill-render', layer: 'L4', name: 'render-assert', src: '.loop/skills/render-assert/SKILL.md', why: 'always · 项目清单点名 dev', chars: 314, ver: '77ab21', ex: '呈现层断言：读计算样式数值或几何，至少一条可判定断言……' },
+  catalog: { id: 'catalog', layer: 'L5', name: '可用技能 2 项（未内联）', src: '技能目录', why: 'on_demand：需要时自行读取', chars: 180, ver: '—', ex: '- visual-diff：参考稿与实现截图逐像素对比（prompts/skills/visual-diff/SKILL.md）\n- db-migration：只用 ALTER TABLE 的迁移写法（.loop/skills/db-migration/SKILL.md）' },
+  devRole: { id: 'role-dev', layer: 'L1', name: '需求开发 · 角色模板固定段', src: 'prompts/dev.md', why: '当前节点角色 = 需求开发', chars: 2410, ver: '7d03be', ex: '你是 {project} 项目的开发 agent。\n输入 = 阶段输入 + 评审反馈……' },
+  crRole: { id: 'role-cr', layer: 'L1', name: '代码审查 · 角色模板固定段', src: 'prompts/code_review.md', why: '当前节点角色 = 代码审查', chars: 2980, ver: '5a7e19', ex: '你是代码审查 agent，只读……' },
+  anaRole: { id: 'role-ana', layer: 'L1', name: '需求分析 · 角色模板固定段', src: 'prompts/analysis.md', why: '前置槽位角色', chars: 2260, ver: 'b81c3d', ex: '你是需求分析 agent，只读……' },
+  notes: { id: 'notes', layer: 'L6', name: '需求标题与详情 notes', src: '看板 #128', why: '本卡', chars: 640, ver: 'rev 4', ex: '<card-data source="看板 #128 notes">\n设置抽屉「飞书机器人」改为「通知渠道」，新增 Webhook 与 Slack……\n</card-data>', fence: true },
+  upstream: { id: 'upstream', layer: 'L6', name: '上游产物指路', src: 'analysis.md', why: '前置节点产物', chars: 160, ver: '—', ex: '阶段输入：需求分析 → ~/.req-board/artifacts/req-board/req-128/analysis.md' },
+  browser: { id: 'skill-browser', layer: 'L6', name: 'browser-verify', src: 'prompts/skills/browser-verify/SKILL.md', why: 'auto：技术方案列出 static/board/50-settings-drawer.js，命中 static/**', chars: 2109, ver: '1e8d52', ex: '浏览器验证（自测报告必须单列「浏览器验证」小节）……', auto: true },
+  rework: { id: 'rework', layer: 'L6', name: '返工输入：未关闭问题 2 项', src: 'code_review.md · result.json issues', why: '代码审查第 1 轮打回', chars: 380, ver: 'run 1823', ex: '<card-data source="代码审查 运行 1823">\nCR-1 [必须] notifiers.json 写入后权限不是 0600（notifiers/config.py:48）\nCR-2 [必须] Slack 渠道失败时未进看板时间线（dispatcher_modules/notify.py:112）\n</card-data>\n逐条修复后在 result.json 的 issues_resolved 里写处理结果。', fence: true },
+  diffPtr: { id: 'diff', layer: 'L6', name: '开发分支 diff 指路', src: 'diff.patch', why: '审查对象', chars: 140, ver: '—', ex: '待审 diff：~/.req-board/artifacts/req-board/req-128/diff.patch' },
+  contract: { id: 'contract', layer: 'L7', name: '前置契约：推荐流程与仓库', src: 'PRE_SLOT_CONTRACT', why: '卡片处于前置阶段', chars: 520, ver: '2d40aa', ex: '输出 suggested_flow（quick / standard / heavy）与 repos……' }
+};
+var params = function (steps) { return { id: 'params', layer: 'L7', name: '分支、路径、时限与步数', src: '调度器', why: '本次运行', chars: 300, ver: '—', ex: '分支：f-20261105-128\n产物目录：~/.req-board/artifacts/req-board/req-128/\n运行参数：本次运行 240 分钟时限；步数上限 ' + steps + ' 步' }; };
+var mark = function (arr, ch) { return arr.map(function (x) { var y = {}; for (var k in x) y[k] = x[k]; y.diff = (ch && ch[x.id]) || 'same'; return y; }); };
+var TRUNC = { tone: 'warn', text: '截断 1 项：项目指引 architecture 超出 4000 字，截掉 812 字（全文路径已写进正文）' };
+var RUNS = {
+  analysis: [{ id: 1790, label: '第 1 轮', kind: '新会话', result: '通过 · 推荐 标准流程', tone: 'ok', model: 'deepseek-v4', modelSrc: '角色级（flows.json）', runtime: 'kimi', cache: '未命中', cacheOk: false, cacheNote: '本项目首次运行 analysis', hash: '3b0e…71c2', prev: null,
+    items: mark([I.tail, I.redline, I.anaRole, I.cmds, I.inst, I.restart, I.catalog, I.notes, I.contract, params(400)]), warnings: [] }],
+  dev: [
+    { id: 1842, label: '第 2 轮', kind: '续跑', result: '进行中 · 已补发 3 项上下文变更', tone: 'run', model: 'deepseek-v4', modelSrc: '项目级（projects.json）', runtime: 'kimi', cache: '命中', cacheOk: true, cacheNote: '稳定前缀与第 1 轮一致', hash: 'c41e…09ab', prev: 1801,
+      items: mark([I.tail, I.redline, I.devRole, I.cmds, I.inst, I.arch, I.restart, I.render, I.catalog, I.notes, I.upstream, I.rework, I.browser, params(1000)], { 'guide-instance': 'changed', notes: 'changed', rework: 'added' }),
+      warnings: [TRUNC, { tone: 'ok', text: '续跑补发：与第 1 轮相比 3 项有变化，已在续跑消息前附「上下文更新」并要求回读' }, { tone: 'violet', text: '运行中加载：visual-diff（按需技能，14:32 被读取）' }] },
+    { id: 1801, label: '第 1 轮', kind: '新会话', result: '完成 · 提交 2 个 commit', tone: 'ok', model: 'deepseek-v4', modelSrc: '项目级（projects.json）', runtime: 'kimi', cache: '未命中', cacheOk: false, cacheNote: 'dev 角色模板 7d03be 首次使用', hash: '8f22…5d10', prev: null,
+      items: mark([I.tail, I.redline, I.devRole, I.cmds, I.inst, I.arch, I.restart, I.render, I.catalog, I.notes, I.upstream, I.browser, params(1000)]), warnings: [TRUNC] }
+  ],
+  code_review: [{ id: 1823, label: '第 1 轮', kind: '新会话', result: '打回 · 2 个必须修改的问题', tone: 'bad', model: 'deepseek-v4-pro', modelSrc: '角色级（flows.json）', runtime: 'kimi', cache: '命中', cacheOk: true, cacheNote: '与上一张卡的代码审查前缀一致', hash: '61d7…aa30', prev: null,
+    items: mark([I.tail, I.redline, I.crRole, I.cmds, I.inst, I.arch, I.restart, I.render, I.catalog, I.notes, I.diffPtr, I.browser, params(500)]), warnings: [TRUNC] }],
+  accept: []
+};
+var NODES = [
+  { key: 'analysis', name: '需求分析', sub: '前置 · 1 轮 · 通过', color: 'var(--ok)' },
+  { key: 'dev', name: '需求开发', sub: '2 轮 · 进行中', color: 'var(--info)' },
+  { key: 'code_review', name: '代码审查', sub: '1 轮 · 打回', color: 'var(--bad)' },
+  { key: 'accept', name: '测试验证', sub: '未开始', color: 'var(--t3)' }
+];
+
+function stackBar(groups, total) {
+  var last = -1;
+  groups.forEach(function (g, i) { if (g.tag !== 'L6' && g.tag !== 'L7') last = i; });
+  return '<div class="bar" role="img" aria-label="各层字数占比">' + groups.map(function (g, i) {
+    return '<div class="' + (i === last ? 'cut' : '') + '" style="width:' + (g.sum / total * 100).toFixed(2) + '%;background:var(--' + g.tag + ')" title="' + esc(g.tag + ' ' + LAYERS[g.tag].name + '：' + fmt(g.sum) + ' 字') + '"></div>';
+  }).join('') + '</div>';
+}
+function groupItems(items) {
+  var out = [];
+  ORDER.forEach(function (k) {
+    var its = items.filter(function (x) { return x.layer === k; });
+    if (its.length) out.push({ tag: k, items: its, sum: its.reduce(function (a, x) { return a + x.chars; }, 0) });
+  });
+  return out;
+}
+
+function renderContext() {
+  var c = state.ctx;
+  var runs = RUNS[c.node] || [];
+  var run = runs.filter(function (r) { return r.id === c.run; })[0] || runs[0];
+  var h = '<div class="split">';
+  h += '<aside class="glass side col"><div class="note">进行中 · 3</div>' +
+    '<div class="card on"><div class="row"><span class="mono" style="color:var(--info)">#128</span><span class="pill p-info">需求开发 · 第 2 轮</span></div><b>设置抽屉新增「通知渠道」tab</b><div class="row"><span class="pill p-warn">截断 1</span><span class="pill p-ok">续跑补发 3 项</span></div></div>' +
+    '<div class="card"><div class="row"><span class="mono" style="color:var(--muted)">#131</span><span class="pill p-bad">停线：缺必需技能</span></div><b>数据库迁移：agent_runs 加三列</b><a href="#preview" data-act="goPreview131">在注入预览里看原因 →</a></div>' +
+    '<div class="card"><div class="row"><span class="mono" style="color:var(--muted)">#134</span><span class="pill p-info">方案评审</span></div><b>英文提示词集</b></div></aside>';
+  h += '<main class="glass main">';
+  h += '<div class="row" style="gap:10px"><span class="mono" style="color:var(--info);font-size:14px">#128</span><h1 style="margin:0;font-size:18px">设置抽屉新增「通知渠道」tab</h1><span class="pill p-info">进行中</span><span class="pill p-violet">标准</span></div>';
+  h += '<div class="seg" aria-label="详情分页"><button>概要</button><button>产物</button><button>会话</button><button class="on">上下文 <span class="pill" style="background:var(--warn);color:#1a1205">1</span></button></div>';
+  h += '<section class="col"><div class="note">流程节点（点选查看每一轮收到的上下文）</div><div class="row">' + NODES.map(function (n) {
+    return '<button class="pick' + (n.key === c.node ? ' on' : '') + '" data-act="node" data-arg="' + n.key + '" style="min-width:120px"><b>' + esc(n.name) + '</b><br><span style="font-size:11px;color:' + n.color + '">' + esc(n.sub) + '</span></button>';
+  }).join('') + '</div></section>';
+  if (!run) {
+    h += '<div class="empty"><div>「测试验证」尚未运行。</div><button class="btn" data-act="screen" data-arg="preview">在注入预览里看它将收到什么 →</button></div></main></div>';
+    return h;
+  }
+  var toneColor = { ok: 'var(--ok)', run: 'var(--info)', bad: 'var(--bad)' };
+  h += '<div class="row">' + runs.map(function (r) {
+    return '<button class="pick' + (r.id === run.id ? ' on' : '') + '" data-act="run" data-arg="' + r.id + '"><span class="mono" style="color:var(--muted)">运行 ' + r.id + '</span> · ' + esc(r.label) + ' · ' + esc(r.kind) + '<br><span style="font-size:11px;color:' + toneColor[r.tone] + '">' + esc(r.result) + '</span></button>';
+  }).join('') + '</div>';
+  var total = run.items.reduce(function (a, x) { return a + x.chars; }, 0);
+  h += '<div class="stats"><div><div class="k">模型</div><div class="mono">' + esc(run.model) + '</div><div class="k">来源：' + esc(run.modelSrc) + '</div></div>' +
+    '<div><div class="k">运行体</div><div class="mono">' + esc(run.runtime) + '</div></div>' +
+    '<div><div class="k">提示词总量</div><div class="mono">' + fmt(total) + ' 字</div></div>' +
+    '<div><div class="k">前缀缓存</div><div style="color:' + (run.cacheOk ? 'var(--ok)' : 'var(--warn)') + '">' + esc(run.cache) + '</div><div class="k">' + esc(run.cacheNote) + '</div></div>' +
+    '<div><div class="k">清单 hash</div><div class="mono">' + esc(run.hash) + '</div></div></div>';
+  var groups = groupItems(run.items);
+  h += '<div class="col"><div class="row" style="justify-content:space-between"><b>分层构成</b><span class="note">白色竖线左侧 = 稳定前缀（可缓存）· 右侧 = 本卡专有</span></div>' + stackBar(groups, total) +
+    '<div class="legend">' + groups.map(function (g) { return '<span><i class="dot" style="background:var(--' + g.tag + ')"></i>' + g.tag + ' ' + esc(LAYERS[g.tag].name) + ' <span class="mono" style="color:var(--t3)">' + fmt(g.sum) + '</span></span>'; }).join('') + '</div></div>';
+  h += run.warnings.map(function (w) { return '<div class="banner b-' + w.tone + '">' + esc(w.text) + '</div>'; }).join('');
+  var diffOn = c.diff && !!run.prev;
+  var changed = run.items.filter(function (x) { return x.diff === 'changed'; }).length;
+  var added = run.items.filter(function (x) { return x.diff === 'added'; }).length;
+  h += '<div class="row"><button class="btn' + (diffOn ? ' on' : '') + '" data-act="diff"' + (run.prev ? '' : ' disabled') + '>' + (run.prev ? (diffOn ? '对比上一轮：开' : '对比上一轮：关') : '首轮，无可对比') + '</button>' +
+    '<button class="btn" data-act="full">' + (c.full ? '返回分层列表' : '查看实际发出的全文') + '</button>' +
+    (diffOn ? '<span class="note">与运行 ' + run.prev + ' 相比：变更 ' + changed + ' 项，新增 ' + added + ' 项，其余不变</span>' : '') + '</div>';
+  if (c.full) {
+    h += '<div class="col" style="padding:14px;border-radius:12px;border:1px solid var(--bd);background:var(--surface)"><div class="note">实际发出的提示词（prompt.txt），按层着色标注；示例节选</div>' +
+      run.items.map(function (x) { return '<div class="col" style="gap:4px"><span class="pill" style="align-self:flex-start;color:#050d18;background:var(--' + x.layer + ')">' + x.layer + ' · ' + esc(x.name) + '</span><pre style="padding:0;background:none;color:#d6e6f5">' + esc(x.ex) + '</pre></div>'; }).join('') + '</div>';
+  } else {
+    h += '<div class="col" style="gap:10px">' + groups.map(function (g) {
+      return '<div class="group"><div class="ghead"><i class="dot" style="background:var(--' + g.tag + ')"></i><span class="mono" style="color:var(--muted)">' + g.tag + '</span><b>' + esc(LAYERS[g.tag].name) + '</b><span class="note" style="color:var(--t3)">' + esc(LAYERS[g.tag].nature) + '</span><span class="spacer"></span><span class="mono" style="color:var(--muted)">' + fmt(g.sum) + ' 字</span></div>' +
+        g.items.map(function (x) {
+          var open = c.open === x.id;
+          var b = '';
+          if (x.trunc) b += '<span class="pill p-warn">截断 812 字</span>';
+          if (x.fence) b += '<span class="pill p-fence">数据围栏</span>';
+          if (x.auto) b += '<span class="pill p-violet">自动触发</span>';
+          if (diffOn && x.diff !== 'same') b += '<span class="pill ' + (x.diff === 'added' ? 'p-ok' : 'p-info') + '" style="font-weight:600">' + (x.diff === 'added' ? '新增' : '变更') + '</span>';
+          return '<div class="item"><button data-act="open" data-arg="' + x.id + '" aria-expanded="' + open + '"><span style="color:var(--t3);width:12px">' + (open ? '▾' : '▸') + '</span><b style="min-width:180px">' + esc(x.name) + '</b><span class="mono src">' + esc(x.src) + '</span>' + b + '<span class="mono num">' + fmt(x.chars) + '</span></button>' +
+            (open ? '<div class="detail"><div class="row" style="gap:16px;font-size:12px;color:var(--t2)"><span>入选理由：' + esc(x.why) + '</span><span>版本：<span class="mono">' + esc(x.ver) + '</span></span></div><pre>' + esc(x.ex) + '</pre></div>' : '') + '</div>';
+        }).join('') + '</div>';
+    }).join('') + '</div>';
+  }
+  return h + '</main></div>';
+}
+
+/* ---------------- ② 技能库 ---------------- */
+var ACT = {
+  always: { label: '始终', hint: '角色匹配就内联正文', cls: 'p-info' },
+  auto: { label: '自动', hint: '命中路径或关键词时内联', cls: 'p-violet' },
+  on_demand: { label: '按需', hint: '只进目录，agent 自取', cls: 'p-teal' },
+  manual: { label: '手动', hint: '卡片 notes 点名才加载', cls: 'p-warn' }
+};
+var SKILLS = [
+  { name: 'browser-verify', scope: 'global', path: 'prompts/skills/browser-verify/SKILL.md', act: 'auto', roles: ['dev', 'accept'], status: '启用', uses: 41, chars: 2109, passWith: '78%', passWithout: '64%', statNote: '样本 41 次，仅作参考信号', paths: 'static/**, templates/**', keywords: '页面, 样式, 浏览器', required: false,
+    desc: '改了 HTML/JS/CSS 或页面行为时使用：浏览器级验证的做法，以及自测报告「浏览器验证」小节的写法。',
+    body: '浏览器验证（自测报告必须单列「浏览器验证」小节）：\n浏览器端改动必须单列「浏览器验证」小节：单元测试、curl 端到端、JS 语法检查都不构成浏览器级验证……',
+    lint: [['ok', '名称合法'], ['ok', '描述 52 字'], ['ok', '正文 2109 字，未超 4000'], ['ok', '不含单个项目的专有内容']], alerts: [] },
+  { name: 'render-assert', scope: 'project', path: '.loop/skills/render-assert/SKILL.md', act: 'always', roles: ['dev'], status: '启用', uses: 63, chars: 314, passWith: '81%', passWithout: '—', statNote: '始终加载，没有对照组', paths: '', keywords: '', required: false,
+    desc: '呈现层改动的可判定断言：读计算样式数值或几何，不写「显示正确」。', body: '呈现层断言：读计算样式数值或几何，至少一条可判定断言……',
+    lint: [['ok', '名称合法'], ['ok', '描述 31 字'], ['ok', '正文 314 字']], alerts: [['info', '项目 req-board 的同名技能，覆盖全局版本']] },
+  { name: 'visual-diff', scope: 'global', path: 'prompts/skills/visual-diff/SKILL.md', act: 'on_demand', roles: ['dev', 'accept'], status: '启用', uses: 6, chars: 3420, passWith: '—', passWithout: '—', statNote: '样本 6 次，不足 20 次不给结论', paths: '', keywords: '', required: false,
+    desc: '视觉还原类需求：参考稿与实现截图逐像素对比，输出差异区域与数值。', body: '视觉对比：\n1. 用项目约定的测试实例截图……',
+    lint: [['ok', '名称合法'], ['ok', '描述 33 字'], ['ok', '附属文件 references/thresholds.md 存在']], alerts: [] },
+  { name: 'db-migration', scope: 'project', path: '.loop/skills/db-migration/SKILL.md', act: 'manual', roles: ['dev'], status: '启用', uses: 2, chars: 0, passWith: '—', passWithout: '—', statNote: '样本 2 次', paths: '', keywords: '', required: true,
+    desc: '只用 ALTER TABLE 的迁移写法，存量行保持 NULL，不删表重建。', body: '（主干上找不到此文件）',
+    lint: [['bad', '文件缺失：主干 .loop/skills/db-migration/SKILL.md 不存在'], ['ok', '名称合法']], alerts: [['bad', '必需技能缺失：卡片 #131 已停线等待处理。补上文件或取消「必需」后，把卡片改回待开发即可继续。']] },
+  { name: 'api-contract', scope: 'global', path: 'prompts/skills/api-contract/SKILL.md', act: 'on_demand', roles: ['tech', 'code_review'], status: '草稿', uses: 0, chars: 1880, passWith: '—', passWithout: '—', statNote: '草稿只在注入预览里可试用，不进真实会话', paths: '', keywords: '', required: false,
+    desc: '改 REST 接口时核对 docs/api.md 与实际路由、字段是否一致。', body: '接口契约核对：\n1. 列出本次改动涉及的路由……',
+    lint: [['ok', '名称合法'], ['warn', '描述里出现「docs/api.md」，全局技能应避免写单个项目的路径']], alerts: [['info', '草稿：发布前不会进入任何真实会话']] },
+  { name: 'release-notes', scope: 'global', path: 'prompts/skills/release-notes/SKILL.md', act: 'manual', roles: ['accept'], status: '废弃', uses: 1, chars: 900, passWith: '—', passWithout: '—', statNote: '已废弃', paths: '', keywords: '', required: false,
+    desc: '旧版发布说明写法。', body: '……', lint: [['warn', '已废弃但仍被 1 个项目清单点名']], alerts: [['warn', '已废弃：仍被项目 demo-shop 的 skills.accept 引用']] }
+];
+var STATUS_CLS = { '启用': 'p-ok', '草稿': 'p-violet', '废弃': 'p-gray' };
+
+function renderSkills() {
+  var s = state.sk;
+  var all = SKILLS.map(function (k) { var y = {}; for (var p in k) y[p] = k[p]; y.act = s.act[k.name] || k.act; y.roles = s.roles[k.name] || k.roles; return y; });
+  var q = s.q.trim();
+  var vis = all.filter(function (k) { return (s.scope === 'all' || k.scope === s.scope) && (!q || k.name.indexOf(q) >= 0 || k.desc.indexOf(q) >= 0); });
+  var h = '<section class="glass main">';
+  h += settingsHead('skills');
+  h += '<div class="row" style="gap:10px"><label style="flex:1 1 220px;max-width:320px"><span class="vh">搜索技能</span><input id="skq" class="field" placeholder="搜索名称或描述" value="' + esc(s.q) + '"></label>' +
+    '<div class="seg">' + [['all', '全部'], ['global', '全局'], ['project', '项目']].map(function (x) { return '<button class="' + (s.scope === x[0] ? 'on' : '') + '" data-act="scope" data-arg="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+    '<span class="spacer"></span><div class="seg">' + [['list', '列表'], ['matrix', '角色 × 技能矩阵']].map(function (x) { return '<button class="' + (s.view === x[0] ? 'on' : '') + '" data-act="view" data-arg="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+    '<button class="btn primary">新建技能</button></div>';
+  if (s.view === 'matrix') {
+    var CYCLE = ['', 'always', 'auto', 'on_demand', 'manual'];
+    h += '<div class="note">点格子循环切换：— → 始终 → 自动 → 按需 → 手动。改动写回技能的 roles / activation，保存前可在注入预览里看效果。</div>';
+    h += '<div class="tablebox"><table><thead><tr><th scope="col" style="text-align:left;padding-left:12px">技能</th>' + ROLES.map(function (r) { return '<th scope="col">' + r[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      vis.map(function (k) {
+        return '<tr><th scope="row" style="text-align:left;padding-left:12px;color:var(--text)"><span class="mono">' + esc(k.name) + '</span> <span class="note">' + (k.scope === 'global' ? '全局' : '项目') + '</span></th>' + ROLES.map(function (r) {
+          var v = (s.matrix[k.name] || {})[r[0]] || '';
+          var a = ACT[v];
+          return '<td style="text-align:center"><button class="cell' + (a ? ' pill ' + a.cls : '') + '" style="' + (a ? 'border-style:solid;border-radius:8px;font-size:13px' : '') + '" data-act="cell" data-arg="' + k.name + '|' + r[0] + '" aria-label="' + esc(k.name + ' 在 ' + r[1] + '：' + (a ? a.label : '未挂载') + '，点击切换') + '">' + (a ? a.label : '—') + '</button></td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+    void CYCLE;
+    return h + '</section>';
+  }
+  h += '<div class="split" style="gap:14px"><div class="col" style="flex:1 1 340px;max-width:460px;min-width:0;gap:6px">' + vis.map(function (k) {
+    var bad = k.lint.some(function (l) { return l[0] === 'bad'; });
+    var warn = k.lint.some(function (l) { return l[0] === 'warn'; });
+    return '<button class="pick' + (k.name === s.sel ? ' on' : '') + '" style="background:' + (k.name === s.sel ? '' : 'transparent') + '" data-act="sel" data-arg="' + k.name + '">' +
+      '<span class="row"><b class="mono">' + esc(k.name) + '</b><span class="pill ' + ACT[k.act].cls + '">' + ACT[k.act].label + '</span><span class="note">' + (k.scope === 'global' ? '全局' : '项目 req-board') + '</span><span class="spacer"></span><span class="pill ' + STATUS_CLS[k.status] + '">' + k.status + '</span></span>' +
+      '<span style="display:block;color:var(--t2);font-size:12px;margin:6px 0">' + esc(k.desc) + '</span>' +
+      '<span class="row note" style="gap:12px;font-size:11px"><span>' + k.roles.map(roleName).join('、') + '</span><span>近 30 天加载 ' + k.uses + ' 次</span><span style="color:' + (bad ? 'var(--bad)' : warn ? 'var(--warn)' : 'var(--ok)') + '">' + (bad ? '校验失败' : warn ? '有提醒' : '校验通过') + '</span></span></button>';
+  }).join('') + (vis.length ? '' : '<div class="note">没有匹配的技能</div>') + '</div>';
+  var k = all.filter(function (x) { return x.name === s.sel; })[0] || all[0];
+  h += '<div class="col" style="flex:999 1 480px;min-width:0;gap:14px;padding:16px;border-radius:12px;border:1px solid var(--bd);background:var(--strong)">';
+  h += '<div class="row" style="gap:10px"><b class="mono" style="font-size:16px">' + esc(k.name) + '</b><span class="note">' + esc(k.path) + '</span><span class="spacer"></span><button class="btn" data-act="screen" data-arg="preview">在注入预览里试用</button><button class="btn primary">保存</button></div>';
+  h += k.alerts.map(function (a) { return '<div class="banner b-' + a[0] + '">' + esc(a[1]) + '</div>'; }).join('');
+  h += '<label class="lbl"><span>描述（会进技能目录，agent 靠它判断要不要用；≤ 200 字）</span><textarea class="field" rows="2">' + esc(k.desc) + '</textarea></label>';
+  h += '<div class="col" style="gap:6px"><span class="note">激活方式</span><div class="row">' + Object.keys(ACT).map(function (id) {
+    var on = id === k.act;
+    return '<button class="act' + (on ? ' pill ' + ACT[id].cls : '') + '" style="' + (on ? 'font-size:13px;border-radius:10px;padding:8px 12px' : '') + '" data-act="setAct" data-arg="' + k.name + '|' + id + '"><b>' + ACT[id].label + '</b><br><span class="note" style="font-size:11px">' + ACT[id].hint + '</span></button>';
+  }).join('') + '</div></div>';
+  h += '<div class="col" style="gap:6px"><span class="note">挂载角色（展示名取自 flows.json）</span><div class="row">' + ROLES.map(function (r) {
+    var on = k.roles.indexOf(r[0]) >= 0;
+    return '<button class="chip' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-act="role" data-arg="' + k.name + '|' + r[0] + '">' + (on ? '✓ ' : '+ ') + r[1] + '</button>';
+  }).join('') + '</div></div>';
+  if (k.act === 'auto') h += '<div class="row" style="gap:12px;align-items:stretch"><label class="lbl" style="flex:1 1 240px"><span>命中路径（glob，任一命中即触发）</span><input class="field mono" value="' + esc(k.paths) + '"></label><label class="lbl" style="flex:1 1 240px"><span>命中关键词（标题或 notes）</span><input class="field" value="' + esc(k.keywords) + '"></label></div>';
+  h += '<label class="row"><input type="checkbox"' + (k.required ? ' checked' : '') + ' style="width:18px;height:18px"><span>必需：文件缺失或解析失败时停线，不拉会话</span></label>';
+  h += '<label class="lbl"><span>正文（SKILL.md，frontmatter 由上面的表单生成）</span><textarea class="field mono" rows="7" style="line-height:1.6">' + esc(k.body) + '</textarea></label>';
+  h += '<div class="row" style="gap:12px;align-items:flex-start"><div class="col" style="flex:1 1 260px;gap:6px"><b>校验</b>' + k.lint.map(function (l) {
+    return '<span style="color:' + (l[0] === 'ok' ? 'var(--ok)' : l[0] === 'bad' ? 'var(--bad)' : 'var(--warn)') + '">' + (l[0] === 'ok' ? '✓' : l[0] === 'bad' ? '✕' : '!') + ' ' + esc(l[1]) + '</span>';
+  }).join('') + '</div><div class="col" style="flex:1 1 260px;gap:6px"><b>使用情况（近 30 天）</b><span>加载 <span class="mono">' + k.uses + '</span> 次 · 平均 <span class="mono">' + fmt(k.chars) + '</span> 字</span><span>加载后节点通过率 <span class="mono">' + k.passWith + '</span> · 未加载 <span class="mono">' + k.passWithout + '</span></span><span class="note">' + esc(k.statNote) + '</span></div></div>';
+  return h + '</div></div></section>';
+}
+
+/* ---------------- ③ 注入预览 ---------------- */
+var PROLE = { analysis: 2260, tech: 1890, tech_review: 2560, dev: 2410, code_review: 2980, accept: 3150, merge_resolve: 1900 };
+function buildPreview() {
+  var s = state.pv, r = s.role, rb = s.project === 'req-board';
+  var out = [], banners = [];
+  var add = function (layer, name, src, why, chars, badges) { out.push({ layer: layer, name: name, src: src, why: why, chars: chars, badges: badges || [] }); };
+  add('L0', '通用约束 COMMON_TAIL', '引擎内置', '所有角色', 1830);
+  add('L0', '进程安全红线（固定部分）', '引擎内置', '所有角色', 260);
+  add('L1', roleName(r) + ' · 角色模板固定段', 'prompts/' + r + '.md', '所选角色', PROLE[r]);
+  if (rb) {
+    add('L2', '常用命令与测试实例', '.loop/project.json', '项目清单', 420);
+    add('L2', '项目指引：instance', '.loop/guides/instance.md', 'roles 未限定 = 全部角色', 1581);
+    if (['dev', 'tech', 'code_review'].indexOf(r) >= 0) add('L2', '项目指引：architecture', '.loop/guides/architecture.md', 'roles 含 ' + roleName(r), 4000, [['p-warn', '截断 812 字']]);
+    if (r === 'dev') add('L3', '自动重启说明', 'prompts/fragments/auto-restart.md', 'when: project.restart 已配置', 120);
+    if (r === 'dev') add('L4', 'render-assert', '.loop/skills/render-assert/SKILL.md', 'always · 项目清单点名 dev', 314);
+  } else {
+    add('L2', '未提供 .loop/project.json 的兜底说明', '引擎内置', '项目没有清单', 380);
+    if (r === 'dev' || r === 'accept') add('L3', '仅推分支说明', 'prompts/fragments/branch-only.md', 'when: project.branch_only', 160);
+    banners.push(['info', 'demo-shop 没有 .loop/project.json：测试命令、测试实例都显示为「未配置」。到项目设置里生成一份清单模板？']);
+  }
+  var cat = [];
+  if (r === 'dev' || r === 'accept') cat.push('visual-diff');
+  if (s.draft && (r === 'tech' || r === 'code_review')) cat.push('api-contract');
+  if (cat.length) add('L5', '技能目录：' + cat.join('、'), '技能目录', 'on_demand：需要时自行读取', 90 * cat.length, cat.indexOf('api-contract') >= 0 ? [['p-violet', '草稿 · 仅预览']] : []);
+  if (s.draft && !(r === 'tech' || r === 'code_review')) banners.push(['info', '草稿技能 api-contract 只挂在 技术方案、代码审查；当前角色不会收到它。']);
+  if (s.card === '128') {
+    add('L6', '需求标题与详情 notes', '看板 #128', '所选卡片', 640, [['p-fence', '数据围栏']]);
+    if (['dev', 'code_review', 'accept'].indexOf(r) >= 0) add('L6', 'browser-verify', 'prompts/skills/browser-verify/SKILL.md', 'auto：命中 static/**', 2109, [['p-violet', '自动触发']]);
+  } else if (s.card === '131') {
+    add('L6', '需求标题与详情 notes', '看板 #131', '所选卡片', 520, [['p-fence', '数据围栏']]);
+    if (r === 'dev') {
+      add('L6', 'db-migration', '.loop/skills/db-migration/SKILL.md', 'manual：notes 写了 skills: db-migration', 0, [['p-bad', '缺失 · 必需']]);
+      banners.push(['bad', '这张卡现在拉起会被拦下：必需技能 db-migration 在主干找不到。到技能库补上文件，或取消「必需」。']);
+    }
+  }
+  add('L7', '分支、路径、时限与步数', '调度器', '运行时生成', 300);
+  if (r === 'analysis') add('L7', '前置契约：推荐流程与仓库', 'PRE_SLOT_CONTRACT', '前置槽位', 520);
+  return { out: out, banners: banners };
+}
+function renderPreview() {
+  var s = state.pv, b = buildPreview();
+  var total = b.out.reduce(function (a, x) { return a + x.chars; }, 0) || 1;
+  var stable = b.out.filter(function (x) { return x.layer !== 'L6' && x.layer !== 'L7'; }).reduce(function (a, x) { return a + x.chars; }, 0);
+  var hsh = 0, key = s.project + s.role + (s.draft ? 'd' : '');
+  for (var i = 0; i < key.length; i++) hsh = (hsh * 31 + key.charCodeAt(i)) >>> 0;
+  var h = '<section class="glass main">';
+  h += '<div class="col" style="gap:4px"><h1 style="margin:0;font-size:18px">这个角色在这个项目会收到什么</h1><div class="note">与调度器用同一个编译器，不拉会话、不花 token。选一张卡可以连任务数据层一起看。</div></div>';
+  h += '<div class="row" style="gap:16px;align-items:flex-end">' +
+    '<div class="col" style="gap:6px"><span class="note">项目</span><div class="seg">' + ['req-board', 'demo-shop'].map(function (p) { return '<button class="mono' + (s.project === p ? ' on' : '') + '" data-act="pvProject" data-arg="' + p + '">' + p + '</button>'; }).join('') + '</div></div>' +
+    '<label class="lbl"><span>角色</span><select id="pvRole" class="field">' + ROLES.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === s.role ? ' selected' : '') + '>' + r[1] + '</option>'; }).join('') + '</select></label>' +
+    '<div class="col" style="gap:6px"><span class="note">卡片（可选）</span><div class="seg">' + [['', '不指定'], ['128', '#128 通知渠道'], ['131', '#131 数据库迁移']].map(function (c) { return '<button class="' + (s.card === c[0] ? 'on' : '') + '" data-act="pvCard" data-arg="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div></div>' +
+    '<label class="row" style="min-height:36px"><input id="pvDraft" type="checkbox"' + (s.draft ? ' checked' : '') + ' style="width:18px;height:18px"><span>试用草稿技能 <span class="mono">api-contract</span></span></label></div>';
+  h += b.banners.map(function (x) { return '<div class="banner b-' + x[0] + '">' + esc(x[1]) + '</div>'; }).join('');
+  h += '<div class="stats"><div><div class="k">总量</div><div class="mono" style="font-size:16px">' + fmt(total) + ' 字</div></div><div><div class="k">稳定前缀（可缓存）</div><div class="mono" style="font-size:16px">' + fmt(stable) + ' 字</div></div><div><div class="k">本卡专有</div><div class="mono" style="font-size:16px">' + fmt(total - stable) + ' 字</div></div><div><div class="k">前缀 hash</div><div class="mono" style="font-size:16px">' + hsh.toString(16).slice(0, 4) + '…' + (hsh % 65536).toString(16) + '</div></div></div>';
+  h += stackBar(groupItems(b.out), total);
+  h += '<div class="group">' + b.out.map(function (x, i) {
+    return '<div class="row" style="gap:10px;padding:10px 12px;' + (i ? 'border-top:1px solid rgba(141,203,255,.1)' : '') + '"><i class="dot" style="background:var(--' + x.layer + ')"></i><span class="mono" style="color:var(--muted);width:24px">' + x.layer + '</span><b style="min-width:200px">' + esc(x.name) + '</b><span class="mono src" style="flex:1 1 220px">' + esc(x.src) + '</span><span style="color:var(--t2);font-size:12px;flex:1 1 220px;min-width:0">' + esc(x.why) + '</span><span style="width:120px;display:flex;justify-content:flex-end;gap:4px">' + x.badges.map(function (bd) { return '<span class="pill ' + bd[0] + '">' + esc(bd[1]) + '</span>'; }).join('') + '</span><span class="mono num">' + fmt(x.chars) + '</span></div>';
+  }).join('') + '</div>';
+  h += '<div class="row"><button class="btn">复制清单 JSON</button><button class="btn">下载完整提示词</button><span class="note">示例数据；正式版由 GET /api/context/preview?project=&amp;role=&amp;req= 返回</span></div>';
+  return h + '</section>';
+}
+
+/* ---------------- ② 设置 · 提示词 tab ---------------- */
+function settingsHead(tab) {
+  var t = function (id, label) { return '<button class="' + (tab === id ? 'on' : '') + '" data-act="settab" data-arg="' + id + '">' + label + '</button>'; };
+  return '<div class="col" style="gap:2px"><b style="font-size:16px">设置</b><span class="note">页头齿轮打开的「设置」抽屉；前三个 tab 是现有的，「提示词」「技能库」是新增的</span></div>' +
+    '<div class="seg" aria-label="设置分页"><button>全局信息</button><button>模型设置</button><button>通知渠道</button>' + t('prompts', '提示词 · 新') + t('skills', '技能库 · 新') + '</div>';
+}
+var L = function () { return Array.prototype.slice.call(arguments).join('\n'); };
+var COMMON_DEFAULT = L(
+  '工作约束：',
+  '1. 时间：本次运行有每轮时限（具体分钟数见文末卡片输入），超时强制终止；优先最小可用实现，用 `date` 关注实际耗时。',
+  '2. 步数：每轮工具调用有步数上限（具体步数见文末卡片输入；调度器强制，达到即取消本轮、只给一次限步收尾）。',
+  '4. 结束回合前必须过一遍检查单：没有后台任务；关键验证已在前台跑完；result.json 已写入并回读可解析。',
+  '',
+  '输出风格：',
+  '- 对话回复：结论先行，一般两三百字内；禁止开场白、客套与复述需求；多用 `-` 列表。',
+  '- result.json summary：结论 + 验证命令与关键结果，`- ` 列表逐行，一般不超过 10 行。');
+var COMMON_OVERRIDE = COMMON_DEFAULT.replace('一般两三百字内；禁止开场白、客套与复述需求；多用 `-` 列表。', '一般一百五十字内；先给结论再给依据；禁止开场白、客套与复述需求。');
+var DEV_OLD = L('你是 {project} 项目的开发 agent。', '输入 = 阶段输入 + 评审反馈（具体内容见文末卡片输入），按输入方案（如有）实施，不做方案设计。', '1. 改动严格限于本需求与输入方案划定的范围……', '4. 完成总结必须输出「上线操作」行……');
+var DEV_NEW = DEV_OLD + '\n9. 返工时逐条处理「未关闭问题」，在 result.json 的 issues_resolved 里写处理结果。';
+var DEV_MINE = DEV_OLD.replace('1. 改动严格限于本需求与输入方案划定的范围……', '1. 改动严格限于本需求与输入方案划定的范围；遇到需要改公共组件时先报 need_confirm。');
+var P_GROUPS = [
+  { name: '平台策略', layer: 'L0', lock: true, items: [
+    { id: 'common', name: '通用约束', file: 'system/common.md', used: '全部 7 个角色 · 所有流程节点', status: 'override', base: 'c2f1a9',
+      ph: [], text: COMMON_DEFAULT, mine: COMMON_OVERRIDE,
+      locked: ['3. 结束前把结果 JSON 写入 result.json：{"status": "done|blocked|need_confirm", "summary", "question"}', '   可选 "todos"、"waive_gate"、"options"（仅 need_confirm）；字符串内换行写 \\n'] },
+    { id: 'readonly', name: '只读工具说明', file: 'system/readonly-tools.md', used: '只读角色：需求分析、方案评审、代码审查', status: 'default', base: '9e01c4', ph: [],
+      text: L('只读数据工具（工具调用，不经 Bash）：`list_dir`、`read_file`、`db_query`（只读查库）、`git_log`、`search_text`、`git_status`、`git_diff`……', '产物目录内的文件写入（含 result.json）一律用 Write/fs 工具。'), locked: [] },
+    { id: 'redline', name: '进程安全红线', file: 'system/kill-redline.md', used: '全部角色 · 新会话与续跑都追加', status: 'default', base: '41be07', ph: [['pid', true]],
+      text: L('禁止 kill/killpg/pkill 该 PID、其进程组及任何 kimi 进程（含 kimi-chat-acp）。', '清理残留进程必须使用项目约定的实例脚本或精确 PID，禁止 pkill -f kimi 类路径猜测。'),
+      locked: ['【进程安全红线】你的 ACP 驱动进程 PID={pid}（进程组）。'] }
+  ] },
+  { name: '角色', layer: 'L1', items: ROLES.map(function (r) {
+    var base = { id: 'role-' + r[0], name: r[1], file: r[0] + '.md', status: 'default', base: '—', ph: [['project', false], ['card_inputs', true]], locked: [],
+      used: '流程节点：' + ({ analysis: '前置槽位', tech: '复杂 #0', tech_review: '复杂 #1', dev: '快速 #0 · 标准 #0 · 复杂 #2', code_review: '标准 #1 · 复杂 #3', accept: '标准 #2 · 复杂 #4', merge_resolve: '合并冲突时' }[r[0]]),
+      text: '你是 {project} 项目的' + r[1] + ' agent。\n（prompts/' + r[0] + '.md 正文，示例略）\n{card_inputs}' };
+    if (r[0] === 'dev') { base.status = 'stale'; base.base = '7d03be'; base.newBase = '8a1f40'; base.text = DEV_NEW + '\n{card_inputs}'; base.mine = DEV_MINE + '\n{card_inputs}'; base.old = DEV_OLD + '\n{card_inputs}'; }
+    return base;
+  }) },
+  { name: '条件片段', layer: 'L3', items: [
+    { id: 'frag-branch', name: '仅推分支说明', file: 'fragments/branch-only.md', when: 'projects.json 里该项目 branch_only = true', used: '角色：需求开发、测试验证', status: 'default', base: '5b2e90', ph: [], locked: [],
+      text: '本项目为仅推分支项目（branch_only）：done 时调度器自动把有改动仓库的 f-分支 push 到 origin，由外部 CI/CD 或人工在发版时合并到主干；你只在本分支提交，不要 push、不要合并任何分支。' },
+    { id: 'frag-restart', name: '自动重启说明', file: 'fragments/auto-restart.md', when: 'projects.json 里该项目配置了 restart', used: '角色：需求开发', status: 'override', base: '3f9a10', ph: [], locked: [],
+      text: '本项目服务由调度器自动重启（done 时按 projects.json 的 restart 配方执行并做就绪校验，无需人工重启）；todos 只声明纯人工事项（如浏览器验收），不要声明重启服务/进程类待办。',
+      mine: '本项目服务由调度器自动重启，无需人工重启；todos 只写浏览器验收这类纯人工事项。' },
+    { id: 'frag-merge', name: '冲突解决上下文', file: 'fragments/merge-resolve.md', when: '合并冲突，由冲突解决角色接手', used: '角色：冲突解决', status: 'default', base: '0c77ad', ph: [['conflict_repos', true], ['merge_targets', true]], locked: [],
+      text: '冲突仓库（需解决）：{conflict_repos}\n各仓库主干引用：\n{merge_targets}\n解决方向：在对应仓库 worktree 内把主干合并进当前 dev 分支 → 解冲突 → 提交。' }
+  ] },
+  { name: '运行时文案', layer: 'L7', items: [
+    { id: 'pre', name: '前置契约', file: 'system/pre-contract.md', used: '前置槽位（需求分析）', status: 'default', base: '2d40aa', ph: [['result_json', true], ['default_flow', true], ['flow_catalog', true]],
+      text: '前置环节输出契约（由调度器强制）：\n结束前把结果 JSON 写入 {result_json}，除 status/summary 外必须带：\n可选流程：\n{flow_catalog}\n产出缺失或非法时按默认流程 {default_flow} 兜底。',
+      locked: ['- "suggested_flow": 推荐的后置流程 id', '- "repos": 本需求实际涉及改动的仓库目录名数组'] },
+    { id: 'resume', name: '续跑提醒', file: 'system/resume.md', used: '所有续跑会话', status: 'default', base: 'aa31e2', ph: [], locked: [],
+      text: '输出风格（新规范，本 resume 会话的系统提示词可能未含）：回复结论先行、能短则短（单条一般两三百字内），禁止开场白/客套/复述需求；result.json summary 要点化、一般不超过 10 行。' },
+    { id: 'wrapup', name: '步数用完的收尾指令', file: 'system/wrapup.md', used: '步数预算截停时', status: 'default', base: '6e0b13', ph: [['detail', true], ['wrapup_steps', true]], locked: [],
+      text: '已达到本轮工具步数上限（{detail}），会话被调度器截停。立即停止新的探索与修改，用不超过 {wrapup_steps} 步把当前进度写入 result.json：已完成且验证通过 → done；否则 blocked，summary 写清已完成部分、未完成部分与下一步。' },
+    { id: 'retry', name: '失败重试原因', file: 'system/retry-hint.md', used: '进程级失败后的重试', status: 'default', base: 'd914f0', ph: [['last_failure', true]], locked: [],
+      text: '上次尝试失败原因：{last_failure}。先针对该原因自查（运行超时/进程异常先确认改动完好、无残留 result.json）再继续。' }
+  ] },
+  { name: '项目约定（只读）', layer: 'L2', ro: true, items: [
+    { id: 'proj-manifest', name: 'req-board · 常用命令与测试实例', file: 'req-board/.loop/project.json', used: '全部角色', status: 'ro', ro: true, ph: [], locked: [],
+      text: '{\n  "commands": {"test": ".venv/bin/python -m pytest -q tests", ...},\n  "instance": {"start": "scripts/test_instance.sh start {port} --seed", ...},\n  "guides": {"instance": ".loop/guides/instance.md", "service": ".loop/guides/service.md"}\n}' },
+    { id: 'proj-instance', name: 'req-board · 指引 instance', file: 'req-board/.loop/guides/instance.md', used: '全部角色', status: 'ro', ro: true, ph: [], locked: [],
+      text: '测试实例只用 scripts/test_instance.sh 起停……（示例）' }
+  ] }
+];
+var P_ITEMS = {};
+P_GROUPS.forEach(function (g) { g.items.forEach(function (it) { it.layer = g.layer; it.group = g; P_ITEMS[it.id] = it; }); });
+var P_STATUS = { 'default': ['默认', 'p-gray'], override: ['已覆盖', 'p-info'], stale: ['默认已更新', 'p-warn'], ro: ['只读', 'p-gray'] };
+function pStatus(it) { return state.pp.status[it.id] || it.status; }
+function pSaved(it) { var st = pStatus(it); return st === 'default' || st === 'ro' ? it.text : (state.pp.saved[it.id] != null ? state.pp.saved[it.id] : it.mine); }
+function pCurrent(it) { return state.pp.draft[it.id] != null ? state.pp.draft[it.id] : pSaved(it); }
+function pCheck(it, txt) {
+  var used = [], m, re = /\{([a-z_]+)\}/g;
+  while ((m = re.exec(txt))) if (used.indexOf(m[1]) < 0) used.push(m[1]);
+  var allowed = it.ph.map(function (p) { return p[0]; });
+  var lockedPh = (it.locked.join('\n').match(/\{([a-z_]+)\}/g) || []).map(function (x) { return x.slice(1, -1); });
+  var out = [];
+  var unknown = used.filter(function (u) { return allowed.indexOf(u) < 0; });
+  var missing = it.ph.filter(function (p) { return p[1] && used.indexOf(p[0]) < 0 && lockedPh.indexOf(p[0]) < 0; }).map(function (p) { return p[0]; });
+  unknown.forEach(function (u) { out.push(['bad', '未声明的占位符 {' + u + '}：调度器不会替换它，原样发给 agent']); });
+  missing.forEach(function (u) { out.push(['bad', '缺少必需占位符 {' + u + '}']); });
+  if (!unknown.length && !missing.length) out.push(['ok', it.ph.length ? '占位符齐全' : '本项不使用占位符']);
+  if (it.locked.length) out.push(['ok', '契约句完整（锁定，不可删改）']);
+  if (txt.length > 4000) out.push(['warn', '超过 4000 字，编译时会截断']); else out.push(['ok', fmt(txt.length) + ' 字']);
+  return out;
+}
+function lineDiff(a, b) {
+  var al = a.split('\n'), bl = b.split('\n'), out = [];
+  al.forEach(function (x) { if (bl.indexOf(x) < 0) out.push(['-', x]); });
+  bl.forEach(function (x) { out.push([al.indexOf(x) < 0 ? '+' : ' ', x]); });
+  return out;
+}
+function renderPrompts() {
+  var p = state.pp, it = P_ITEMS[p.sel];
+  var st = pStatus(it), txt = pCurrent(it), dirty = p.draft[it.id] != null && p.draft[it.id] !== pSaved(it);
+  var h = '<section class="glass main">' + settingsHead('prompts');
+  h += '<div class="split" style="gap:14px">';
+  h += '<nav class="col" style="flex:1 1 280px;max-width:340px;min-width:0;gap:10px" aria-label="提示词目录">' + P_GROUPS.map(function (g) {
+    return '<div class="group"><div class="ghead"><i class="dot" style="background:var(--' + g.layer + ')"></i><span class="mono" style="color:var(--muted)">' + g.layer + '</span><b>' + esc(g.name) + '</b>' + (g.lock ? '<span class="pill p-warn">含锁定句</span>' : '') + '</div>' +
+      g.items.map(function (x) {
+        var s = P_STATUS[pStatus(x)];
+        return '<div class="item"><button data-act="psel" data-arg="' + x.id + '" style="' + (x.id === p.sel ? 'background:rgba(59,130,246,.14)' : '') + '"><span style="flex:1 1 auto;min-width:0">' + esc(x.name) + '<br><span class="mono note" style="font-size:11px">' + esc(x.file) + '</span></span><span class="pill ' + s[1] + '">' + s[0] + '</span></button></div>';
+      }).join('') + '</div>';
+  }).join('') + '</nav>';
+  h += '<div class="col" style="flex:999 1 480px;min-width:0;gap:14px;padding:16px;border-radius:12px;border:1px solid var(--bd);background:var(--strong)">';
+  var s = P_STATUS[st];
+  h += '<div class="row" style="gap:10px"><i class="dot" style="background:var(--' + it.layer + ')"></i><b style="font-size:16px">' + esc(it.name) + '</b><span class="pill ' + s[1] + '">' + s[0] + '</span>' + (dirty ? '<span class="pill p-violet">有未保存修改</span>' : '') + '<span class="spacer"></span>' +
+    (it.ro ? '<button class="btn">打开文件</button>' : '<button class="btn" data-act="pdiff">' + (p.diff ? '返回编辑' : '对比默认') + '</button><button class="btn" data-act="prestore"' + (st === 'default' && !dirty ? ' disabled' : '') + '>恢复默认</button>') +
+    '<button class="btn" data-act="screen" data-arg="preview">在注入预览里看效果</button>' + (it.ro ? '' : '<button class="btn primary" data-act="psave"' + (pCheck(it, txt).some(function (c) { return c[0] === 'bad'; }) || !dirty ? ' disabled' : '') + '>保存</button>') + '</div>';
+  h += '<div class="stats" style="gap:24px"><div><div class="k">默认文件</div><div class="mono">' + (it.ro ? esc(it.file) : 'prompts/' + esc(it.file)) + '</div></div>' +
+    (it.ro ? '' : '<div><div class="k">覆盖文件（本机，不进 git）</div><div class="mono">' + (st === 'default' ? '（无）' : 'prompts.local/' + esc(it.file)) + '</div></div>') +
+    '<div><div class="k">用于</div><div>' + esc(it.used) + '</div></div>' + (it.when ? '<div><div class="k">生效条件（引擎定义，只读）</div><div>' + esc(it.when) + '</div></div>' : '') + '</div>';
+  if (it.ro) h += '<div class="banner b-info">只读：这份文件在项目仓库 req-board 的主干里。第一期请用编辑器修改并提交到该仓库；这里显示的是下次编译会读到的内容。</div>';
+  if (st === 'stale') {
+    h += '<div class="banner b-warn">升级后默认版本已更新（' + it.base + ' → ' + it.newBase + '），你的覆盖基于旧版默认。编译仍使用你的覆盖，直到你处理。 <button class="btn" data-act="p3" style="margin-left:8px">' + (p.three ? '收起三方对比' : '三方对比') + '</button></div>';
+    if (p.three) {
+      var col = function (title, t) { return '<div class="col" style="flex:1 1 240px;min-width:0;gap:6px"><b>' + title + '</b><pre>' + esc(t) + '</pre></div>'; };
+      h += '<div class="row" style="align-items:stretch;gap:10px">' + col('旧默认 ' + it.base, it.old) + col('新默认 ' + it.newBase, it.text) + col('你的覆盖', pSaved(it)) + '</div>' +
+        '<div class="row"><button class="btn" data-act="ptake" data-arg="new">采用新默认</button><button class="btn" data-act="ptake" data-arg="merge">在新默认上重放我的修改</button><button class="btn" data-act="ptake" data-arg="mine">保留我的覆盖并标记已处理</button></div>';
+    }
+  } else if (st === 'override') {
+    h += '<div class="banner b-info">你的覆盖版本 · 基于默认 ' + it.base + '。编译时使用覆盖，清单里记为「覆盖」。</div>';
+  }
+  if (p.diff && !it.ro) {
+    h += '<div class="col" style="gap:4px"><span class="note">与默认相比（- 默认里有、你删掉的；+ 你新增或改写的）</span><pre>' + lineDiff(it.text, txt).map(function (d) {
+      var c = d[0] === '+' ? 'color:var(--ok)' : d[0] === '-' ? 'color:var(--bad)' : '';
+      return '<span style="' + c + '">' + d[0] + ' ' + esc(d[1]) + '</span>';
+    }).join('\n') + '</pre></div>';
+  } else if (it.ro) {
+    h += '<pre>' + esc(txt) + '</pre>';
+  } else {
+    if (it.ph.length) h += '<div class="row"><span class="note">可用占位符（点击插入到光标处）：</span>' + it.ph.map(function (x) { return '<button class="chip mono" data-act="pins" data-arg="' + x[0] + '">{' + x[0] + '}' + (x[1] ? ' · 必需' : '') + '</button>'; }).join('') + '</div>';
+    if (it.locked.length) h += '<div class="col" style="gap:4px"><span class="note">契约句（调度器按它解析结果，锁定不可删改）</span><pre style="border:1px dashed rgba(245,158,11,.4)">' + it.locked.map(function (l) { return '🔒 ' + esc(l); }).join('\n') + '</pre></div>';
+    h += '<label class="lbl"><span>可编辑正文</span><textarea id="pEdit" class="field mono" rows="10" style="line-height:1.6">' + esc(txt) + '</textarea></label>';
+  }
+  h += '<div class="col" style="gap:6px"><b>校验</b>' + pCheck(it, txt).map(function (c) {
+    return '<span style="color:' + (c[0] === 'ok' ? 'var(--ok)' : c[0] === 'bad' ? 'var(--bad)' : 'var(--warn)') + '">' + (c[0] === 'ok' ? '✓' : c[0] === 'bad' ? '✕' : '!') + ' ' + esc(c[1]) + '</span>';
+  }).join('') + '<span class="note">试一下：在正文里打一个 {timeout}，保存按钮会变灰。</span></div>';
+  return h + '</div></div></section>';
+}
+var P_ACTIONS = {
+  settab: function (a) { state.st = a; history.replaceState(null, '', '#' + (a === 'prompts' ? 'prompts' : 'skills')); },
+  psel: function (a) { state.pp.sel = a; state.pp.diff = false; state.pp.three = false; },
+  pdiff: function () { state.pp.diff = !state.pp.diff; },
+  p3: function () { state.pp.three = !state.pp.three; },
+  psave: function () { var it = P_ITEMS[state.pp.sel]; state.pp.saved[it.id] = pCurrent(it); delete state.pp.draft[it.id]; if (pStatus(it) !== 'stale') state.pp.status[it.id] = 'override'; },
+  prestore: function () { var it = P_ITEMS[state.pp.sel]; delete state.pp.draft[it.id]; delete state.pp.saved[it.id]; state.pp.status[it.id] = 'default'; state.pp.three = false; },
+  ptake: function (a) {
+    var it = P_ITEMS[state.pp.sel];
+    if (a === 'new') { delete state.pp.saved[it.id]; delete state.pp.draft[it.id]; state.pp.status[it.id] = 'default'; }
+    else if (a === 'merge') { state.pp.saved[it.id] = it.text.replace('1. 改动严格限于本需求与输入方案划定的范围……', '1. 改动严格限于本需求与输入方案划定的范围；遇到需要改公共组件时先报 need_confirm。'); state.pp.status[it.id] = 'override'; }
+    else { state.pp.status[it.id] = 'override'; }
+    state.pp.three = false;
+  },
+  pins: function (a) {
+    var it = P_ITEMS[state.pp.sel], el = document.getElementById('pEdit');
+    var txt = pCurrent(it), pos = el ? el.selectionStart : txt.length;
+    state.pp.draft[it.id] = txt.slice(0, pos) + '{' + a + '}' + txt.slice(pos);
+  }
+};
+
+/* ---------------- 路由与事件 ---------------- */
+var SCREENS = [['context', '① 卡片上下文'], ['skills', '② 设置：提示词 / 技能库'], ['preview', '③ 注入预览']];
+var app = document.getElementById('app');
+function render() {
+  document.getElementById('screens').innerHTML = SCREENS.map(function (x) { return '<button class="' + (state.screen === x[0] ? 'on' : '') + '" data-act="screen" data-arg="' + x[0] + '">' + x[1] + '</button>'; }).join('');
+  app.innerHTML = state.screen === 'skills' ? (state.st === 'prompts' ? renderPrompts() : renderSkills()) : state.screen === 'preview' ? renderPreview() : renderContext();
+}
+var ACTIONS = {
+  screen: function (a) { state.screen = a; history.replaceState(null, '', '#' + (a === 'skills' ? (state.st === 'prompts' ? 'prompts' : 'skills') : a)); window.scrollTo(0, 0); },
+  goPreview131: function () { state.pv.card = '131'; state.pv.role = 'dev'; ACTIONS.screen('preview'); },
+  node: function (a) { var r = RUNS[a] || []; state.ctx.node = a; state.ctx.run = r[0] ? r[0].id : null; state.ctx.open = null; state.ctx.full = false; },
+  run: function (a) { state.ctx.run = Number(a); state.ctx.open = null; state.ctx.full = false; },
+  open: function (a) { state.ctx.open = state.ctx.open === a ? null : a; },
+  diff: function () { state.ctx.diff = !state.ctx.diff; },
+  full: function () { state.ctx.full = !state.ctx.full; },
+  scope: function (a) { state.sk.scope = a; },
+  view: function (a) { state.sk.view = a; },
+  sel: function (a) { state.sk.sel = a; },
+  setAct: function (a) { var p = a.split('|'); state.sk.act[p[0]] = p[1]; },
+  role: function (a) {
+    var p = a.split('|'), k = SKILLS.filter(function (x) { return x.name === p[0]; })[0];
+    var cur = state.sk.roles[p[0]] || k.roles;
+    state.sk.roles[p[0]] = cur.indexOf(p[1]) >= 0 ? cur.filter(function (x) { return x !== p[1]; }) : cur.concat([p[1]]);
+  },
+  cell: function (a) {
+    var p = a.split('|'), CY = ['', 'always', 'auto', 'on_demand', 'manual'];
+    var row = state.sk.matrix[p[0]] || (state.sk.matrix[p[0]] = {});
+    var nx = CY[(CY.indexOf(row[p[1]] || '') + 1) % CY.length];
+    if (nx) row[p[1]] = nx; else delete row[p[1]];
+  },
+  pvProject: function (a) { state.pv.project = a; },
+  pvCard: function (a) { state.pv.card = a; }
+};
+for (var pk in P_ACTIONS) ACTIONS[pk] = P_ACTIONS[pk];
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-act]');
+  if (!t || t.disabled) return;
+  e.preventDefault();
+  ACTIONS[t.getAttribute('data-act')](t.getAttribute('data-arg'));
+  render();
+});
+document.addEventListener('input', function (e) {
+  if (e.target.id === 'pEdit') {
+    var ps = e.target.selectionStart, pe = e.target.selectionEnd, it = P_ITEMS[state.pp.sel];
+    state.pp.draft[it.id] = e.target.value; render();
+    var te = document.getElementById('pEdit'); if (te) { te.focus(); te.setSelectionRange(ps, pe); }
+    return;
+  }
+  if (e.target.id === 'skq') {
+    var pos = e.target.selectionStart;
+    state.sk.q = e.target.value; render();
+    var el = document.getElementById('skq'); el.focus(); el.setSelectionRange(pos, pos);
+  }
+});
+document.addEventListener('change', function (e) {
+  if (e.target.id === 'pvRole') { state.pv.role = e.target.value; render(); }
+  if (e.target.id === 'pvDraft') { state.pv.draft = e.target.checked; render(); }
+});
+window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h === 'prompts') { state.screen = 'skills'; state.st = 'prompts'; render(); } else if (['context', 'skills', 'preview'].indexOf(h) >= 0) { state.screen = h; if (h === 'skills') state.st = 'skills'; render(); } });
+render();
+})();
+</script>
+</body>
+</html>

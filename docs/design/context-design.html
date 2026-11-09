@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提示词分层注入与技能管理设计</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d2430;--fg2:#4b5563;--muted:#6b7280;--rule:#e5e3dc;--code:#f2f0ea;--accent:#2563eb;--accent-tint:rgba(37,99,235,.10);--tint:#efede6;--axis:#9aa3ad}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0d1117;--fg:#e6edf3;--fg2:#b4bec9;--muted:#8b949e;--rule:#2a313a;--code:#161b22;--accent:#60a5fa;--accent-tint:rgba(96,165,250,.14);--tint:#1a2029;--axis:#6b7480}}
+:root[data-theme="dark"]{--bg:#0d1117;--fg:#e6edf3;--fg2:#b4bec9;--muted:#8b949e;--rule:#2a313a;--code:#161b22;--accent:#60a5fa;--accent-tint:rgba(96,165,250,.14);--tint:#1a2029;--axis:#6b7480}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:860px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:28px;line-height:1.3;margin:0 0 8px}
+h2{font-size:20px;margin:48px 0 12px;padding-top:8px;border-top:1px solid var(--rule)}
+p{margin:10px 0}
+.byline{color:var(--muted);font-size:13px}
+.lead{font-size:16px;padding:14px 16px;border-radius:10px;background:var(--accent-tint)}
+a{color:var(--accent)}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;line-height:1.55}
+pre code{background:none;padding:0}
+.tbl{overflow-x:auto;margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6}
+th,td{border-bottom:1px solid var(--rule);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px}
+td:first-child{min-width:6.5em}
+td.nw{white-space:nowrap}
+ul,ol{padding-left:22px}
+li{margin:4px 0}
+figure{margin:20px 0}
+figure svg{width:100%;height:auto;display:block}
+figcaption{color:var(--muted);font-size:13px;margin-top:6px}
+.todo{list-style:none;padding-left:0}
+.todo li::before{content:"☐ ";color:var(--muted)}
+nav.toc{font-size:14px;color:var(--fg2)}
+nav.toc a{color:var(--fg2)}
+.st{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;white-space:nowrap;font-weight:600}
+.st-done{background:rgba(38,166,91,.14);color:#1f8a4c}.st-doing{background:rgba(37,99,235,.12);color:var(--accent)}
+.st-todo{background:rgba(120,120,120,.14);color:var(--muted)}.st-ask{background:rgba(217,119,6,.14);color:#b45309}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .st-done{color:#4ade80}:root:not([data-theme="light"]) .st-ask{color:#fbbf24}}
+:root[data-theme="dark"] .st-done{color:#4ade80}:root[data-theme="dark"] .st-ask{color:#fbbf24}
+svg .t{fill:var(--fg)} svg .q{fill:var(--muted)} svg .b{fill:none;stroke:var(--axis);stroke-width:1.25}
+svg .hl{fill:var(--accent-tint);stroke:var(--accent);stroke-width:2} svg .band{fill:var(--tint);stroke:var(--axis);stroke-width:1}
+svg .ln{fill:none;stroke:var(--axis);stroke-width:1.25} svg .ah{fill:var(--axis)}
+</style>
+</head>
+<body>
+<main>
+<h1>Loop Engine 提示词分层注入与技能管理整体设计</h1>
+<div class="byline">2026-11-05 · 设计稿 · 配套交互原型：<a href="context-prototype.html">context-prototype.html</a></div>
+
+<p class="lead">结论：把现在「六段字符串拼接」升级为一个<b>上下文编译器</b>：每次拉起会话先编译出一份带来源、版本、大小和入选理由的「注入清单」，再按清单渲染提示词。技能改用与 Claude Code 兼容的 SKILL.md 格式，只常驻一行摘要、按需加载正文。引擎里写死的提示词全部搬成文件，每一层都能在「设置」抽屉的「提示词」tab 里编辑，编辑结果存为本机覆盖、不改默认文件。看板上新增四个入口：卡片的「上下文」页、设置里的「提示词」与「技能库」、角色卡上的「注入预览」。分四期落地，第一期只记录不改行为。</p>
+
+<nav class="toc">目录：<a href="#s1">一、现状诊断</a> · <a href="#s2">二、设计原则</a> · <a href="#s3">三、目标架构</a> · <a href="#s4">四、分层模型</a> · <a href="#s5">五、技能管理</a> · <a href="#s6">六、提示词编辑</a> · <a href="#s7">七、任务卡执行</a> · <a href="#s8">八、交互设计</a> · <a href="#s9">九、分阶段落地</a> · <a href="#s10">十、下一阶段：提示词瘦身</a> · <a href="#s11">十一、工作项总清单</a> · <a href="#s12">十二、待拍板</a></nav>
+
+<h2 id="s1">一、现状诊断</h2>
+<p>现在的分层思路是对的（固定段在前、按卡内容在后，利于缓存），问题在于「拼完就发、发完不留」：看不到 agent 实际收到了什么，也说不清为什么收到。</p>
+<p>当前拼装顺序（<code>flow_engine.build_prompt_parts</code> → <code>build_prompt</code> → <code>agent_run.run_agent</code>）：角色模板固定段 + <code>COMMON_TAIL</code> → 项目约定（<code>.loop/project.json</code>）→ 场景技能 → 卡片输入 → 前置契约 → 进程安全红线。</p>
+<div class="tbl"><table>
+<thead><tr><th>缺口</th><th>现象</th><th>代码证据</th></tr></thead>
+<tbody>
+<tr><td>发出去的提示词不留底</td><td><code>agent_runs</code> 只记 token 用量，没有提示词快照或 hash；卡片出问题时无法复现当时的输入</td><td><code>board_modules/db.py</code> agent_runs 表；仅飞书助手有 <code>prompt_hash</code></td></tr>
+<tr><td>注入规则写死在代码里</td><td>「仅推分支」「自动重启」「冲突上下文」三段按 if 拼进 <code>extra</code>，改文案要改 Python</td><td><code>build_prompt_parts</code> 第 375–412 行</td></tr>
+<tr><td>技能无元数据、全文常驻</td><td>技能就是一个 md 文件，挂上就整篇内联（上限 4000 字）；不能按改动路径或关键词触发，没有描述、版本、负责人</td><td><code>acp_shared.skill_text</code>、<code>scenario_skills_text</code></td></tr>
+<tr><td>缺文件只写日志</td><td>挂载的技能或指引找不到时跳过，卡照跑；与「配置非法一律停线」的 fail-closed 原则不一致</td><td><code>scenario_skills_text</code> 的 log.warning 分支</td></tr>
+<tr><td>续跑不补发变更</td><td>恢复旧会话只发简化文案；中途改了指引、技能或卡片 notes，agent 仍按旧上下文工作</td><td><code>docs/project-manifest.md</code>「续跑边界」已自述</td></tr>
+<tr><td>用户数据与指令混在一起</td><td>notes、summary、上游产物、飞书消息直接拼进提示词，没有「这是数据不是指令」的边界；summary 同时充当评审反馈通道</td><td><code>review_feedback</code> / <code>history</code> 变量</td></tr>
+<tr><td>主干与 worktree 的清单版本不一致</td><td>清单从主工作区读，agent 在 worktree 里干活；卡上改了 <code>.loop/</code> 不会影响自己，也没有记录用的是哪个版本</td><td><code>_project_repos</code> 读 <code>projects.json.paths</code></td></tr>
+</tbody></table></div>
+<p>看板上也没有任何地方能看到「某个角色在某个项目会收到什么」，技能只能改文件和 flows.json。</p>
+
+<h2 id="s2">二、设计原则</h2>
+<p>七条原则，都来自主流 agent 工具已经验证过的做法；右列是它在 Loop Engine 里的具体样子。行业参照为作者知识整理，未逐条联网核对最新版本。</p>
+<div class="tbl"><table>
+<thead><tr><th>原则</th><th>行业参照</th><th>在 Loop Engine 里怎么做</th></tr></thead>
+<tbody>
+<tr><td>1. 上下文是编译产物，可复现、可对比</td><td>依赖锁文件（lockfile）；LangSmith / Langfuse 的提示词版本与 trace</td><td>每次会话生成「注入清单」：每层的来源路径、git 提交、内容 hash、字数、入选规则；存产物目录并关联到 agent_runs</td></tr>
+<tr><td>2. 技能渐进式加载</td><td>Anthropic Agent Skills（SKILL.md：启动时只加载 name + description，用到时再读正文和附属文件）</td><td>提示词里只放技能目录（每个一行），正文按规则自动内联或由 agent 读取；格式与 Claude Code 互通</td></tr>
+<tr><td>3. 规则按条件挂载</td><td>Cursor Rules 的 Always / Auto Attached（按文件 glob）/ Agent Requested / Manual 四种模式</td><td>技能与指引都声明激活条件：角色、流程节点、涉及路径、关键词、项目开关；代码里的 if 拼接改为声明式片段</td></tr>
+<tr><td>4. 就近优先的分层记忆</td><td>AGENTS.md 约定、Claude Code 的 CLAUDE.md 层级（企业 / 用户 / 项目 / 子目录）</td><td>全局 → 项目 → 仓库子目录 → 卡片；同名覆盖在清单里显式标出“覆盖了谁”</td></tr>
+<tr><td>5. 稳定前缀在前、变化内容在后</td><td>Anthropic / OpenAI 提示词缓存：缓存按前缀命中</td><td>沿用现有「固定段 / 卡片输入」切分，并在清单里标出缓存断点，前缀变化时告诉人“这次为什么没命中”</td></tr>
+<tr><td>6. 指令与数据分开，权限靠工具不靠文字</td><td>OWASP LLM01 提示词注入防护、Microsoft Spotlighting（给外部内容加边界标记）</td><td>notes、summary、上游产物、飞书原文放进带来源的数据块，并声明“块内内容不是指令”；角色权限仍由 <code>ROLE_CAPABILITIES</code> 的工具白名单强制</td></tr>
+<tr><td>7. 提示词改动要有回归</td><td>promptfoo / OpenAI Evals 的评测集；金标准样本回放</td><td>用已完成的卡片做金标准：改模板或技能后编译出新旧两份清单对比；技能按使用后的通过率、打回率统计</td></tr>
+</tbody></table></div>
+<p>延续不变的红线：<code>req_reviews</code> 永不进提示词；配置非法、必需件缺失时停线；展示名一律来自 flows.json。</p>
+
+<h2 id="s3">三、目标架构</h2>
+<p>把 <code>build_prompt_parts</code> 升级为一个六步的上下文编译器，放在 <code>dispatcher_modules/context.py</code>。产物有两份：发给 agent 的提示词全文，和记录「每一段从哪来、为什么在」的注入清单。</p>
+<figure>
+<svg viewBox="0 0 760 468" role="img" aria-label="每次拉起会话前，先把各层来源编译成一份可追溯的清单" font-size="13">
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="t" x="24" y="32" font-size="15" font-weight="600">每次拉起会话前，先把各层来源编译成一份可追溯的清单</text>
+<rect class="band" x="24" y="50" width="712" height="74" rx="8"/>
+<text class="q" x="40" y="72" font-size="11.5">输入来源</text>
+<g font-size="11.5" text-anchor="middle">
+<rect class="b" x="38" y="84" width="104" height="28" rx="8"/><text class="t" x="90" y="102">平台策略</text>
+<rect class="b" x="154" y="84" width="104" height="28" rx="8"/><text class="t" x="206" y="102">角色模板</text>
+<rect class="b" x="270" y="84" width="104" height="28" rx="8"/><text class="t" x="322" y="102">项目清单 .loop</text>
+<rect class="b" x="386" y="84" width="104" height="28" rx="8"/><text class="t" x="438" y="102">技能库</text>
+<rect class="b" x="502" y="84" width="104" height="28" rx="8"/><text class="t" x="554" y="102">卡片与上游产物</text>
+<rect class="b" x="618" y="84" width="104" height="28" rx="8"/><text class="t" x="670" y="102">运行状态</text>
+</g>
+<g class="ln">
+<path d="M132 124V156" marker-end="url(#a1)"/><path d="M240 192H272" marker-end="url(#a1)"/><path d="M488 192H520" marker-end="url(#a1)"/>
+<path d="M628 228V272" marker-end="url(#a1)"/><path d="M520 308H488" marker-end="url(#a1)"/><path d="M272 308H240" marker-end="url(#a1)"/>
+<path d="M132 344V388" marker-end="url(#a1)"/><path d="M132 366H380V388" marker-end="url(#a1)"/><path d="M380 366H628V388" marker-end="url(#a1)"/>
+</g>
+<g text-anchor="middle">
+<rect class="b" x="24" y="156" width="216" height="72" rx="8"/><text class="t" x="132" y="182" font-weight="600">① 收集</text><text class="q" x="132" y="202" font-size="11.5">读取各层来源</text><text class="q" x="132" y="218" font-size="11.5">记下路径、提交、内容 hash</text>
+<rect class="b" x="272" y="156" width="216" height="72" rx="8"/><text class="t" x="380" y="182" font-weight="600">② 选择</text><text class="q" x="380" y="202" font-size="11.5">按角色、节点、路径、关键词</text><text class="q" x="380" y="218" font-size="11.5">和项目开关决定入选</text>
+<rect class="b" x="520" y="156" width="216" height="72" rx="8"/><text class="t" x="628" y="182" font-weight="600">③ 排序</text><text class="q" x="628" y="202" font-size="11.5">稳定前缀在前，卡片数据在后</text><text class="q" x="628" y="218" font-size="11.5">标出缓存断点</text>
+<rect class="b" x="520" y="272" width="216" height="72" rx="8"/><text class="t" x="628" y="298" font-weight="600">④ 预算</text><text class="q" x="628" y="318" font-size="11.5">每层字数上限</text><text class="q" x="628" y="334" font-size="11.5">超出截断并留全文路径</text>
+<rect class="b" x="272" y="272" width="216" height="72" rx="8"/><text class="t" x="380" y="298" font-weight="600">⑤ 渲染</text><text class="q" x="380" y="318" font-size="11.5">生成 prompt.txt</text><text class="q" x="380" y="334" font-size="11.5">数据层加来源围栏</text>
+<rect class="hl" x="24" y="272" width="216" height="72" rx="8"/><text class="t" x="132" y="298" font-weight="600">⑥ 锁定</text><text class="t" x="132" y="318" font-size="11.5">写 manifest.json</text><text class="t" x="132" y="334" font-size="11.5">必需件缺失则停线</text>
+<rect class="b" x="24" y="388" width="216" height="56" rx="8"/><text class="t" x="132" y="412" font-weight="600">发给 agent 会话</text><text class="q" x="132" y="432" font-size="11.5">kimi / Claude Code / Codex</text>
+<rect class="b" x="272" y="388" width="216" height="56" rx="8"/><text class="t" x="380" y="412" font-weight="600">看板可见</text><text class="q" x="380" y="432" font-size="11.5">卡片上下文页、注入预览</text>
+<rect class="b" x="520" y="388" width="216" height="56" rx="8"/><text class="t" x="628" y="412" font-weight="600">续跑对比</text><text class="q" x="628" y="432" font-size="11.5">与上次清单比对，补发变更</text>
+</g>
+</svg>
+<figcaption>上下文编译器 · 6 步</figcaption>
+</figure>
+<p>看板的注入预览和调度器走同一个编译器，预览看到的就是将来发出去的。第一期编译器必须输出与现在逐字节相同的提示词，现有断言提示词文本的测试就是这条的验收。</p>
+
+<h2 id="s4">四、分层模型</h2>
+<p>八层，前五层是「指令」且跨卡稳定（进缓存前缀），第六层是「数据」，第七、八层按卡或按运行变化。L0–L4 与现有实现一一对应，新增的只有 L3 条件片段、L5 技能目录和 L6 的数据围栏。</p>
+<div class="tbl"><table>
+<thead><tr><th>层</th><th>内容</th><th>来源</th><th>性质</th><th>位置</th></tr></thead>
+<tbody>
+<tr><td>L0 平台策略</td><td>结果契约、时间与步数规则、进程安全红线、输出风格</td><td>引擎内置（现 <code>COMMON_TAIL</code>）</td><td>指令，不可被下层覆盖</td><td>稳定前缀</td></tr>
+<tr><td>L1 角色</td><td>角色职责、产物要求、工作步骤</td><td><code>prompts/&lt;角色&gt;.md</code> 固定段，由 flows.json 指向</td><td>指令</td><td>稳定前缀</td></tr>
+<tr><td>L2 项目约定</td><td>常用命令、测试实例、按角色的项目指引、AGENTS.md 指路</td><td>各仓库 <code>.loop/project.json</code> 与 <code>.loop/guides/</code></td><td>指令；事实类内容与 L1 冲突时以本层为准</td><td>稳定前缀（按项目）</td></tr>
+<tr><td>L3 条件片段（新）</td><td>仅推分支、自动重启、外部角色等按项目开关生效的说明</td><td><code>prompts/fragments/*.md</code>，头部声明 <code>when</code> 条件</td><td>指令</td><td>稳定前缀（按项目）</td></tr>
+<tr><td>L4 常驻技能</td><td>激活方式为「始终」的技能正文</td><td>全局 / 项目技能库</td><td>指令</td><td>稳定前缀</td></tr>
+<tr><td>L5 技能目录（新）</td><td>本次可用但未内联的技能：名称 + 一句描述 + 路径</td><td>同上</td><td>指令（只是索引）</td><td>稳定前缀末尾</td></tr>
+<tr><td>L6 任务数据</td><td>标题、notes、上游产物指路、返工输入、卡片级触发的技能正文</td><td>看板、产物目录</td><td><b>数据</b>，放进带来源的围栏，声明不是指令</td><td>可变尾部</td></tr>
+<tr><td>L7 运行参数</td><td>分支、路径、时限、步数、前置契约、本进程 PID 红线、冲突仓库清单</td><td>调度器运行时</td><td>指令（引擎生成）</td><td>可变尾部</td></tr>
+</tbody></table></div>
+<p>三条编译规则：</p>
+<ol>
+<li><b>优先级</b>：L0 &gt; L2（仅限事实：命令、端口、路径）&gt; L1 &gt; L3 &gt; L4。L6 是数据，不参与优先级；权限不靠任何一层的文字，靠工具白名单。</li>
+<li><b>预算</b>：每层有字数上限（沿用单文件 4000 字，另加固定段总预算）。超出时截断并在正文留一句“全文在 &lt;路径&gt;”，清单里记截断字数，看板上黄色提示。</li>
+<li><b>必需件停线</b>：标记为 <code>required</code> 的技能或指引缺失、解析失败时不拉会话，卡片转暂缓并写明缺什么；非必需件缺失照旧跳过，但在清单和卡片上可见。</li>
+</ol>
+
+<h2 id="s5">五、技能管理</h2>
+<p>技能从「一个 md 文件 + 在别处点名」升级为「自带元数据的目录」，格式对齐 Anthropic Agent Skills 的 SKILL.md，同一份技能可以直接拿到 Claude Code 里用。</p>
+<p><b>文件格式</b>：<code>skills/&lt;名字&gt;/SKILL.md</code>，可附 <code>references/</code>、<code>scripts/</code> 等文件，只在用到时读。</p>
+<pre><code>---
+name: browser-verify
+description: 改了 HTML/JS/CSS 或页面行为时使用：浏览器级验证的做法与自测报告「浏览器验证」小节写法
+roles: [dev, accept]
+activation: auto        # always | auto | on_demand | manual
+paths: ["static/**", "templates/**"]
+keywords: [页面, 样式, 浏览器]
+required: false
+owner: frontend
+---
+（正文）</code></pre>
+<p>旧的平铺 <code>&lt;名字&gt;.md</code> 继续有效，按 <code>activation: always</code>、角色取自点名处理，不强制迁移。版本号不靠人工维护：内容 hash 即版本，清单里同时记下所在 git 提交。</p>
+<p><b>四种激活方式</b></p>
+<div class="tbl"><table>
+<thead><tr><th>方式</th><th>什么时候生效</th><th>放在哪一层</th><th>适合</th></tr></thead>
+<tbody>
+<tr><td>始终 always</td><td>角色匹配就内联正文</td><td>L4 常驻技能（稳定前缀）</td><td>短小、每次都得遵守的做法</td></tr>
+<tr><td>自动 auto</td><td>命中路径、关键词或流程节点时内联正文</td><td>L6 卡片段（不破坏前缀缓存）</td><td>只在特定改动里用得上的方法</td></tr>
+<tr><td>按需 on_demand</td><td>只进技能目录，agent 自己决定要不要读</td><td>L5 技能目录</td><td>长篇参考、偶尔用到的流程</td></tr>
+<tr><td>手动 manual</td><td>只有卡片 notes 点名（<code>skills: x</code>）时加载</td><td>L6 卡片段</td><td>一次性或高风险操作手册</td></tr>
+</tbody></table></div>
+<p>「自动」的路径条件在不同阶段依据不同：开发前只有分析产物里的仓库与技术方案列出的文件，审查和验收时才有真实 diff。清单里写明每个技能是被哪条依据命中的。按需技能被 agent 读取时，从工具调用事件里识别并补记为「运行中加载」。</p>
+<p><b>作用域与覆盖</b>：全局 <code>prompts/skills/</code> → 项目 <code>.loop/skills/</code> → 卡片点名或排除（<code>skills: a</code> / <code>-skills: b</code>）。同名时近的整份覆盖远的，不合并内容，清单和界面上标出“覆盖了全局版本”。角色点名（flows.json、项目清单）与技能自己声明的 <code>roles</code> 取并集。</p>
+<p><b>运行体适配</b>：kimi 与 Codex 走内联 + 目录；Claude Code 额外把本次可用的技能复制到 worktree 的 <code>.claude/skills/</code>，用它自带的按需加载，内联部分只保留 always 类。</p>
+<p><b>生命周期</b>：草稿 → 启用 → 废弃。草稿只在注入预览里可试用，不进真实会话；废弃的技能仍被引用时告警。</p>
+<p><b>质量门槛与指标</b></p>
+<ul>
+<li>校验（保存时和 doctor 里都跑）：名字合法、description 必填且不超过 200 字、正文不超过预算、引用的附属文件存在、全局技能里不含单个项目的专有内容。</li>
+<li>指标：加载次数、加载后该节点的通过率与打回率、平均占用字数。只作参考信号，样本少时不给结论。</li>
+<li>沉淀：卡片详情提供「存为技能草稿」，由人把一次经验改写成技能；评审记录本身不自动变成技能，守住 <code>req_reviews</code> 不进提示词的红线。</li>
+</ul>
+
+<h2 id="s6">六、提示词编辑</h2>
+<p>原则：<b>发给 agent 的每一段文字都是文件，代码只决定什么时候用、往里填什么值。</b>编辑发生在「设置」抽屉新增的「提示词」tab；保存写进本机覆盖目录，不改随代码发布的默认文件。</p>
+<p><b>写死在代码里、要搬成文件的文字</b>（已逐处核对）：</p>
+<div class="tbl"><table>
+<thead><tr><th>文字</th><th>现在位置</th><th>搬到</th><th>层</th></tr></thead>
+<tbody>
+<tr><td>通用约束（结果 JSON 契约、时间与步数、输出风格）</td><td><code>flow_engine.COMMON_TAIL</code></td><td><code>prompts/system/common.md</code></td><td>L0</td></tr>
+<tr><td>只读工具说明</td><td><code>acp_modules/readonly_tools.READONLY_TOOL_GUIDE</code></td><td><code>prompts/system/readonly-tools.md</code></td><td>L0</td></tr>
+<tr><td>进程安全红线</td><td><code>acp_modules/command_policy.KILL_REDLINE_TMPL</code></td><td><code>prompts/system/kill-redline.md</code></td><td class="nw">L0 / L7</td></tr>
+<tr><td>前置契约（推荐流程与仓库）</td><td><code>flow_engine.PRE_SLOT_CONTRACT</code></td><td><code>prompts/system/pre-contract.md</code></td><td>L7</td></tr>
+<tr><td>仅推分支、自动重启、冲突上下文</td><td><code>build_prompt_parts</code> 里的 if 拼接</td><td><code>prompts/fragments/branch-only.md</code>、<code>auto-restart.md</code>、<code>merge-resolve.md</code></td><td>L3</td></tr>
+<tr><td>续跑提醒、步数用完的收尾指令、失败重试原因</td><td><code>agent_run.py</code>、<code>git_sync.resume_failure_hint</code></td><td><code>prompts/system/resume.md</code>、<code>wrapup.md</code>、<code>retry-hint.md</code></td><td class="nw">运行时文案</td></tr>
+<tr><td>「项目约定」外框与未配置清单的兜底说明</td><td><code>flow_engine.project_conventions_text</code></td><td><code>prompts/system/project-frame.md</code></td><td class="nw">L2 包装</td></tr>
+</tbody></table></div>
+<p>每个文件头部声明自己可用的占位符（如 <code>{timeout_minutes}</code>、<code>{result_json}</code>）和生效条件（片段的 <code>when</code>）。保存时校验：用了未声明的占位符、漏掉必需占位符、删改了契约句，一律拒绝保存。编译器每次拉起会话现读文件，改完不用重启。搬迁本身要求输出逐字节不变，现有断言提示词文本的测试就是验收。</p>
+<p><b>各层的编辑权限</b></p>
+<div class="tbl"><table>
+<thead><tr><th>层</th><th>在哪编辑</th><th>权限</th></tr></thead>
+<tbody>
+<tr><td>L0 平台策略与引擎协议</td><td>「提示词」tab，带锁标记</td><td>受保护编辑：措辞可改；调度器要按它解析的<b>契约句</b>（如 result.json 的字段与取值那几行）锁定不可删改，有测试守着</td></tr>
+<tr><td>L1 角色模板</td><td>「提示词」tab</td><td>自由编辑</td></tr>
+<tr><td>L2 项目约定</td><td>文件在各项目仓库 <code>.loop/</code></td><td>第一期只读展示 + 「打开文件」；在页面上改等于改项目仓库主干，要处理未提交改动和提交，后续再做</td></tr>
+<tr><td>L3 条件片段</td><td>「提示词」tab，显示生效条件</td><td>自由编辑正文；生效条件只读（由引擎定义）</td></tr>
+<tr><td>L4 / L5 技能</td><td>「技能库」tab</td><td>自由编辑（见第五节）</td></tr>
+<tr><td>运行时文案（续跑、收尾、重试）</td><td>「提示词」tab</td><td>自由编辑措辞；里面的值由调度器填</td></tr>
+<tr><td>L6 任务数据</td><td>卡片本身（标题、notes）</td><td>不在设置里改</td></tr>
+<tr><td>L7 运行参数</td><td>「提示词」tab</td><td>只能改包在外面的措辞模板，值不可改</td></tr>
+</tbody></table></div>
+<p><b>默认与覆盖</b>：默认版本随代码发布在 <code>prompts/</code>；页面上保存的内容写进不进 git 的 <code>prompts.local/</code>（目录结构与 <code>prompts/</code> 一一对应，和 <code>projects.json</code> 一样算本机数据）。编译时有覆盖用覆盖，没有用默认。这样升级 Loop Engine 不会和用户的修改冲突。</p>
+<ul>
+<li>界面上每一项标出状态：默认 / 已覆盖 / 默认已更新（覆盖基于旧版默认）。</li>
+<li>「恢复默认」= 删除覆盖文件。</li>
+<li>覆盖文件记下它基于的默认版本 hash；升级后默认变了，提示并给出三方对比（旧默认 / 新默认 / 你的覆盖），由人决定合并方式。</li>
+<li>清单（第七节）里每一项同时记来源是默认还是覆盖，事后能查清当时用的是哪一版。</li>
+</ul>
+<p>这与 VS Code 的默认设置 / 用户设置、Claude Code 的 CLAUDE.md 分层是同一个思路：发布方给默认，使用方只保存差异。</p>
+
+<h2 id="s7">七、任务卡执行</h2>
+<p>每次拉起会话都留一份「执行档案」，续跑时按档案差异补发变更，返工时只传未解决的问题。</p>
+<p><b>执行档案</b>：存在产物目录 <code>runs/&lt;运行号&gt;/</code>，包含 <code>manifest.json</code>（清单）和 <code>prompt.txt</code>（实际发出的全文）。<code>agent_runs</code> 用 ALTER TABLE 加 <code>manifest_path</code>、<code>prompt_hash</code>、<code>prefix_hash</code> 三列，存量行保持空。</p>
+<pre><code>{
+  "run": 1842, "req": 128, "role": "dev", "node": "standard#0", "runtime": "kimi",
+  "model": {"id": "deepseek-v4", "source": "project"},
+  "prefix_hash": "9f3a…", "prompt_hash": "c41e…", "chars": 18240,
+  "layers": [
+    {"layer": "L2", "id": "guide:instance", "src": ".loop/guides/instance.md", "commit": "a9a99e3", "hash": "5d1c…", "chars": 1581, "why": "roles 含 dev"},
+    {"layer": "L6", "id": "skill:browser-verify", "src": "prompts/skills/browser-verify/SKILL.md", "hash": "77ab…", "chars": 2109, "why": "auto: 技术方案列出 static/board/60-robot-drawer.js"}
+  ],
+  "skipped": [{"id": "skill:render-assert", "why": "未命中路径条件"}],
+  "warnings": [{"code": "truncated", "id": "guide:service", "cut": 812}]
+}</code></pre>
+<p><b>续跑补发</b>：续跑前重新编译清单，与该会话上次的清单对比。</p>
+<div class="tbl"><table>
+<thead><tr><th>变化范围</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>无变化</td><td>照现在发简化续跑文案</td></tr>
+<tr><td>L2–L6 有变化</td><td>续跑消息前附「上下文更新」：逐条列出变了什么并附新正文，要求回读确认</td></tr>
+<tr><td>L0 或 L1 有变化</td><td>不续用旧会话，带交接摘要开新会话（与飞书助手的 prompt_hash 重建口径一致）</td></tr>
+</tbody></table></div>
+<p>人工续跑时，聊天框上方先提示「上下文已变化 N 项，发送时会一并补发」，可展开看差异。</p>
+<p><b>返工输入</b>：评审角色打回时在 result.json 里必填 <code>issues</code>（编号、严重程度、位置、问题）。返工会话的 L6 只放「未关闭问题清单 + 评审产物路径」，作者在自己的 result.json 里逐条写处理结果；summary 回归「做了什么」的本意，不再兼做反馈通道。问题来自评审产物，不读 <code>req_reviews</code>。</p>
+<p><b>失败可见</b>：卡片上用小标记提示「缺技能」「有截断」「上下文已变更」；因必需件缺失停线的卡片直接写出缺的是哪个文件，并给出「去技能库修复」的入口。</p>
+
+<h2 id="s8">八、交互设计</h2>
+<p>四个入口，分别回答四个问题：这张卡的 agent 到底收到了什么；每一层提示词怎么改；我有哪些技能、挂在谁身上；改了配置之后会变成什么样。原型沿用看板现有的玻璃风格与颜色令牌。</p>
+<div class="tbl"><table>
+<thead><tr><th>入口</th><th>位置</th><th>一眼看到什么</th><th>展开后能做什么</th></tr></thead>
+<tbody>
+<tr><td>上下文</td><td>卡片详情新增一页</td><td>流程节点条（每个节点几轮、结果）；选中一轮后显示分层堆叠条、缓存断点和警告数</td><td>按层展开每一项的来源、版本、入选理由；与上一轮对比；查看实际发出的全文</td></tr>
+<tr><td>提示词</td><td>「设置」抽屉新增一个 tab</td><td>按层排的目录（平台策略带锁、角色、条件片段、运行时文案、项目约定只读），每项标默认 / 已覆盖 / 默认已更新</td><td>编辑正文、插入占位符、实时校验；对比默认、恢复默认、跳到注入预览看效果</td></tr>
+<tr><td>技能库</td><td>「设置」抽屉新增一个 tab</td><td>技能列表：作用域、挂载角色、激活方式、状态、近 30 天使用次数</td><td>编辑元数据与正文、看校验结果；切换到「角色 × 技能」矩阵，点格子切换激活方式</td></tr>
+<tr><td>注入预览</td><td>角色卡和技能编辑器上的按钮</td><td>选项目 + 角色（可选一张已有卡片）后的编译结果</td><td>试用草稿技能、看改动前后差异；不拉会话、不花 token</td></tr>
+</tbody></table></div>
+<p><b>各项设置放在哪</b>（「现在」是看板当前的样子，「本方案」是改动后）：</p>
+<div class="tbl"><table>
+<thead><tr><th>设置项</th><th>现在在哪改</th><th>本方案</th></tr></thead>
+<tbody>
+<tr><td>模型池、模型别名</td><td>「设置」抽屉 → 模型设置 tab</td><td>不变</td></tr>
+<tr><td>某项目每个角色用什么模型</td><td>项目条上的「项目模型调参」抽屉</td><td>不变</td></tr>
+<tr><td>通知渠道（飞书 / Webhook / Slack）</td><td>「设置」抽屉 → 通知渠道 tab</td><td>不变</td></tr>
+<tr><td>流程（有哪些节点、顺序）</td><td>只能改 <code>flows.json</code>；「设置」→ 全局信息 tab 只读展示</td><td>不变，本方案不做流程编辑界面</td></tr>
+<tr><td>角色提示词正文</td><td>只能改 <code>prompts/*.md</code>；全局信息 tab 只读展示角色卡</td><td><b>新增</b>「设置」→ 提示词 tab 可编辑（存为本机覆盖）；角色卡上加「注入预览」按钮</td></tr>
+<tr><td>平台策略、条件片段、续跑 / 收尾 / 重试文案</td><td>写死在 Python 里，改不了</td><td><b>新增</b>搬成文件后在「提示词」tab 编辑；平台策略的契约句锁定</td></tr>
+<tr><td>项目约定（命令、测试实例、指引）</td><td>只能改各仓库 <code>.loop/</code></td><td>第一期在「提示词」tab 只读展示 + 打开文件；注入预览里能看到它们最终怎么进提示词</td></tr>
+<tr><td>技能（内容、挂哪个角色、何时加载）</td><td>只能改 md 文件 + <code>flows.json</code> / <code>.loop/project.json</code></td><td><b>新增</b>「设置」抽屉 → 技能库 tab，可编辑，保存时写回这些文件</td></tr>
+<tr><td>某张卡实际收到了什么</td><td>看不到</td><td><b>新增</b>卡片详情（右侧详情面板，不是抽屉）里的「上下文」页，只读</td></tr>
+<tr><td>某角色在某项目会收到什么</td><td>看不到</td><td><b>新增</b>「注入预览」，从角色卡或技能编辑器打开，只读</td></tr>
+</tbody></table></div>
+<p>交互原则：</p>
+<ul>
+<li>默认只给概要（一条堆叠条 + 警告数），细节点开才出现，不打断看卡片的主路径。</li>
+<li>每一层固定一个颜色，卡片、预览、技能库三处一致，看一次就记住。</li>
+<li>警告带去处：「缺技能」点过去就是技能库里那一项，「有截断」点过去就是那份指引。</li>
+<li>展示名一律取自 flows.json，界面文案进中英词典。</li>
+</ul>
+<p>原型：<a href="context-prototype.html">context-prototype.html</a>，三个画面：卡片上下文、设置（提示词 / 技能库两个 tab）、注入预览，均可点击交互，数据为示例。</p>
+
+<h2 id="s9">九、分阶段落地</h2>
+<p>顺序按风险从低到高：一期只加记录、不动输出，出问题也不影响在跑的卡片。未估工期，每期开工前再拆任务。</p>
+<figure>
+<svg viewBox="0 0 760 484" role="img" aria-label="四期推进：先看得见，再管得住，最后用数据迭代" font-size="13">
+<defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="t" x="24" y="30" font-size="15" font-weight="600">四期推进：先看得见，再管得住，最后用数据迭代</text>
+<text class="q" x="24" y="56" font-size="11.5">阶段</text><text class="q" x="200" y="56" font-size="11.5">做什么</text><text class="q" x="536" y="56" font-size="11.5">验收闸门（过了才进下一期）</text>
+<g class="ln"><path d="M104 148V172" marker-end="url(#a2)"/><path d="M104 252V276" marker-end="url(#a2)"/><path d="M104 356V380" marker-end="url(#a2)"/></g>
+<rect class="hl" x="24" y="68" width="160" height="80" rx="8"/><rect class="b" x="200" y="68" width="320" height="80" rx="8"/><rect class="band" x="536" y="68" width="200" height="80" rx="8"/>
+<text class="t" x="40" y="98" font-weight="600">一期 · 看得见</text><text class="q" x="40" y="120" font-size="11.5">只记录，不改行为</text>
+<g font-size="11.5"><text class="t" x="216" y="94">上下文编译器骨架，按现有六段原样输出</text><text class="t" x="216" y="114">每次运行落盘清单与全文，agent_runs 加三列</text><text class="t" x="216" y="134">卡片「上下文」页（只读）+ 注入预览接口</text></g>
+<g font-size="12"><text class="t" x="552" y="102">现有提示词逐字节不变</text><text class="t" x="552" y="124">全量测试通过</text></g>
+<rect class="b" x="24" y="172" width="160" height="80" rx="8"/><rect class="b" x="200" y="172" width="320" height="80" rx="8"/><rect class="band" x="536" y="172" width="200" height="80" rx="8"/>
+<text class="t" x="40" y="202" font-weight="600">二期 · 管得住</text><text class="q" x="40" y="224" font-size="11.5">规则改为声明式</text>
+<g font-size="11.5"><text class="t" x="216" y="198">写死文字搬成文件，if 拼接改为条件片段</text><text class="t" x="216" y="218">数据围栏、必需件停线、返工 issues</text><text class="t" x="216" y="238">续跑按清单差异补发变更</text></g>
+<g font-size="12"><text class="t" x="552" y="206">搬迁后提示词逐字节不变</text><text class="t" x="552" y="228">续跑可见补发，打回只传问题</text></g>
+<rect class="b" x="24" y="276" width="160" height="80" rx="8"/><rect class="b" x="200" y="276" width="320" height="80" rx="8"/><rect class="band" x="536" y="276" width="200" height="80" rx="8"/>
+<text class="t" x="40" y="306" font-weight="600">三期 · 可编辑</text><text class="q" x="40" y="328" font-size="11.5">提示词与技能界面</text>
+<g font-size="11.5"><text class="t" x="216" y="302">提示词 tab：覆盖目录、契约句锁定、三方对比</text><text class="t" x="216" y="322">SKILL.md 格式、技能库 tab 与角色 × 技能矩阵</text><text class="t" x="216" y="342">Claude Code 运行体原生按需加载</text></g>
+<g font-size="12"><text class="t" x="552" y="310">旧技能不改即可用，契约句删不掉</text><text class="t" x="552" y="332">按需读取被记录</text></g>
+<rect class="b" x="24" y="380" width="160" height="80" rx="8"/><rect class="b" x="200" y="380" width="320" height="80" rx="8"/><rect class="band" x="536" y="380" width="200" height="80" rx="8"/>
+<text class="t" x="40" y="410" font-weight="600">四期 · 闭环</text><text class="q" x="40" y="432" font-size="11.5">用数据改提示词</text>
+<g font-size="11.5"><text class="t" x="216" y="406">已完成卡片做金标准，改动前后清单对比</text><text class="t" x="216" y="426">技能效果指标：加载次数、通过率、打回率</text><text class="t" x="216" y="446">从卡片「存为技能草稿」</text></g>
+<g font-size="12"><text class="t" x="552" y="414">改模板必附对比报告</text><text class="t" x="552" y="436">样本不足不出结论</text></g>
+</svg>
+<figcaption>四期路线 · 每期一道验收闸门</figcaption>
+</figure>
+<p>每期都在 main 上直接开发、全量测试，涉及界面的在中英文、深浅两套皮肤下用真浏览器验证。</p>
+
+<h2 id="s10">十、下一阶段：提示词瘦身</h2>
+<p>结论：上下文编译器和界面完成后，下一步不是继续加规则，而是给提示词做减法——角色模板只留这个角色最核心的判断，协议交给平台层，确定性的事交给代码，并用执行档案里的指标证明每一处改动是改好了。</p>
+<p><b>依据</b>：现有 7 个角色模板加通用约束共 22 处「禁止」、24 处「不得/不要」，其中多处与工具层已强制的规则重复（如杀进程、写越界）；以最大的 <code>dev.md</code> 为例，真正属于「开发者」的内容约两成，其余是 git 规则、时间管理、todos 写法、进程安全等通用协议。参照了一份公开讨论里的五条经验：XML 隔离语义块、清理旧模型的防御性补丁、确定性计算交给工具、权衡给出两端代价、用「生成—评估—修复」闭环替代巨型提示词。</p>
+<div class="tbl"><table>
+<thead><tr><th>改动</th><th>具体做法</th><th>对应经验</th></tr></thead>
+<tbody>
+<tr><td>S1 角色模板只写核心</td><td>统一六段：使命、成功标准、判断原则（附原因）、产物契约、何时停下、常见失误（从真实打回记录提炼）。git 规则、时间与步数、todos、commit 格式、上线操作等协议挪到平台策略或条件片段；测试实例那套（<code>accept.md</code> 后半）做成技能，开发与验收共用</td><td>—</td></tr>
+<tr><td>S2 清理防御性补丁</td><td>逐条审计「禁止 / 不得」：已由工具强制的（命令审查、写路径白名单、进程红线）只留一句说明或删除，被拦截时由工具返回明确原因；工具管不到的才保留，并写一句为什么</td><td>第 2 条</td></tr>
+<tr><td>S3 确定性的事交给代码</td><td>测试实例端口由调度器算好直接给值；新增「提交结果」工具，校验格式后原子写入 result.json，删掉各模板里的写法与回读说明；worktree 是否干净由调度器收尾时检查；是否需要「上线操作」由调度器按改动路径与项目配置判断</td><td>第 3 条</td></tr>
+<tr><td>S4 权衡给出两端</td><td>关键决策点同时写清继续的风险与停下的代价：开发「超范围就停」补上「停下会让卡片等人工，平均等待时长」；评审「打回」补上「每次打回 = 一整轮返工，连续 3 次转人工」，给出判断依据而非单向禁令</td><td>第 4 条</td></tr>
+<tr><td>S5 XML 分块渲染</td><td>编译器按层输出 <code>&lt;platform_policy&gt;</code>、<code>&lt;role&gt;</code>、<code>&lt;project_conventions&gt;</code>、<code>&lt;skills&gt;</code>、<code>&lt;card_data&gt;</code>、<code>&lt;runtime&gt;</code> 标签块</td><td>第 1 条</td></tr>
+<tr><td>S6 机器先评</td><td>开发完成后、代码审查前，调度器先跑项目清单声明的测试与 lint 命令；不通过直接带输出回到开发，不花模型审查成本；通过才进审查</td><td>第 5 条</td></tr>
+</tbody></table></div>
+<p><b>怎么证明改对了</b>：改动前从执行档案取每个角色近期的打回率、格式类续接轮次数、平均提示词长度做基线；一次只改一个角色，观察所在节点的指标变化，变差用「恢复默认」退回。S5、S6 是机制改动，单独上线、单独观察。</p>
+<p><b>顺序</b>：S5 → S3 → S6 → S2 → S1 → S4。前三项是机制，风险低、收益确定；后三项改文字，依赖前面的指标基线。</p>
+
+<h2 id="s11">十一、工作项总清单</h2>
+<p>截至 2026-11-05 晚：共 48 项，<span class="st st-done">已完成</span> 27 项、<span class="st st-doing">进行中</span> 5 项、<span class="st st-todo">未开始</span> 13 项、<span class="st st-ask">待决定</span> 3 项。「core / ui」是负责的子 agent；本轮代码都只提交在本地，尚未推送。</p>
+<div class="tbl"><table>
+<thead><tr><th>工作项</th><th>状态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">开源与产品打磨（此前完成）</td></tr>
+<tr><td>MIT 许可、清理公司与个人痕迹、公开仓库与历史压缩</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>GitHub CI（Python 3.11 / 3.12 + 语法检查）、Issue / PR 模板</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送，CI 绿</td></tr>
+<tr><td>中英双语界面（DOM 翻译层，页头切换）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>时区可配置、可插拔运行体（开发角色支持 Claude Code / Codex）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>通知渠道插件化（飞书 / Webhook / Slack）、Docker 与 Compose</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>操作指南与快速开始重写，含英文版</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>拆巨石：acp_shared → acp_modules、board.js → 10 个分片、dispatcher.py 9020 → 725 行</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>拆分包改动也触发调度器自动重启（修复）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">已推送</td></tr>
+<tr><td>英文提示词集</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>评审类角色支持 Claude Code / Codex（需先证明只读限制生效）</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>README 真实项目截图、X 与小红书首发稿</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)">等你在其他机器跑完真实项目</td></tr>
+<tr><td>偶发失败用例 test_chat_self_heal 排查</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">设计与原型</td></tr>
+<tr><td>现状诊断与整体设计（本文档）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">docs/design/，未提交到仓库</td></tr>
+<tr><td>交互原型（卡片上下文、设置：提示词 / 技能库、注入预览）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">docs/design/context-prototype.html</td></tr>
+<tr><td>实现契约（模块边界、文件格式、接口）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">团队内部使用</td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">一期 · 看得见</td></tr>
+<tr><td>提示词存储 prompt_store + 本机覆盖 prompts.local/</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>写死文字搬成文件（逐字节不变，测试守护）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>上下文编译器 compile_context（含预览用的只读模式）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>执行档案：manifest.json + prompt.txt，agent_runs 加三列</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>接口：上下文记录、实际全文、注入预览、提示词增删改查</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">二期 · 管得住</td></tr>
+<tr><td>条件片段从卡片段挪进稳定前缀（声明式 when）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>卡片数据加边界标记（声明不是指令）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>评审打回改传 issues，返工只看未关闭问题</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>续跑按清单差异补发；平台策略或角色变了开新会话</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>必需技能缺失停线、技能选择接进编译器、Claude Code 技能落盘</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>嵌套 AGENTS.md：按改动路径指路、记进清单、运行体自带加载不重复、doctor 扩展</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>操作指南新增「AGENTS.md 与提示词分层」小节（中英）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>写入保护统一（Docker 下不能误挡编辑）</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送；Docker 用 REQ_BOARD_TRUST_FORWARDED_WRITES 放行</td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">三期 · 可编辑</td></tr>
+<tr><td>技能 v2 引擎：SKILL.md、三级作用域、四种激活方式、notes 点名 / 排除、lint</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>技能库接口与 doctor 技能校验</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">本地 main，未推送</td></tr>
+<tr><td>卡片详情「上下文」页</td><td><span class="st st-doing">进行中</span></td><td style="color:var(--muted)">ui</td></tr>
+<tr><td>设置 →「提示词」tab（含锁定句、三方对比、AGENTS.md 只读展示）</td><td><span class="st st-doing">进行中</span></td><td style="color:var(--muted)">ui</td></tr>
+<tr><td>设置 →「技能库」tab 与角色 × 技能矩阵</td><td><span class="st st-doing">进行中</span></td><td style="color:var(--muted)">ui</td></tr>
+<tr><td>注入预览面板</td><td><span class="st st-doing">进行中</span></td><td style="color:var(--muted)">ui</td></tr>
+<tr><td>每层颜色令牌（深浅两套）、界面文案进中英词典、真浏览器验证</td><td><span class="st st-doing">进行中</span></td><td style="color:var(--muted)">ui</td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">四期 · 闭环</td></tr>
+<tr><td>技能近 30 天加载次数</td><td><span class="st st-done">已完成</span></td><td style="color:var(--muted)">技能库接口已返回</td></tr>
+<tr><td>技能加载后的通过率 / 打回率指标</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>已完成卡片做金标准，改模板前后清单对比</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>卡片详情「存为技能草稿」</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">下一阶段 · 提示词瘦身（第十节）</td></tr>
+<tr><td>S5 XML 分块渲染</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>S3 确定性的事交给代码（端口、提交结果工具、工作区检查、上线操作）</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>S6 机器先评（审查前先跑测试与 lint）</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>S2 清理防御性补丁</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>S1 角色模板只写核心（六段结构，测试实例做成技能）</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>S4 关键决策点写清两端代价</td><td><span class="st st-todo">未开始</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td colspan="3" style="font-weight:600;padding-top:16px">收尾</td></tr>
+<tr><td>本轮代码推送到 GitHub</td><td><span class="st st-ask">待决定</span></td><td style="color:var(--muted)">等你看过后决定</td></tr>
+<tr><td>docs/design/ 是否进公开仓库</td><td><span class="st st-ask">待决定</span></td><td style="color:var(--muted)"></td></tr>
+<tr><td>browser-verify 改为「自动」激活并挂到测试验证</td><td><span class="st st-ask">待决定</span></td><td style="color:var(--muted)">会改变验收角色的提示词</td></tr>
+</tbody></table></div>
+
+<h2 id="s12">十二、待拍板</h2>
+<p>已定（2026-11-05）：</p>
+<ul>
+<li>覆盖文件放 Loop Engine 目录下不进 git 的 <code>prompts.local/</code>，算本机数据</li>
+<li>平台策略开放编辑，但契约句锁定</li>
+<li>项目约定第一期只读，提供「打开文件」</li>
+</ul>
+<p>已按推荐默认推进（2026-11-05 起，随时可推翻）：</p>
+<ul class="todo">
+<li>技能格式是否对齐 SKILL.md（推荐：是。代价是多一层目录，收益是和 Claude Code 生态互通，对外宣传也更好讲）</li>
+<li><code>prompt.txt</code> 全文是否默认落盘（推荐：是，只存本机产物目录，按现有产物清理策略一起清）</li>
+<li>「必需件缺失停线」是否默认开启（推荐：只对标了 <code>required</code> 的生效，存量技能默认不必需，不改变现有行为）</li>
+<li>返工输入改用 <code>issues</code> 后，是否同时删掉模板里「评审反馈」对 summary 的引用（推荐：是，第二期一起改）</li>
+<li>第一期先做哪个界面：卡片「上下文」页还是技能库（推荐：上下文页，它直接解决“看不到 agent 收到了什么”）</li>
+</ul>
+</main>
+</body>
+</html>

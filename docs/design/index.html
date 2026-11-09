@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop Engine 设计稿</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d2430;--muted:#6b7280;--rule:#e5e3dc;--accent:#2563eb}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--rule:#2a313a;--accent:#60a5fa}}
+:root[data-theme="dark"]{--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--rule:#2a313a;--accent:#60a5fa}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:720px;margin:0 auto;padding:48px 16px}
+h1{font-size:24px;margin:0 0 6px}
+p{color:var(--muted);margin:0 0 24px}
+a.item{display:block;padding:16px 18px;border:1px solid var(--rule);border-radius:12px;margin-bottom:12px;color:var(--fg);text-decoration:none}
+a.item:hover{border-color:var(--accent)}
+a.item b{color:var(--accent)}
+a.item span{display:block;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>Loop Engine · 提示词分层注入与技能管理</h1>
+<p>2026-11-05 设计稿。三个文件互相链接，整个文件夹拷走即可离线打开。</p>
+<a class="item" href="context-design.html"><b>整体设计方案</b><span>现状诊断、设计原则、目标架构、八层模型、技能管理、提示词编辑、任务卡执行、交互设计、分期落地与待拍板</span></a>
+<a class="item" href="context-prototype.html"><b>交互原型</b><span>① 卡片「上下文」页　② 设置：「提示词」与「技能库」两个新 tab　③ 注入预览（示例数据，可点击）</span></a>
+</main>
+</body>
+</html>
