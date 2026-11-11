@@ -166,6 +166,62 @@ until they do. If the configured runtime cannot start a chat, the board tells yo
 
 Setup details: [quickstart → Agent runtimes](docs/quickstart.en.md#agent-runtimes).
 
+## Vision & roadmap
+
+**The bet: reliability should come from the process, not from the price of the model.**
+
+Factories did not become dependable by hiring geniuses. They became dependable through stations,
+inspections and standards. Loop Engine brings that to software: many inexpensive agents, each doing one
+job, each checked by another, nothing merged on trust.
+
+**Where this is going:** one developer runs a whole software team of agents, and a ten-person company
+ships like a hundred-person one, paying for tokens instead of headcount. You state the intent. The engine
+plans, builds, reviews, tests, merges and explains what it did. You step in only for decisions that are
+truly yours.
+
+**North star:** *cost per verified, merged change* and *how often a human had to step in*.
+We want to drive both toward zero, and measure it in public.
+
+### Stage 1 · Trust the loop (now)
+
+One person, one machine, one repository, working without supervision.
+
+- [x] Pluggable runtimes: OpenCode for every role, Claude Code and Codex for development
+- [x] Runtime certification: a runtime may run reviewer roles only after it proves it cannot write, execute or escape
+- [x] English and Chinese UI, Docker Compose
+- [ ] `loop init`: one command from zero to your first merged card, with model presets
+- [ ] English prompt set
+- [ ] Claude Code, Codex and Gemini CLI certified for reviewer roles
+
+### Stage 2 · Prove it (next)
+
+A claim like ours needs numbers.
+
+- [ ] **Open benchmark:** the same task set, cheap models with gates against a single frontier model.
+      Merge rate, rework, cost per change and human interventions, reproducible and re-run every release.
+- [ ] Live self-build counter: how much of this repository its own pipeline wrote
+- [ ] Shareable card replays: one link shows a card's whole life, with every prompt, review, rejection and diff
+
+### Stage 3 · Join the team (later)
+
+Work where teams already work.
+
+- [ ] GitHub and GitLab Issues ⇄ cards; PR mode (open a reviewed pull request instead of merging)
+- [ ] One board, many repositories and many worker machines
+- [ ] Accounts, roles, audit log and authentication for shared deployments
+- [ ] Human reviewers as first-class gates next to agent reviewers
+
+### Stage 4 · An open standard for agent work (horizon)
+
+- [ ] **Loop spec:** an open, runtime-neutral format for flows, gates and verdicts, so any agent tool can plug in
+- [ ] Flow and skill registry: share and fork proven flows, such as "security-reviewed backend change"
+      or "data migration with a dry run"
+- [ ] A loop that learns: rejections and failures flow back into prompts, skills and model routing
+- [ ] Standing maintenance: dependency upgrades, flaky tests and doc drift handled as ongoing cards
+
+Want to shape what comes first? [Open an issue](https://github.com/RonSpeace/loop-engine/issues) and tell
+us which stage matters to you.
+
 ## Documentation
 
 | Read this | For |
@@ -189,15 +245,7 @@ Issues and pull requests are welcome; please read [CONTRIBUTING.md](CONTRIBUTING
 .venv/bin/python -m pytest -q tests
 ```
 
-Roadmap:
-
-- [x] Pluggable runtimes: OpenCode for every role, Claude Code and Codex for dev
-- [x] English UI · Docker Compose
-- [ ] Claude Code / Codex for reviewer roles, Gemini CLI
-- [ ] English prompt set
-- [ ] One-command install
-- [ ] GitHub Issues ⇄ cards sync, PR mode
-- [ ] Shareable card replays
+Where the project is heading: [Vision & roadmap](#vision--roadmap).
 
 ## License
 
