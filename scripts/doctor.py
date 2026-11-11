@@ -9,6 +9,7 @@
 """
 import json
 import os
+import shlex
 import shutil
 import socket
 import subprocess
@@ -99,6 +100,66 @@ def check_git():
 
 def kimi_bin():
     return os.environ.get("KIMI_BIN") or shutil.which("kimi") or str(Path.home() / ".kimi-code" / "bin" / "kimi")
+
+
+def load_dotenv():
+    """与 run_local.sh 看到同一套配置：读仓库根 .env，只补进环境里还没有的键（显式环境变量优先）。"""
+    env = REPO / ".env"
+    if not env.is_file():
+        return
+    for line in env.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.replace("export ", "", 1).strip()
+        if key.isidentifier():
+            os.environ.setdefault(key, val.strip().strip("'\""))
+
+
+def used_runtimes():
+    """实际会用到的运行体：环境默认（LOOP_AGENT_RUNTIME，缺省 kimi）+ flows.json 角色级 + projects.json 项目级。"""
+    found = {os.environ.get("LOOP_AGENT_RUNTIME", "").strip() or "kimi"}
+    try:
+        roles = json.loads((REPO / "flows.json").read_text()).get("roles", {})
+        found |= {r.get("runtime") for r in roles.values() if isinstance(r, dict) and r.get("runtime")}
+    except Exception:  # noqa: BLE001 - flows.json 由 check_flow_config 报错
+        pass
+    try:
+        for cfg in json.loads((REPO / "projects.json").read_text()).values():
+            if isinstance(cfg, dict):
+                if cfg.get("runtime"):
+                    found.add(cfg["runtime"])
+                found |= {v for v in (cfg.get("runtimes") or {}).values() if v}
+    except Exception:  # noqa: BLE001 - projects.json 由 check_projects 报错
+        pass
+    return found
+
+
+def check_opencode():
+    cmd = shlex.split(os.environ.get("LOOP_AGENT_CMD_OPENCODE", "")) or ["opencode"]
+    path = shutil.which(cmd[0])
+    if not path:
+        fail("OpenCode 未安装（npm install -g opencode-ai；需要 Node.js 18+）")
+    else:
+        try:
+            r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=30)
+            ok(f"OpenCode 可用：{path}（{(r.stdout or r.stderr).strip()[:40]}）")
+        except Exception as e:  # noqa: BLE001
+            warn(f"OpenCode 版本探测失败（{e}）：{path}")
+    base = os.environ.get("LOOP_OPENAI_BASE_URL", "").strip()
+    if base:
+        if os.environ.get("LOOP_OPENAI_API_KEY", "").strip():
+            ok(f"OpenAI 兼容服务商：{base}（API Key 已配置）")
+        else:
+            fail("设置了 LOOP_OPENAI_BASE_URL 但缺少 LOOP_OPENAI_API_KEY（重跑 loop init）")
+        if os.environ.get("LOOP_OPENCODE_MODEL", "").strip():
+            dev = os.environ.get("LOOP_OPENCODE_MODEL_DEV", "").strip()
+            ok(f"模型：{os.environ['LOOP_OPENCODE_MODEL']}" + (f"（dev：{dev}）" if dev else ""))
+        else:
+            fail("缺少 LOOP_OPENCODE_MODEL（重跑 loop init）")
+    else:
+        warn("未设 LOOP_OPENAI_BASE_URL：使用本机 OpenCode 自己配置的服务商（opencode auth login）")
 
 
 def check_kimi():
@@ -345,10 +406,16 @@ def check_skills():
 
 
 def main():
+    load_dotenv()
+    runtimes = used_runtimes()
     print(f"== req-board doctor：{REPO} ==\n")
     print("-- 基础 --");         check_python(); check_venv(); check_repo_files(); check_deps(); check_git()
-    print("\n-- agent 运行体 --"); check_kimi()
-    print("\n-- 模型配置 --");    check_model_config(); check_mcp()
+    print(f"\n-- agent 运行体（{', '.join(sorted(runtimes))}）--")
+    if "opencode" in runtimes:
+        check_opencode()
+    if "kimi" in runtimes:
+        check_kimi()
+        print("\n-- 模型配置（kimi）--"); check_model_config(); check_mcp()
     print("\n-- 项目接入 --");    check_projects(); check_project_conventions()
     print("\n-- 渠道与本地 --");  check_env_feishu(); check_dirs_and_port()
     print("\n-- 流程配置 --");    check_flow_config()

@@ -1,0 +1,132 @@
+#!/bin/bash
+# loop：Loop Engine 命令行入口（安装脚本把它软链到 ~/.local/bin/loop）
+#   loop init     安装向导：模型服务商 + API Key + 项目 + 自检 + 启动 + 第一张卡
+#   loop start    后台启动看板 + 调度器（scripts/run_local.sh）
+#   loop stop     停止（有卡在开发时需 --force）
+#   loop status   运行状态
+#   loop logs     跟踪日志
+#   loop doctor   环境自检
+#   loop open     打开看板
+# 兼容 macOS 自带 bash 3.2。
+set -u
+
+SELF="$0"
+while [ -L "$SELF" ]; do
+    target="$(readlink "$SELF")"
+    case "$target" in /*) SELF="$target" ;; *) SELF="$(dirname "$SELF")/$target" ;; esac
+done
+REPO="$(cd "$(dirname "$SELF")/.." && pwd)"
+cd "$REPO" || exit 1
+
+PY="${REQ_BOARD_PYTHON:-}"
+[ -n "$PY" ] || { if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi; }
+
+envval() {  # 先看环境变量，再看 .env
+    local key="$1" def="$2" v
+    v="$(printenv "$key" 2>/dev/null || true)"
+    if [ -z "$v" ] && [ -f .env ]; then
+        v="$(sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$key[[:space:]]*=[[:space:]]*//p" .env | tail -n 1 | tr -d "\"'")"
+    fi
+    echo "${v:-$def}"
+}
+
+PORT="$(envval REQ_BOARD_PORT 8899)"
+HOST="$(envval REQ_BOARD_HOST 127.0.0.1)"
+URL="http://$HOST:$PORT"
+if [ "$(uname)" = "Darwin" ]; then DEF_LOG="$HOME/Library/Logs/req-board"; else DEF_LOG="$HOME/.local/state/loop-engine/logs"; fi
+LOG_DIR="$(envval REQ_BOARD_LOG_DIR "$DEF_LOG")"
+LOG="$LOG_DIR/loop.log"
+PIDFILE="$REPO/data/loop.pid"
+
+running_pid() {
+    [ -f "$PIDFILE" ] || return 1
+    local p
+    p="$(cat "$PIDFILE" 2>/dev/null)"
+    [ -n "$p" ] && kill -0 "$p" 2>/dev/null && { echo "$p"; return 0; }
+    return 1
+}
+
+http_code() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
+
+doing_count() {
+    curl -s -m 3 "$URL/api/requirements?status=doing" 2>/dev/null |
+        "$PY" -c 'import json,sys
+try:
+    d=json.load(sys.stdin); d=d if isinstance(d,list) else d.get("items",[])
+    print(len(d))
+except Exception: print(0)' 2>/dev/null || echo 0
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+    init)
+        exec "$PY" scripts/loop_init.py "$@"
+        ;;
+    start)
+        if p="$(running_pid)"; then echo "Loop Engine is already running (pid $p): $URL"; exit 0; fi
+        if [ "$(http_code "$URL/")" != "000" ]; then
+            echo "Port $PORT is already in use by another process. Stop it or set REQ_BOARD_PORT in .env." >&2
+            exit 1
+        fi
+        mkdir -p "$LOG_DIR" data
+        if command -v setsid >/dev/null 2>&1; then
+            setsid nohup ./scripts/run_local.sh >>"$LOG" 2>&1 </dev/null &
+        else
+            nohup ./scripts/run_local.sh >>"$LOG" 2>&1 </dev/null &
+        fi
+        echo $! >"$PIDFILE"
+        for _ in $(seq 1 30); do
+            [ "$(http_code "$URL/")" = "200" ] && { echo "Loop Engine started: $URL  (logs: loop logs)"; exit 0; }
+            running_pid >/dev/null || break
+            sleep 1
+        done
+        echo "Loop Engine did not come up. Last log lines:" >&2
+        tail -n 20 "$LOG" >&2
+        exit 1
+        ;;
+    stop)
+        p="$(running_pid)" || { echo "Loop Engine is not running (started by loop start)."; rm -f "$PIDFILE"; exit 0; }
+        n="$(doing_count)"
+        if [ "${n:-0}" != "0" ] && [ "${1:-}" != "--force" ]; then
+            echo "$n card(s) are in progress; stopping now interrupts their agents. Use: loop stop --force" >&2
+            exit 1
+        fi
+        kill -TERM "$p" 2>/dev/null
+        for _ in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 1; done
+        if kill -0 "$p" 2>/dev/null; then echo "Still stopping (pid $p); check: loop status" >&2; exit 1; fi
+        rm -f "$PIDFILE"
+        echo "Loop Engine stopped."
+        ;;
+    status)
+        if p="$(running_pid)"; then echo "Process:    running (pid $p)"; else echo "Process:    not started by loop start"; fi
+        code="$(http_code "$URL/")"
+        echo "Board:      $URL ($([ "$code" = "200" ] && echo up || echo "down, HTTP $code"))"
+        if [ "$code" = "200" ]; then
+            curl -s -m 3 "$URL/api/dispatcher-health" | "$PY" -c 'import json,sys
+d=json.load(sys.stdin)
+print("Dispatcher: " + ("running" if d.get("ok") else "not reporting"))' 2>/dev/null
+            echo "In progress: $(doing_count) card(s)"
+        fi
+        ;;
+    logs)
+        [ -f "$LOG" ] || { echo "No log yet: $LOG"; exit 0; }
+        exec tail -n "${1:-100}" -f "$LOG"
+        ;;
+    doctor)
+        exec "$PY" scripts/doctor.py
+        ;;
+    open)
+        if command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1 &
+        elif command -v open >/dev/null 2>&1; then open "$URL"
+        else echo "$URL"; fi
+        ;;
+    help|-h|--help)
+        sed -n '2,10p' "$REPO/bin/loop" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "Unknown command: $cmd (see: loop help)" >&2
+        exit 2
+        ;;
+esac

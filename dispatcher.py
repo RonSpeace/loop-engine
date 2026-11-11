@@ -105,7 +105,9 @@ log = logging.getLogger("dispatcher")
 
 # ==================== 配置 ====================
 REPO_DIR = Path(__file__).resolve().parent
-BOARD_API = os.environ.get("REQ_BOARD_API", "http://127.0.0.1:8899/api/requirements")
+# 缺省跟随看板端口 REQ_BOARD_PORT（.env 改了端口时调度器不能还连 8899）
+BOARD_API = os.environ.get(
+    "REQ_BOARD_API", f"http://127.0.0.1:{os.environ.get('REQ_BOARD_PORT', '8899')}/api/requirements")
 # 看板根 API（/agent-sessions、/manual-commands 等顶层路由），从 BOARD_API 派生
 BOARD_ROOT_API = BOARD_API.rsplit("/requirements", 1)[0] if "/requirements" in BOARD_API else BOARD_API
 # 自动开发的项目清单：projects.json（看板 project 名 -> {paths, confirm}），与看板页面共享，加项目改这个文件
