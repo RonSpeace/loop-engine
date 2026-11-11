@@ -54,19 +54,36 @@ Loop Engine 是一个对话驱动的闭环：**需求 → 开发 → 评审 → 
 
 ## 快速开始
 
-需要 Python 3.11+、git 和一个 agent 运行体（见[运行体](#运行体)）。
+macOS 或 Linux 上一条命令：
 
 ```bash
-git clone https://github.com/RonSpeace/loop-engine.git && cd loop-engine
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp projects.example.json projects.json      # 指向一个让 agent 干活的 git 仓库
-.venv/bin/python scripts/doctor.py           # 环境自检
-./scripts/run_local.sh                       # 同时启动看板和调度器，Ctrl-C 一起停
+curl -fsSL https://raw.githubusercontent.com/RonSpeace/loop-engine/main/scripts/install.sh | bash
 ```
 
-打开 <http://127.0.0.1:8899>，建一张卡。
+它会检查 git、Python 3.11+ 和 Node.js，把 Loop Engine 下载到 `~/loop-engine`，建好 Python 环境（系统 Python 不行时
+自动改用 [uv](https://docs.astral.sh/uv/)），安装 [OpenCode](https://opencode.ai)，并添加 `loop` 命令。之后
+`loop init` 带你走完剩下的步骤：
 
-完整步骤——模型与 API Key、MCP 工具、跑通第一条闭环的玩具项目、排障——见
+1. **选模型服务商：** DeepSeek、智谱 GLM、通义千问、Moonshot Kimi、OpenRouter、OpenAI，或任何 OpenAI 兼容接口。
+2. **粘贴 API Key。** 当场验证 Key 和你选的模型（多数角色用便宜模型，开发角色可以另选一个更强的）。Key 只存在
+   `.env` 里，只有你自己能读。
+3. **选项目：** 一个小的演示项目，或你已有的 git 仓库。
+4. **自检、启动、建第一张卡。** 演示项目上，agent 会把这张卡走完分析、开发、评审、验收，然后合并。打开
+   <http://127.0.0.1:8899> 就能看着它跑。
+
+日常使用：
+
+```bash
+loop start     # 后台启动看板 + 调度器
+loop status    # 是否在运行、几张卡在开发
+loop logs      # 跟踪日志
+loop stop      # 停止（有 agent 在干活时拒绝，除非加 --force）
+loop doctor    # 环境自检
+loop init      # 重新配置：换服务商、模型或项目
+```
+
+想手动装？克隆仓库、建 `.venv`、`pip install -r requirements.txt`，然后运行
+`.venv/bin/python scripts/loop_init.py`。完整步骤——其它运行体（kimi、Claude Code、Codex）、MCP 工具、排障——见
 **[docs/quickstart.md](docs/quickstart.md)**。
 
 **Docker：**

@@ -9,6 +9,10 @@
 - 改了配置或提示词后没有热加载，需要重启看板和调度器两个进程。
 - 在两台机器间同步引擎代码、各自保留运行数据，见 [two-machine-sync.md](two-machine-sync.md)。
 
+> **最快的方式：** `curl -fsSL https://raw.githubusercontent.com/RonSpeace/loop-engine/main/scripts/install.sh | bash`
+> 一条命令装好所有东西并运行 `loop init`，配好 OpenCode + OpenAI 兼容模型、项目和第一张卡（见 [README](../README.zh-CN.md#快速开始)）。
+> 想换服务商、模型或项目，随时再跑 `loop init`；`loop init --help` 列出无人值守安装用的参数。下面各节是手动安装和其它运行体的做法。
+
 ## 0. 需要准备什么
 
 ```

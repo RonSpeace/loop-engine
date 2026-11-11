@@ -46,7 +46,11 @@ running_pid() {
     return 1
 }
 
-http_code() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
+http_code() {  # 连不上时 curl 自己输出 000 且退出码非 0——只取输出，不再追加
+    local c
+    c="$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
+    echo "${c:-000}"
+}
 
 doing_count() {
     curl -s -m 3 "$URL/api/requirements?status=doing" 2>/dev/null |
@@ -88,6 +92,10 @@ case "$cmd" in
         ;;
     stop)
         p="$(running_pid)" || { echo "Loop Engine is not running (started by loop start)."; rm -f "$PIDFILE"; exit 0; }
+        if [ "$(http_code "$URL/")" != "200" ] && [ "${1:-}" != "--force" ]; then
+            echo "Cannot reach the board at $URL to check for running agents. Use: loop stop --force" >&2
+            exit 1
+        fi
         n="$(doing_count)"
         if [ "${n:-0}" != "0" ] && [ "${1:-}" != "--force" ]; then
             echo "$n card(s) are in progress; stopping now interrupts their agents. Use: loop stop --force" >&2

@@ -392,9 +392,12 @@ def main(argv=None):
                 if err:
                     raise InitError(f"test call to model {m!r} failed: {err}")
                 say(f"  Model {m}: ok")
-        write_env(env_path, {"LOOP_AGENT_RUNTIME": "opencode", "LOOP_OPENAI_BASE_URL": base_url,
-                             "LOOP_OPENAI_API_KEY": key, "LOOP_OPENCODE_MODEL": model,
-                             "LOOP_OPENCODE_MODEL_DEV": dev_model})
+        values = {"LOOP_AGENT_RUNTIME": "opencode", "LOOP_OPENAI_BASE_URL": base_url,
+                  "LOOP_OPENAI_API_KEY": key, "LOOP_OPENCODE_MODEL": model, "LOOP_OPENCODE_MODEL_DEV": dev_model}
+        # 本次用环境变量指定了端口 → 记进 .env，之后的 loop start/stop/status 和调度器才会用同一个端口
+        if os.environ.get("REQ_BOARD_PORT", "").strip():
+            values["REQ_BOARD_PORT"] = os.environ["REQ_BOARD_PORT"].strip()
+        write_env(env_path, values)
         say(f"  Saved to {env_path} (readable only by you; never committed).")
 
         # 3. 项目

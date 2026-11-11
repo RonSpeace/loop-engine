@@ -9,6 +9,11 @@ card → analysis → development → code review → acceptance → automatic m
 - There is no hot reload for configuration or prompts: restart both the board and the dispatcher after changing them.
 - To share the engine code between two machines while keeping each machine's runtime data, see [two-machine-sync.md](two-machine-sync.md) (Chinese).
 
+> **Fastest path:** `curl -fsSL https://raw.githubusercontent.com/RonSpeace/loop-engine/main/scripts/install.sh | bash`
+> installs everything and runs `loop init`, which sets up an OpenCode + OpenAI-compatible model, a project and a first card
+> (see the [README](../README.md#quick-start)). Run `loop init` again any time to change provider, model or project;
+> `loop init --help` lists options for unattended setup. The sections below are the manual path and the other runtimes.
+
 ## 0. What you need
 
 ```

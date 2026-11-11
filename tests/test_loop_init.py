@@ -140,6 +140,13 @@ class LoopInitTest(unittest.TestCase):
         ident = subprocess.run(["git", "var", "GIT_COMMITTER_IDENT"], cwd=toy, capture_output=True)
         self.assertEqual(ident.returncode, 0)
 
+    def test_port_from_environment_is_saved(self):
+        with mock.patch.dict(os.environ, {"REQ_BOARD_PORT": "8941"}):
+            code, out = self.run_init("--provider", "custom", "--base-url", self.base, "--model", "cheap-1",
+                                      "--project", "toy", "--toy-dir", str(self.tmp / "toy"))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(loop_init.read_env(self.tmp / ".env")["REQ_BOARD_PORT"], "8941")
+
     def test_rejected_key_stops_before_writing(self):
         code, out = self.run_init("--provider", "custom", "--base-url", self.base, "--model", "cheap-1",
                                   "--project", "toy", "--toy-dir", str(self.tmp / "toy"), key="sk-wrong")

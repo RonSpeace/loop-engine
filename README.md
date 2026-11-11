@@ -62,20 +62,38 @@ Click a picture to open it full size. Interactive versions (zoom, search, light/
 
 ## Quick start
 
-You need Python 3.11+, git and one agent runtime (see [Agent runtimes](#agent-runtimes)).
+One command on macOS or Linux:
 
 ```bash
-git clone https://github.com/RonSpeace/loop-engine.git && cd loop-engine
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp projects.example.json projects.json      # point it at a git repo for the agents
-.venv/bin/python scripts/doctor.py           # environment self-check
-./scripts/run_local.sh                       # board + dispatcher; Ctrl-C stops both
+curl -fsSL https://raw.githubusercontent.com/RonSpeace/loop-engine/main/scripts/install.sh | bash
 ```
 
-Open <http://127.0.0.1:8899> and create a card.
+It checks for git, Python 3.11+ and Node.js, downloads Loop Engine to `~/loop-engine`, sets up its Python
+environment (using [uv](https://docs.astral.sh/uv/) when your system Python can't), installs
+[OpenCode](https://opencode.ai) and adds a `loop` command. Then `loop init` walks you through the rest:
 
-The full walkthrough — models and API keys, MCP tools, a toy project for your first loop and
-troubleshooting — is in **[docs/quickstart.en.md](docs/quickstart.en.md)**.
+1. **Pick a model provider:** DeepSeek, Zhipu GLM, Qwen, Moonshot Kimi, OpenRouter, OpenAI, or any
+   OpenAI-compatible endpoint.
+2. **Paste your API key.** It is checked on the spot, along with the models you pick (a cheap one for most roles,
+   optionally a stronger one for development). The key is stored only in `.env`, readable by you alone.
+3. **Choose a project:** a small demo project, or a git repository you already have.
+4. **Self-check, start, and queue a first card.** On the demo project, the agents take it through analysis,
+   development, review and acceptance, then merge it. Watch it happen at <http://127.0.0.1:8899>.
+
+Day to day:
+
+```bash
+loop start     # board + dispatcher in the background
+loop status    # is it running, how many cards are in progress
+loop logs      # follow the log
+loop stop      # stop (refuses while agents are working, unless --force)
+loop doctor    # environment self-check
+loop init      # run the setup again: switch provider, model or project
+```
+
+Prefer to do it by hand? Clone the repository, create `.venv`, `pip install -r requirements.txt`, then run
+`.venv/bin/python scripts/loop_init.py`. The full walkthrough — other runtimes (kimi, Claude Code, Codex), MCP tools
+and troubleshooting — is in **[docs/quickstart.en.md](docs/quickstart.en.md)**.
 
 **Docker:**
 
