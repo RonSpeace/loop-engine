@@ -217,7 +217,7 @@ from dispatcher_modules.workspace import (  # noqa: E402,F401  拆分回挂，�
     _REAL_DEV_WORKTREE_PATH, _REAL_WORKTREES_ROOT, _TAPD_ID_RE, _default_branch,
     _link_repo_local_config, artifact_dir, dev_branch, dev_workdir_for, dev_worktree_path,
     dev_write_roots, effective_repos, in_test_env, outside_repos, parse_notes_repos,
-    result_file_path, tapd_id_from_notes, validate_repos, workdir_for,
+    issue_responses_path, result_file_path, tapd_id_from_notes, validate_repos, workdir_for,
 )
 
 # ==================== 项目级 Git 同步/推送（git_sync v1） ====================

@@ -9,6 +9,7 @@ from prompt_i18n import prompt_lang, tr
 from acp_shared import ACP_MODEL, RESULT_FILENAME, _pool_lookup, default_flow_id, enabled_flows, load_project_manifest, pre_role, role_meta
 
 from dispatcher_modules.workspace import outside_repos, validate_repos
+from dispatcher_modules.workspace import issue_responses_path
 from dispatcher_modules.runtime import D, log
 
 
@@ -351,6 +352,22 @@ def _review_rework_extra(req, node, issues, round_no=None):
                                issues="\n".join(lines), artifact=art_path)
 
 
+def _keep_issue_responses(req, role, result):
+    """作者回合结束：带 issue_responses（非空数组）→ 写入/覆盖；不带 → 删除旧文件（防上一轮回应串到本轮）。
+    只是复审输入的旁路留档，失败只告警。"""
+    if not role:
+        return
+    try:
+        path = issue_responses_path(req, role)
+        items = (result or {}).get("issue_responses") if isinstance(result, dict) else None
+        if isinstance(items, list) and items:
+            path.write_text(json.dumps(items, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        else:
+            path.unlink(missing_ok=True)
+    except Exception as e:
+        log.warning(f"需求 #{req.get('id')} 保存 issue_responses 失败（不影响推进）: {e}")
+
+
 def _review_node_done(req, node, result, summary):
     """评审节点完成（§1.4）：verdict pass → 前进（清轮次）；reject → 打回前驱节点复修
     （**先回退指针再 resume**，否则 #279 守卫按当前节点校验会拦截致卡死；打回意见经 extra 注入
@@ -381,6 +398,11 @@ def _review_node_done(req, node, result, summary):
             D.state.get("flow_review_rounds", {}).get(req_id, {}).pop(rounds_key, None)
         D._clear_review_escalation(req_id, rounds_key, prev.get("role") if prev else None)
         D.save_state()
+        if prev and prev.get("role"):
+            try:
+                issue_responses_path(req, prev["role"]).unlink(missing_ok=True)   # 本评审周期已结束
+            except Exception as e:
+                log.warning(f"需求 #{req_id} 清理 issue_responses 失败: {e}")
         D.append_summary(req_id, f"{D.node_display(node)}通过。")
         D.post_dispatcher_event(int(req_id), f"「{D.node_display(node)}」评审通过", kind="phase")
         D._advance_after_node(req, node)
@@ -558,6 +580,7 @@ def handle_result(req, role, returncode, timed_out, started_at, aborted=False):
                 log.warning(f"需求 #{req_id} 结果文件非法 JSON（{result_file}: {e}），已保留现场 {backup_file}")
         else:
             result_file.unlink(missing_ok=True)
+            _keep_issue_responses(req, role, result)
 
     status = (result or {}).get("status")
     summary = (result or {}).get("summary", "")

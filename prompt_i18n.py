@@ -83,8 +83,8 @@ EN = {
     "类型检查": "type check", "构建": "build",
     "工作目录 {name}/AGENTS.md": "{name}/AGENTS.md in the working directory",
     "工作目录仓库根的 AGENTS.md": "AGENTS.md at the repository root of the working directory",
-    "项目约定（{project}，来源 {path}；与通用说明不一致时以此为准）：":
-        "Project conventions ({project}, from {path}; these win over the general instructions where they differ):",
+    "项目约定（{project}，来源 {path}；命令、端口、路径等项目事实与通用说明不一致时以此为准，权限与结果契约仍以上方说明为准）：":
+        "Project conventions ({project}, from {path}; for project facts such as commands, ports and paths these win over the general instructions where they differ; permissions and the result contract still follow the instructions above):",
     "- 常用命令：": "- Common commands: ",
     "；": "; ",
     "{label} `{cmd}`": "{label} `{cmd}`",
@@ -117,6 +117,8 @@ EN = {
     "历史记录（前几次尝试的总结/评审反馈）：{summary}\n": "History (summaries / review feedback of earlier attempts): {summary}\n",
     "（无）": "(none)",
     "补充上下文：{extra}\n": "Additional context: {extra}\n",
+    "作者回应（上一轮问题的逐条处理，{path}）：\n{data}\n":
+        "Author responses (item-by-item handling of last round's issues, {path}):\n{data}\n",
     # dispatcher_modules/agent_run
     "约 200": "about 200",
     "本轮工具调用达上限": "this round's tool-call limit was reached",

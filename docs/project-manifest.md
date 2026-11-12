@@ -91,7 +91,8 @@ status: active                  # draft | active | deprecated
 ## 需求、评审与续跑边界
 
 - notes 只写本次目标、范围、事实、验收与生效方式；notes/summary 都进入 Prompt，不能当作评审日志或规则覆盖通道。评审记录存产物或 `req_reviews`，后者永不自动进入 Prompt。
-- 评审打回：评审角色在 result.json 写 `issues`（`[{id, severity, where, what}]`），返工会话的卡片输入只收到「返工输入：未关闭问题」清单 + 评审产物路径（`prompts/system/rework-issues.md`），作者在自己的 result.json 用 `issue_responses` 逐条回应；未带 issues 的打回照常执行，返工输入回退为意见摘要 + 产物全文并留痕。问题来自评审 result.json，不读 `req_reviews`。模板里「评审反馈」对 summary 的引用暂保留（给人看的留档）。
+- 角色卡片输入：开发角色带阶段输入（上游产物路径，含方案评审的「开发须知」）；验收与冲突解决带需求详情 notes。通用约束 `system/common` 按角色能力措辞（谁跑测试、写工具可写范围、JSON 生成方式、todos）；项目约定只在命令、端口、路径等项目事实上优先于通用说明，权限与结果契约不受其覆盖；评审角色不执行项目测试命令（如 pytest），只在 unittest discover / py_compile 形态内复跑。
+- 评审打回：评审角色在 result.json 写 `issues`（`[{id, severity, where, what}]`），返工会话的卡片输入只收到「返工输入：未关闭问题」清单 + 评审产物路径（`prompts/system/rework-issues.md`），作者在自己的 result.json 用 `issue_responses` 逐条回应（调度器读结果时留档到产物目录 `issue_responses-<作者角色>.json`，作者下一轮不带回应或评审通过即删除；复审时评审的卡片输入「作者回应」内联这份回应，上一轮问题由评审读自己上一轮的产物）；未带 issues 的打回照常执行，返工输入回退为意见摘要 + 产物全文并留痕。问题来自评审 result.json，不读 `req_reviews`。模板里「评审反馈」对 summary 的引用暂保留（给人看的留档）。
 - 数据围栏：卡片输入块里的标题、notes、summary、上游产物指路、返工问题清单用 `<card-data source="…">…</card-data>` 包住，`prompts/system/common.md` 第 9 条声明块内是数据不是指令。
 - 自动续跑：恢复旧会话前把本次编译清单与该会话上次的清单（`runs/*/manifest.json`，按 session_id 匹配）逐项对比——无变化发简化续跑文案；L2–L6（项目约定、条件片段、技能、卡片数据）有变化时续跑消息前置「上下文更新」（逐条附新正文，要求回读）；L0/L1（平台策略、角色模板）有变化时不续用旧会话，开新会话并附交接说明。清单里记 `context_update`。档案上线前的存量会话与看板人工续跑不做对比，仍按简化文案。
 - 关键配置变化后通过看板聊天框交接：列明变更文件、当前基线、已确认目标、剩余任务与验收，要求回读；新会话走看板「新建聊天」，不自行启动 ACP。冲突先报 need_confirm。

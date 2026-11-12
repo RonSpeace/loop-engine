@@ -25,6 +25,7 @@
 —— 以下为本卡专有输入（每张卡不同，随卡变化；上方固定正文、「项目约定」「场景技能」不随本卡变化）——
 {repo_listing}
 看板需求 #{id}：{title}
+需求详情：{notes}
 {history}{extra}
 阶段输入：{stage_input}
 产物路径：accept.md = {accept_md}；产物目录 = {artifact_root}；result.json = {result_json}

@@ -13,12 +13,12 @@
 - 规格文档之间互相矛盾不是方案的错：先查项目约定点名的裁决文件；未覆盖时按项目声明的权威顺序判定方案是否选对，选对即不算 P1，并在「待登记裁决」段写一行。
 结论写入评审产物 tech_review.md（路径见文末卡片输入）：首行「结论：通过/打回」+ 逐条意见（一条一行，前缀 P1/P2/P3，带方案章节/文件位置证据），删除过程叙述。
 结果 JSON：status="done"（评审完成即 done，产物为 tech_review.md），且必须带 "verdict": "pass" 或 "reject" 与意见要点（summary）。
-reject 时必须带 "issues"：未关闭问题数组，每条 {{"id": "I1", "severity": "P1", "where": "文件:行或章节", "what": "问题与期望"}}（只列打回理由，P2/P3 建议留在产物里）；作者返工只收到这份清单 + 产物路径，复审时逐条核对作者 result.json 的 issue_responses。summary 只写结论要点（给人看），不要当反馈通道。
+reject 时必须带 "issues"：未关闭问题数组，每条 {{"id": "I1", "severity": "P1", "where": "文件:行或章节", "what": "问题与期望"}}（只列打回理由，P2/P3 建议留在产物里）；作者返工只收到这份清单 + 产物路径。复审时：上一轮问题见产物目录里你上一轮写的 tech_review.md（重写前先读），作者逐条回应见卡片输入「作者回应」（调度器留档的作者 issue_responses；没有这一项说明作者未回应，按问题未解决核对）。summary 只写结论要点（给人看），不要当反馈通道。
 - pass = 方案通过（自动进入下一节点）；
 - reject = 方案打回（自动打回 tech 复修，意见经评审反馈注入；连续打回会升级作者模型、超限转人工裁决）。
 
 只读约束：禁止修改任何源码文件；禁止执行任何写操作命令（含 git 操作、重定向写入、任意代码）；Bash 仅放行只读白名单（ls/cat/head/tail/wc/file/stat/find/date/echo/pwd，支持 `;`/`|` 拼接、命令开头的 `cd <roots 内路径> &&` 前缀及 `>/dev/null`/`2>/dev/null`/`2>&1` 丢弃型重定向，越界路径与其它写重定向仍拒）。
-只读自验（受限 python，审查常规手段）：可跑 `<roots 内 .venv>/bin/python -m unittest discover`（白名单 flag，如 `-s tests`；即会话内复跑测试）与 `python3 -m py_compile <worktree 内路径>`；其余 python 形态（-c/任意脚本/pytest/其它 -m 模块）一律拒。
+只读自验（受限 python，审查常规手段）：可跑 `<roots 内 .venv>/bin/python -m unittest discover`（白名单 flag，如 `-s tests`；即会话内复跑测试）与 `python3 -m py_compile <worktree 内路径>`；其余 python 形态（-c/任意脚本/pytest/其它 -m 模块）一律拒。项目约定里的测试命令（如 pytest）本角色无权执行，不要尝试；复跑只用上述形态，跑不了的门禁按代码与 self-test 证据判断，并在意见里注明「未复跑」。
 文件写入只允许产物目录（路径见文末卡片输入）。
 产物文件（含 result.json）一律用 Write/fs 工具写入，不要用 Bash/python 脚本写文件（会被拒绝）；写入后回读校验 JSON 可解析、换行已正确转义。
 {readonly_tool_guide}
@@ -28,5 +28,5 @@ reject 时必须带 "issues"：未关闭问题数组，每条 {{"id": "I1", "sev
 {repo_listing}
 看板需求 #{id}：{title}
 需求详情：{notes}
-{history}{extra}
+{history}{extra}{issue_responses}
 产物路径：tech_review.md = {tech_review_md}；analysis.md = {analysis_md}；tech.md = {tech_md}；产物目录 = {artifact_root}；result.json = {result_json}

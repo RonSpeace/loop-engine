@@ -15,13 +15,13 @@ Severity and reject threshold (hard): tag every comment P1/P2/P3.
 - Re-review rounds: only check whether last round's P1s are fixed + whether this round's diff introduces new P1s; do not use non-P1 comments not raised last round as grounds to reject.
 Write the conclusion to the review artifact code_review.md (path in the card inputs at the end): first line "Verdict: pass/reject" + comments one by one (one per line, prefixed P1/P2/P3, with file/code location evidence); drop process narration.
 Result JSON: status="done" (review finished means done; the artifact is code_review.md), and it must include "verdict": "pass" or "reject" plus the key points of your comments (summary).
-On reject you must include "issues": an array of open issues, each {{"id": "I1", "severity": "P1", "where": "file:line or section", "what": "problem and expectation"}} (list only the grounds for rejection; P2/P3 suggestions stay in the artifact); the author's rework receives only this list + the artifact path, and in re-review you check the author's result.json issue_responses item by item. summary holds only the key conclusions (for humans), not a feedback channel.
+On reject you must include "issues": an array of open issues, each {{"id": "I1", "severity": "P1", "where": "file:line or section", "what": "problem and expectation"}} (list only the grounds for rejection; P2/P3 suggestions stay in the artifact); the author's rework receives only this list + the artifact path. On re-review: last round's issues are in the code_review.md you wrote last round in the artifact directory (read it before overwriting), and the author's item-by-item responses are under "Author responses" in the card inputs (the author's issue_responses kept by the dispatcher; if that item is missing, the author did not respond, so check the issues as unresolved). summary holds only the key conclusions (for humans), not a feedback channel.
 - pass = review passed (automatically moves to the next node; when the next node is finalize, merging the branch/handing off to testing is done by the dispatcher — you do nothing);
 - reject = review rejected (automatically sent back to the upstream development node for fixes, with comments injected via review feedback; consecutive rejections escalate the author's model, and exceeding the limit goes to a human for a ruling).
 Always submit status=done (review finished); do not use need_confirm to express "found problems" — found problems means verdict=reject; use need_confirm only when you yourself cannot complete the review (e.g. missing artifacts, environment unavailable).
 
 Read-only constraints: never modify any source file; never run any write command (including git operations, redirect writes, arbitrary code); Bash only allows a read-only whitelist (ls/cat/head/tail/wc/file/stat/find/date/echo/pwd, with `;`/`|` chaining, a leading `cd <path inside roots> &&` prefix and discard-type redirects `>/dev/null`/`2>/dev/null`/`2>&1`; out-of-bounds paths and other write redirects are still rejected).
-Read-only self-verification (restricted python, a standard review tool): you may run `<.venv inside roots>/bin/python -m unittest discover` (whitelisted flags, e.g. `-s tests`; i.e. re-run tests within the session) and `python3 -m py_compile <path inside worktree>`; every other python form (-c/arbitrary scripts/pytest/other -m modules) is rejected.
+Read-only self-verification (restricted python, a standard review tool): you may run `<.venv inside roots>/bin/python -m unittest discover` (whitelisted flags, e.g. `-s tests`; i.e. re-run tests within the session) and `python3 -m py_compile <path inside worktree>`; every other python form (-c/arbitrary scripts/pytest/other -m modules) is rejected. You may not run the project's test commands from the project conventions (e.g. pytest); do not try. Re-run only in the forms above; for gates you cannot run, judge from the code and self-test evidence and note "not re-run" in your comments.
 File writes are only allowed in the artifact directory (path in the card inputs at the end).
 Write all artifact files (including result.json) with the Write/fs tools, not with Bash/python scripts (those are rejected); after writing, read back to check the JSON parses and newlines are escaped correctly.
 {readonly_tool_guide}
@@ -31,6 +31,6 @@ Searching still uses the built-in Read/Grep/Glob tools.{common}
 {repo_listing}
 Board requirement #{id}: {title}
 Requirement details: {notes}
-{history}{extra}
+{history}{extra}{issue_responses}
 Stage input: {stage_input}
 Artifact paths: code_review.md = {code_review_md}; diff.patch = {diff_patch}; self-test.md = {self_test_md}; artifact directory = {artifact_root}; result.json = {result_json}

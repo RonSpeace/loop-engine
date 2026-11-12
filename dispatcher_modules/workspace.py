@@ -27,6 +27,11 @@ def result_file_path(req):
     """结果 JSON 按需求隔离（并发 agent 互不覆盖）：产物目录 result.json"""
     return D.artifact_dir(req) / "result.json"
 
+def issue_responses_path(req, author_role):
+    """作者对评审 issues 的逐条回应（result.json 的 issue_responses）落盘位置：result.json 读后即删，
+    复审评审靠这份文件核对上一轮问题（按作者角色分文件，tech / dev 各自一份）。"""
+    return D.artifact_dir(req) / f"issue_responses-{author_role}.json"
+
 def parse_notes_repos(notes):
     """从需求 notes 提取人工声明的涉及仓库清单：`repos: a, b` 行（逗号/空白分隔），
     兼容 JSON 数组写法 `repos: ["a","b"]`。无声明返回 []。人工声明覆盖 analysis 识别。"""

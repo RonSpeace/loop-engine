@@ -25,6 +25,7 @@ Permission constraints: running commands is allowed (running tests, may create t
 —— Card-specific inputs below (differ per card and change with it; the fixed text above, "Project conventions" and "Scenario skills" do not change with this card) ——
 {repo_listing}
 Board requirement #{id}: {title}
+Requirement details: {notes}
 {history}{extra}
 Stage input: {stage_input}
 Artifact paths: accept.md = {accept_md}; artifact directory = {artifact_root}; result.json = {result_json}

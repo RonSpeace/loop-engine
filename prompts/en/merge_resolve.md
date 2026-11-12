@@ -15,6 +15,7 @@ Tasks:
 —— Card-specific inputs below (different for every card, change with the card; the fixed text above, "Project conventions" and "Scenario skills" do not change with this card) ——
 {repo_listing}
 Board requirement #{id}: {title}
+Requirement details: {notes}
 {merge_ctx}Branch: {branch}
 {history}{extra}
 Run parameters: time box about {timeout_minutes} minutes (forcibly terminated on timeout); step limit {max_steps} steps

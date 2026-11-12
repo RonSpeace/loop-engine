@@ -34,6 +34,7 @@ ROLE_PLACEHOLDERS = (
     "timeout_minutes", "max_steps", "analysis_md", "prd_md", "tech_md", "self_test_md", "accept_md",
     "diff_patch", "tech_review_md", "code_review_md", "artifact_root", "result_json", "review_feedback",
     "stage_input", "history", "extra", "merge_ctx", "readonly_tool_guide", "common", "card_inputs",
+    "issue_responses",
 )
 # 固定段（{card_inputs} 之前）只允许这几个项目级常量（与 flow_engine.FIXED_PART_PLACEHOLDERS 一致）
 ROLE_FIXED_PLACEHOLDERS = ("project", "project_goal_hint", "readonly_tool_guide", "common")

@@ -15,6 +15,7 @@
 —— 以下为本卡专有输入（每张卡不同，随卡变化；上方固定正文、「项目约定」「场景技能」不随本卡变化）——
 {repo_listing}
 看板需求 #{id}：{title}
+需求详情：{notes}
 {merge_ctx}分支：{branch}
 {history}{extra}
 运行参数：时间盒约 {timeout_minutes} 分钟（超时强制终止）；步数上限 {max_steps} 步
