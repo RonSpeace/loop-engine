@@ -507,15 +507,41 @@ def paths_from_text(text):
     return out
 
 
+GLOBAL_SKILLS_EN_DIR = REPO_DIR / "prompts" / "en" / "skills"
+
+
+def localized(skill, lang):
+    """技能的语言版本：随代码发布的全局技能（prompts/skills/<名>/SKILL.md）在 prompts/en/skills/ 下有英文版
+    时返回英文版 Skill（只用于正文与描述；激活方式、角色等选择依据仍以中文原版为准）；其它情况返回原技能。"""
+    if lang == "zh" or skill.legacy or skill.scope != "global":
+        return skill
+    try:
+        skill.path.relative_to(GLOBAL_SKILLS_DIR)
+    except ValueError:
+        return skill
+    en_path = GLOBAL_SKILLS_EN_DIR / skill.name / "SKILL.md"
+    if not en_path.is_file():
+        return skill
+    en = load_skill(en_path, scope="global", name=skill.name)
+    return skill if en.errors else en
+
+
+def skill_body(skill, lang="zh"):
+    """进 prompt 的正文（按语言）。"""
+    return localized(skill, lang).text
+
+
 def auto_hit(skill, paths_hint=(), text=""):
     """auto 技能命中依据：路径 glob 命中优先，其次关键词（不区分大小写，对 title + notes）。
-    返回说明串（写进清单的 why）或 None。"""
+    关键词含英文版技能的关键词（英文卡片也能命中）。返回说明串（写进清单的 why）或 None。"""
     for g in skill.paths:
         for p in paths_hint or ():
             if glob_match(g, p):
                 return f"路径 {_norm_path(p)} 命中 {g}"
     low = (text or "").lower()
-    for k in skill.keywords:
+    en = localized(skill, "en")
+    keywords = list(skill.keywords) + [k for k in (en.keywords if en is not skill else ()) if k not in skill.keywords]
+    for k in keywords:
         if k and k.lower() in low:
             return f"关键词「{k}」命中"
     return None
@@ -655,23 +681,27 @@ def select_skills(project, role, req, repos, *, paths_hint=(), draft_skills=(),
 
 # ---------------- 渲染辅助（编译器接线用） ----------------
 
-def skills_block(skills):
+def skills_block(skills, lang="zh"):
     """技能正文块（与旧 scenario_skills_text 逐字一致）：`\\n【场景技能：名】\\n正文\\n\\n…\\n`；空 → ""。
-    skills 可为 [Skill] 或 [(Skill, why)]。"""
+    skills 可为 [Skill] 或 [(Skill, why)]。lang="en"：标题英文，正文取技能的英文版（有则用）。"""
+    from prompt_i18n import tr
     parts = []
     for s in skills or ():
         sk = s[0] if isinstance(s, tuple) else s
-        parts.append(f"【场景技能：{sk.name}】\n{sk.text}")
+        parts.append(tr(lang, "【场景技能：{name}】\n{text}", name=sk.name, text=skill_body(sk, lang)))
     return ("\n" + "\n\n".join(parts) + "\n") if parts else ""
 
 
-def catalog_block(skills):
+def catalog_block(skills, lang="zh"):
     """技能目录（L5）：每个技能一行「名：描述（路径）」；空 → ""。"""
+    from prompt_i18n import tr
     if not skills:
         return ""
-    lines = ["\n【可用技能目录】以下技能未内联正文，需要时用读文件工具读取对应路径："]
+    lines = [tr(lang, "\n【可用技能目录】以下技能未内联正文，需要时用读文件工具读取对应路径：")]
     for sk in skills:
-        lines.append(f"- {sk.name}：{sk.description or '（无描述）'}（{sk.rel_path}）")
+        loc = localized(sk, lang)
+        lines.append(tr(lang, "- {name}：{desc}（{path}）", name=sk.name,
+                        desc=loc.description or tr(lang, "（无描述）"), path=loc.rel_path))
     return "\n".join(lines) + "\n"
 
 

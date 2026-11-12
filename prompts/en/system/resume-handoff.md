@@ -1,0 +1,1 @@
+[Session handoff] This card already had a "{role}" session, but {reason} changed ({changed}), so the dispatcher opened a new session; the full latest prompt is above. First check the artifact directory's current state and git status / git log to see what is done, then continue the remaining work; do not redo steps that are completed and verified.

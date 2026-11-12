@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dispatcher_modules.agent_run import active_lock
 from dispatcher_modules.workspace import effective_repos
+from prompt_i18n import prompt_lang, tr
 from dispatcher_modules.runtime import D, log, subprocess
 
 
@@ -461,9 +462,11 @@ def _merge_resolve_retry(req, reason):
                           f"merge_resolve 运行失败（{reason}），第 {entry['attempts']} 次自动重试",
                           kind="retry")
     D.spawn_agent(req, role="merge_resolve", resume=True,
-                extra=f"上次尝试失败（第 {entry['attempts']} 次）：{reason}。"
-                      "先确认改动完好（git status / 冲突文件是否已解决）、worktree 内冲突是否仍在，"
-                      "再继续解决并提交；如属语义冲突需要人工决策，直接报 need_confirm。")
+                extra=tr(prompt_lang(req.get("project")), "上次尝试失败（第 {n} 次）：{reason}。{hint}",
+                         n=entry["attempts"], reason=reason,
+                         hint=tr(prompt_lang(req.get("project")),
+                                 "先确认改动完好（git status / 冲突文件是否已解决）、worktree 内冲突是否仍在，"
+                                 "再继续解决并提交；如属语义冲突需要人工决策，直接报 need_confirm。")))
     return True
 
 

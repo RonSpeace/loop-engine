@@ -1,0 +1,1 @@
+The tool step limit for this round has been reached ({detail}); the session was stopped by the dispatcher. Immediately stop new exploration and changes, and within at most {wrapup_steps} steps write the current progress to result.json: completed and verified → done; otherwise blocked, with summary stating what is done, what is not, and the next step. End the round once written.

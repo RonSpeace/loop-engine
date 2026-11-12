@@ -313,6 +313,7 @@ once; if it fails again the card is deferred with the reason in its summary — 
 | Models and API keys | `config.toml` in the harness home + `KIMI_MODEL` |
 | Per-role / per-project models | `flows.json` `roles.<role>.model`; per project in the board's "Model tuning" |
 | Agent runtime | `projects.json` `runtimes` / `runtime`, or `flows.json` `roles.<role>.runtime` |
+| Prompt language (what the agents read and write: English or Chinese) | `LOOP_PROMPT_LANG=en` or `zh` (set by `loop init`; default `zh`); per project `projects.json` `"prompt_language": "en"`. English texts live in `prompts/en/`; local overrides in `prompts.local/en/` |
 | kimi binary | `KIMI_BIN` |
 | Harness home | `KIMI_CODE_HOME` (default `~/.kimi-code-deepseek`) |
 | Board port / address | `REQ_BOARD_PORT` (default 8899); the dispatcher reaches the board via `REQ_BOARD_API` |

@@ -23,6 +23,7 @@ from pathlib import Path
 
 import acp_shared
 import prompt_store
+from prompt_i18n import display, prompt_lang, tr
 from acp_shared import GLOBAL_SKILLS_DIR, MANIFEST_GUIDE_MAX_CHARS, _SKILL_NAME_RE, _repo_rel_file, \
     load_project_manifest, role_meta
 
@@ -37,6 +38,7 @@ REAL_ARTIFACTS_ROOT = Path.home() / ".req-board" / "artifacts"
 RUNS_DIRNAME = "runs"
 _TRUNC_MARK = "已截断，完整内容见"
 REWORK_MARK = "返工输入：未关闭问题"
+REWORK_MARKS = (REWORK_MARK, "Rework input: open issues")   # 中 / 英（registry locked / locked_en）
 
 
 class MissingRequiredContext(Exception):
@@ -80,26 +82,26 @@ def public_items(items):
     return [{k: v for k, v in it.items() if not k.startswith("_")} for it in items]
 
 
-def _store_item(item_id, layer, why, text=None, *, chars=None):
-    """提示词存储条目的清单项（默认/覆盖来源取自存储）。"""
+def _store_item(item_id, layer, why, text=None, *, chars=None, lang="zh"):
+    """提示词存储条目的清单项（默认/覆盖来源取自存储；lang = 本卡项目的提示词语言）。"""
     try:
         meta = prompt_store._entry(item_id)
         title = meta.get("title") or item_id
-        org = prompt_store.origin(item_id)
-        src = prompt_store.src(item_id)
+        org = prompt_store.origin(item_id, lang)
+        src = prompt_store.src(item_id, lang)
         if text is None:
-            text = prompt_store.read(item_id)
+            text = prompt_store.read(item_id, lang)
     except Exception:
         title, org, src = item_id, "default", ""
         text = text or ""
     return _item(item_id, layer, title, text, origin=org, src=src, why=why, chars=chars)
 
 
-def _stale_warnings(item_ids):
+def _stale_warnings(item_ids, lang="zh"):
     out = []
     for iid in item_ids:
         try:
-            if prompt_store.status(iid) == "stale":
+            if prompt_store.status(iid, lang) == "stale":
                 out.append({"code": "stale_override", "id": iid,
                             "message": f"{iid} 的本机覆盖基于旧版默认（默认已更新），编译仍用覆盖"})
         except Exception:
@@ -209,11 +211,13 @@ def _card_items(req, role, extra, card_text, merge_text):
     """L6 卡片数据 + L7 运行参数（卡片输入块按来源拆项；剩余为模板框架与运行参数）。"""
     items = []
     used = 0
-    title_notes = f"{req.get('title') or ''}\n{req.get('notes') or '（无）'}"
+    title_notes = f"{req.get('title') or ''}\n{req.get('notes') or tr(prompt_lang(req.get('project')), '（无）')}"
     items.append(_item("card:title-notes", "L6", "标题与需求详情", title_notes, origin="card",
                        src=f"requirements#{req['id']}", why="本卡"))
     used += len(title_notes)
-    summary = D.compact_summary(req.get("summary"))
+    lang = prompt_lang(req.get("project"))
+    summary = (D.compact_summary(req.get("summary")) if lang == "zh"
+               else D.compact_summary(req.get("summary"), lang=lang))
     if summary:
         items.append(_item("card:summary", "L6", "开发总结（评审反馈/历史记录）", summary, origin="card",
                            src=f"requirements#{req['id']}.summary", why="卡片 summary 非空"))
@@ -223,7 +227,7 @@ def _card_items(req, role, extra, card_text, merge_text):
         items.append(_item("card:stage-input", "L6", "上游产物指路", si, origin="card",
                            src=str(D.artifact_dir(req)), why=f"流程第 {node_index_of(req)} 个节点"))
         used += len(si)
-    if extra and REWORK_MARK in extra:
+    if extra and any(m in extra for m in REWORK_MARKS):
         # 评审打回带 issues 的返工输入（prompts/system/rework-issues.md）：L6 数据
         items.append(_item("card:rework-issues", "L6", "返工输入：未关闭问题", extra, origin="card",
                            src="评审 result.json issues", why="评审打回"))
@@ -233,7 +237,8 @@ def _card_items(req, role, extra, card_text, merge_text):
                            why="调度器传入（失败重试原因等）"))
         used += len(extra)
     if merge_text:
-        items.append(_store_item("fragment/merge-resolve", "L7", "冲突解决：按卡填冲突仓库", text=merge_text))
+        items.append(_store_item("fragment/merge-resolve", "L7", "冲突解决：按卡填冲突仓库", text=merge_text,
+                                 lang=prompt_lang(req.get("project"))))
         used += len(merge_text)
     items.append(_item("runtime:card-frame", "L7", "卡片输入框架与运行参数", card_text, origin="engine",
                        src=f"role/{role}（{CARD_INPUTS_MARK} 之后）", why="分支/时限/步数/产物路径",
@@ -268,7 +273,9 @@ def compile_context(req, role, extra="", *, dry=False):
     contract = ""
     # #419 前置槽位契约：仅当卡处于前置阶段（未入流程、无快照）时追加（按槽位而非角色名判定）
     if in_pre_stage(req):
-        contract = pre_slot_contract_text(D.result_file_path(req))
+        lang = prompt_lang(req["project"])
+        contract = (pre_slot_contract_text(D.result_file_path(req)) if lang == "zh"
+                    else pre_slot_contract_text(D.result_file_path(req), lang=lang))
         prompt += contract
     compiled = Compiled(prompt=prompt, parts=list(parts), prefix="".join(parts[:3]))
     try:
@@ -291,25 +298,27 @@ def compile_context(req, role, extra="", *, dry=False):
 
 
 def _fill_manifest(compiled, req, role, extra, parts, contract, meta=None):
-    tmpl = D.role_prompt(role)
+    lang = prompt_lang(req["project"])
+    tmpl = D.role_prompt(role) if lang == "zh" else D.role_prompt(role, lang)
     fixed_tmpl, _card_tmpl = split_role_template(tmpl)
     items, skipped, warnings = [], [], []
-    common = prompt_store.read("system/common")
+    common = prompt_store.read("system/common", lang)
     used_ids = ["system/common", f"role/{role}"]
-    items.append(_store_item("system/common", "L0", "全部角色", text=common))
+    items.append(_store_item("system/common", "L0", "全部角色", text=common, lang=lang))
     fixed_chars = len(parts[0]) - len(common)
     if "{readonly_tool_guide}" in fixed_tmpl:
-        guide = prompt_store.read("system/readonly-tools")
-        items.append(_store_item("system/readonly-tools", "L0", "角色模板引用 {readonly_tool_guide}", text=guide))
+        guide = prompt_store.read("system/readonly-tools", lang)
+        items.append(_store_item("system/readonly-tools", "L0", "角色模板引用 {readonly_tool_guide}", text=guide,
+                                 lang=lang))
         used_ids.append("system/readonly-tools")
         fixed_chars -= len(guide)
     goal = (D.PROJECTS.get(req["project"]) or {}).get("goal") or ""
     if goal and "{project_goal_hint}" in fixed_tmpl:
-        hint = f"项目目标（goal）：{goal}\n"
+        hint = tr(lang, "项目目标（goal）：{goal}\n", goal=goal)
         items.append(_item(f"project:{req['project']}/goal", "L2", "项目目标（goal）", hint, origin="project",
                            src="projects.json", why="项目配置了 goal"))
         fixed_chars -= len(hint)
-    role_item = _store_item(f"role/{role}", "L1", "当前节点角色", text=fixed_tmpl, chars=max(0, fixed_chars))
+    role_item = _store_item(f"role/{role}", "L1", "当前节点角色", text=fixed_tmpl, chars=max(0, fixed_chars), lang=lang)
     items.insert(1, role_item)
     frags = selected_fragments(req["project"], role)
     frag_text = fragments_text(req["project"], role)
@@ -329,16 +338,16 @@ def _fill_manifest(compiled, req, role, extra, parts, contract, meta=None):
     warnings += sk_warn
     # L3 条件片段：稳定前缀（项目约定之后）
     for fid in frags:
-        items.append(_store_item(fid, "L3", _fragment_why(fid)))
+        items.append(_store_item(fid, "L3", _fragment_why(fid), lang=lang))
     used_ids += frags
     merge_text = _merge_text_of(parts[3]) if role == "merge_resolve" else ""
     if merge_text:
         used_ids.append("fragment/merge-resolve")
     items += _card_items(req, role, extra, parts[3], merge_text)
     if contract:
-        items.append(_store_item("system/pre-contract", "L7", "卡处于前置环节（未入流程）", text=contract))
+        items.append(_store_item("system/pre-contract", "L7", "卡处于前置环节（未入流程）", text=contract, lang=lang))
         used_ids.append("system/pre-contract")
-    warnings += _stale_warnings(used_ids)
+    warnings += _stale_warnings(used_ids) if lang == "zh" else _stale_warnings(used_ids, lang)
     compiled.items, compiled.skipped, compiled.warnings = items, skipped, warnings
 
 
@@ -513,21 +522,28 @@ def resume_plan(req, role, compiled, session_id):
         if "L1" in layers:
             reasons.append("角色模板")
         plan["mode"] = "new_session"
-        plan["handoff"] = prompt_store.render("system/resume-handoff", role=D.ROLE_NAMES.get(role, role),
-                                              reason="、".join(reasons), changed="、".join(plan["changed"]))
+        lang = prompt_lang(req.get("project"))
+        plan["handoff"] = prompt_store.render("system/resume-handoff", lang=lang,
+                                              role=display(lang, D.ROLE_NAMES.get(role, role)),
+                                              reason=tr(lang, "、").join(tr(lang, r) for r in reasons),
+                                              changed=tr(lang, "、").join(plan["changed"]))
         return plan
+    lang = prompt_lang(req.get("project"))
     blocks = []
     for k in changed:
         it = new[k]
         text = str(it.get("_text") or "")
         if len(text) > UPDATE_ITEM_MAX_CHARS:
-            text = text[:UPDATE_ITEM_MAX_CHARS] + f"\n……（超过 {UPDATE_ITEM_MAX_CHARS} 字已截断，完整内容见 {it.get('src')}）"
+            text = text[:UPDATE_ITEM_MAX_CHARS] + tr(lang, "\n……（超过 {n} 字已截断，完整内容见 {src}）",
+                                                     n=UPDATE_ITEM_MAX_CHARS, src=it.get("src"))
         if k.startswith("card:"):
             text = f'<card-data source="{k}">{text}</card-data>'
-        tag = "新增" if k not in old else "已变更"
-        blocks.append(f"--- {tag}：{it.get('title') or k}（{k}，{it.get('layer')}）---\n{text}")
+        tag = tr(lang, "新增") if k not in old else tr(lang, "已变更")
+        blocks.append(tr(lang, "--- {tag}：{title}（{key}，{layer}）---\n{text}", tag=tag,
+                         title=display(lang, it.get("title") or k), key=k, layer=it.get("layer"), text=text))
     for k in removed:
-        blocks.append(f"--- 已移除：{(old[k].get('title') or k)}（{k}）——不再适用，忽略此前收到的这部分 ---")
+        blocks.append(tr(lang, "--- 已移除：{title}（{key}）——不再适用，忽略此前收到的这部分 ---",
+                         title=display(lang, old[k].get("title") or k), key=k))
     plan["mode"] = "update"
-    plan["block"] = prompt_store.render("system/context-update", items="\n".join(blocks))
+    plan["block"] = prompt_store.render("system/context-update", lang=lang, items="\n".join(blocks))
     return plan

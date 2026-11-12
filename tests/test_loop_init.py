@@ -147,6 +147,19 @@ class LoopInitTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(loop_init.read_env(self.tmp / ".env")["REQ_BOARD_PORT"], "8941")
 
+    def test_prompt_language_follows_flag_then_locale(self):
+        with mock.patch.dict(os.environ, {"LANG": "zh_CN.UTF-8", "LC_ALL": "", "LC_MESSAGES": ""}):
+            code, out = self.run_init("--provider", "custom", "--base-url", self.base, "--model", "cheap-1",
+                                      "--project", "toy", "--toy-dir", str(self.tmp / "toy"))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(loop_init.read_env(self.tmp / ".env")["LOOP_PROMPT_LANG"], "zh")
+        code, out = self.run_init("--provider", "custom", "--base-url", self.base, "--model", "cheap-1",
+                                  "--lang", "en", "--project", "toy", "--toy-dir", str(self.tmp / "toy"))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(loop_init.read_env(self.tmp / ".env")["LOOP_PROMPT_LANG"], "en")
+        with mock.patch.dict(os.environ, {"LANG": "en_US.UTF-8", "LC_ALL": "", "LC_MESSAGES": ""}):
+            self.assertEqual(loop_init.default_prompt_lang(), "en")
+
     def test_rejected_key_stops_before_writing(self):
         code, out = self.run_init("--provider", "custom", "--base-url", self.base, "--model", "cheap-1",
                                   "--project", "toy", "--toy-dir", str(self.tmp / "toy"), key="sk-wrong")

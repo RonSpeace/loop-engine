@@ -48,7 +48,8 @@ class StaticContract(unittest.TestCase):
         """services 不 import board / blueprints；services 之间只允许下列边（均指向更早实施的模块，故无环）。"""
         allowed = {"harness_config": {"model_pool"}, "presentation": {"model_pool"},
                    "mcp_servers": {"requirements", "dispatcher_ops", "chat_runtime"},
-                   "reqchat_runtime": {"chat_runtime", "mcp_servers"},
+                   "chat_runtime": {"chat_prompts_en"},
+                   "reqchat_runtime": {"chat_runtime", "mcp_servers", "chat_prompts_en"},
                    "assistant_runtime": {"assistant_card", "chat_runtime"},
                    "assistant_mcp": {"assistant_card", "assistant_runtime", "requirements"}}
         for m in MODS:

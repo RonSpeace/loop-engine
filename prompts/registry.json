@@ -11,6 +11,9 @@
    "locked": [
     "3. 结束前把结果 JSON 写入 result.json（路径见文末卡片输入）：{\"status\": \"done|blocked|need_confirm\", \"summary\": \"做了什么/验证方式及结果/失败原因\", \"question\": \"仅 need_confirm 时填\"}"
    ],
+   "locked_en": [
+    "3. Before finishing, write the result JSON to result.json (path in the card inputs at the end): {\"status\": \"done|blocked|need_confirm\", \"summary\": \"what was done / how it was verified and the result / failure reason\", \"question\": \"only for need_confirm\"}"
+   ],
    "used_by": "全部角色 · 所有流程节点（角色模板 {common}）",
    "when": null
   },
@@ -39,6 +42,9 @@
    "locked": [
     "【进程安全红线】你的 ACP 驱动进程 PID={pid}（进程组）。"
    ],
+   "locked_en": [
+    "[Process-safety red line] Your ACP driver process PID={pid} (process group)."
+   ],
    "used_by": "全部角色 · 每次发送（新会话、续跑、人工续跑）末尾",
    "when": null
   },
@@ -58,6 +64,10 @@
    "locked": [
     "- \"suggested_flow\": 推荐的后置流程 id",
     "- \"repos\": 本需求实际涉及改动的仓库目录名数组"
+   ],
+   "locked_en": [
+    "- \"suggested_flow\": the recommended downstream flow id",
+    "- \"repos\": array of repo directory names this requirement actually changes"
    ],
    "used_by": "前置环节（卡未入流程时）提示词末尾",
    "when": null
@@ -243,6 +253,9 @@
    ],
    "locked": [
     "返工输入：未关闭问题"
+   ],
+   "locked_en": [
+    "Rework input: open issues"
    ],
    "used_by": "评审打回后的作者返工会话（问题来自评审 result.json 的 issues）",
    "when": null

@@ -1,0 +1,1 @@
+This is a branch-only project (branch_only): on done the dispatcher automatically pushes the f- branch, and external CI/CD or a human merges it into the main branch at release time; todos should read like "complete test verification on the pushed f- branch", not "merge the branch into master".

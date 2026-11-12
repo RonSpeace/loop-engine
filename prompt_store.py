@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
 from pathlib import Path
 
+log = logging.getLogger(__name__)
 REPO_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = REPO_DIR / "prompts"
 REGISTRY_FILE = PROMPTS_DIR / "registry.json"
@@ -120,8 +122,19 @@ def _clean(e):
     return {k: v for k, v in e.items() if not k.startswith("_")}
 
 
-def default_text(item_id) -> str:
+def _lang_rel(e, lang):
+    """语言版本的相对路径：中文 = 注册的 file，英文 = en/<file>。"""
+    return e["file"] if lang == "zh" else f"{lang}/{e['file']}"
+
+
+def default_text(item_id, lang="zh") -> str:
+    """默认文本。英文版文件缺失时退回中文并告警（tests/test_prompt_i18n.py 保证随代码发布的条目齐全）。"""
     e = _entry(item_id)
+    if lang != "zh":
+        text = _read_file(PROMPTS_DIR / _lang_rel(e, lang))
+        if text is not None:
+            return text
+        log.warning("提示词条目 %s 缺 %s 版本 prompts/%s，按中文发送", item_id, lang, _lang_rel(e, lang))
     if e.get("kind") == "role":
         return e["_default"]
     text = _read_file(PROMPTS_DIR / e["file"])
@@ -130,51 +143,53 @@ def default_text(item_id) -> str:
     return text
 
 
-def _local_path(e):
-    return local_dir() / e["file"]
+def _local_path(e, lang="zh"):
+    return local_dir() / _lang_rel(e, lang)
 
 
-def override_text(item_id):
-    return _read_file(_local_path(_entry(item_id)))
+def override_text(item_id, lang="zh"):
+    return _read_file(_local_path(_entry(item_id), lang))
 
 
-def base_text(item_id):
+def base_text(item_id, lang="zh"):
     """覆盖保存时的默认文本（旁路 .base 文件）；无 → None。"""
     e = _entry(item_id)
-    return _read_file(Path(str(_local_path(e)) + ".base"))
+    return _read_file(Path(str(_local_path(e, lang)) + ".base"))
 
 
-def read(item_id) -> str:
-    """有覆盖用覆盖，否则默认。"""
-    ov = override_text(item_id)
-    return ov if ov is not None else default_text(item_id)
+def read(item_id, lang="zh") -> str:
+    """有覆盖用覆盖，否则默认（按语言各自一套：prompts.local/en/ 覆盖英文版）。"""
+    ov = override_text(item_id, lang)
+    return ov if ov is not None else default_text(item_id, lang)
 
 
-def origin(item_id) -> str:
-    return "override" if override_text(item_id) is not None else "default"
+def origin(item_id, lang="zh") -> str:
+    return "override" if override_text(item_id, lang) is not None else "default"
 
 
-def status(item_id) -> str:
-    if override_text(item_id) is None:
+def status(item_id, lang="zh") -> str:
+    if override_text(item_id, lang) is None:
         return "default"
-    base = base_text(item_id)
-    if base is not None and sha256(base) != sha256(default_text(item_id)):
+    base = base_text(item_id, lang)
+    if base is not None and sha256(base) != sha256(default_text(item_id, lang)):
         return "stale"
     return "override"
 
 
-def src(item_id) -> str:
+def src(item_id, lang="zh") -> str:
     """当前生效文本的来源路径（展示用）。"""
     e = _entry(item_id)
-    lp = _local_path(e)
+    lp = _local_path(e, lang)
     if lp.is_file():
         return str(lp)
+    if lang != "zh" and (PROMPTS_DIR / _lang_rel(e, lang)).is_file():
+        return f"prompts/{_lang_rel(e, lang)}"
     return f"prompts/{e['file']}"
 
 
-def render(item_id, **values) -> str:
+def render(item_id, *, lang="zh", **values) -> str:
     """读条目并替换声明的占位符（单遍：值里的花括号不再展开）；未传的声明占位符原样保留。"""
-    text = read(item_id)
+    text = read(item_id, lang)
     declared = set(_entry(item_id).get("placeholders") or ())
 
     def _sub(m):
@@ -185,7 +200,7 @@ def render(item_id, **values) -> str:
     return _PH_RE.sub(_sub, text)
 
 
-def validate(item_id, text) -> list:
+def validate(item_id, text, lang="zh") -> list:
     """保存前校验：未声明占位符、缺必需占位符、缺锁定句、超长；角色模板另查 format 可用与固定段占位符。"""
     e = _entry(item_id)
     errors = []
@@ -203,7 +218,7 @@ def validate(item_id, text) -> list:
     if missing:
         errors.append({"code": "missing_required",
                        "message": "缺少必需占位符：" + "、".join("{%s}" % n for n in missing)})
-    for s in e.get("locked") or ():
+    for s in e.get("locked" if lang == "zh" else f"locked_{lang}") or ():
         if s not in text:
             errors.append({"code": "locked_removed", "message": f"锁定句被删改：{s}"})
     if e.get("kind") == "role":
@@ -230,23 +245,23 @@ def _atomic_write(path, text):
     os.replace(tmp, path)
 
 
-def save_override(item_id, text, rebase=False):
+def save_override(item_id, text, rebase=False, lang="zh"):
     """写本机覆盖；校验不过抛 ValueError(errors)。首次保存或 rebase 时把当前默认写进 .base。"""
-    errors = validate(item_id, text)
+    errors = validate(item_id, text, lang)
     if errors:
         raise ValueError(errors)
     e = _entry(item_id)
-    path = _local_path(e)
+    path = _local_path(e, lang)
     base = Path(str(path) + ".base")
     if rebase or not base.is_file():
-        _atomic_write(base, default_text(item_id))
+        _atomic_write(base, default_text(item_id, lang))
     _atomic_write(path, text)
 
 
-def delete_override(item_id):
+def delete_override(item_id, lang="zh"):
     """恢复默认 = 删除覆盖文件与 .base。返回是否删了东西。"""
     e = _entry(item_id)
-    path = _local_path(e)
+    path = _local_path(e, lang)
     hit = False
     for p in (path, Path(str(path) + ".base")):
         try:
@@ -271,16 +286,16 @@ def items() -> list:
     return out
 
 
-def describe(item_id) -> dict:
+def describe(item_id, lang="zh") -> dict:
     """单条目详情（API 用）。"""
     e = _entry(item_id)
     d = _clean(e)
     d.setdefault("kind", "system" if item_id.startswith("system/") else "fragment")
-    dt = default_text(item_id)
-    ov = override_text(item_id)
-    st = status(item_id)
+    dt = default_text(item_id, lang)
+    ov = override_text(item_id, lang)
+    st = status(item_id, lang)
     d.update(default_text=dt, override_text=ov, text=(ov if ov is not None else dt), status=st,
-             base_text=(base_text(item_id) if st == "stale" else None), readonly=False)
+             base_text=(base_text(item_id, lang) if st == "stale" else None), readonly=False, lang=lang)
     return d
 
 

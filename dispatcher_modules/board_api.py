@@ -5,6 +5,7 @@ import re
 import time
 import urllib.request
 
+from prompt_i18n import tr
 from acp_shared import KIMI, REDLINE_CANCEL_SIGNAL, pct_value
 from storage_time import parse_storage_time
 
@@ -100,7 +101,7 @@ def append_summary(req_id, line):
 SUMMARY_PROMPT_KEEP = 6
 
 
-def compact_summary(summary, keep=None):
+def compact_summary(summary, keep=None, lang="zh"):
     """C4：summary（prompt 通道）进 prompt 前折叠早期记录，防打回轮次越多 prompt 越长。
     按 [auto] 记录分组（多行记录整体保留）；首段人工前言与含「人工」的记录（答复/裁决/否决）
     永不折叠——它们是已澄清的事实，折掉会让 agent 重复追问；其余只留末尾 keep 条。
@@ -124,7 +125,8 @@ def compact_summary(summary, keep=None):
     if not folded:
         return text
     rejects = sum(1 for e in folded if "未通过" in e[0])
-    digest = f"（更早 {len(folded)} 条记录已折叠，其中评审打回 {rejects} 次；完整历史见看板卡片开发总结）"
+    digest = tr(lang, "（更早 {folded} 条记录已折叠，其中评审打回 {rejects} 次；完整历史见看板卡片开发总结）",
+                folded=len(folded), rejects=rejects)
     out = preface + [digest] + [ln for e in pinned + recent for ln in e]
     return "\n".join(out).strip()
 

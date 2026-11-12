@@ -5,6 +5,7 @@
 from acp_shared import PLAYWRIGHT_TOOL_PREFIX
 from acp_shared import TAPD_TOOL_PREFIX
 from acp_shared import append_kill_redline
+from prompt_i18n import prompt_lang, tr
 from pathlib import Path
 import tempfile
 import threading
@@ -124,6 +125,10 @@ def _reqchat_system_prompt(req_id, model=None, req_chat_id=None):
     notes = (req["notes"] or "").strip() or "（无）"
     summary = (req["summary"] or "").strip() or "（无）"
     tmp_dir = f"/tmp/req_board_reqchat_{req_chat_id}/" if req_chat_id else "/tmp"
+    if prompt_lang(project) == "en":
+        from board_modules.services.chat_prompts_en import req_chat_prompt
+        return req_chat_prompt(req_id=req_id, req=req, project=project, workdir=workdir, req_dir=req_dir,
+                               model=model, tmp_dir=tmp_dir)
     return (
         "你是需求看板（req-board）的「需求助手」，帮助用户了解与维护这个需求。\n"
         f"当前需求：#{req_id}「{req['title']}」（项目 {project}，状态 {status_cn}，通道 {mode_cn}）\n"
@@ -334,9 +339,12 @@ def _reqchat_run_round(req_chat_id, text):
                 (req_chat_id,)).fetchone() is None
         if first:
             # 首轮注入系统提示词 + 进程安全红线（续跑会话已在上下文内，不重复注入）
+            with resolve("get_db")() as conn:
+                prow = conn.execute("SELECT project FROM requirements WHERE id = ?", (req_id,)).fetchone()
+            lang = prompt_lang(prow["project"] if prow else None)
             text = append_kill_redline(
                 _reqchat_system_prompt(req_id, model=session.model_name, req_chat_id=req_chat_id),
-                session.proc.pid) + "\n\n用户消息：\n" + text
+                session.proc.pid, lang) + tr(lang, "\n\n用户消息：\n") + text
         try:
             session.prompt(text, timeout=REQ_CHAT_TIMEOUT)
             session._flush_message()

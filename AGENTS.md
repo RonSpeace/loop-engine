@@ -17,7 +17,7 @@
 - `prompts/`：角色提示词模板；`prompts/skills/`：全局场景技能片段。全局模板不写任何单个项目的专有内容。
 - `.loop/`：本项目自己的清单、指引、技能。
 - `scripts/`：运维脚本（`doctor.py`、`test_instance.sh`、`dispatcher-restart.sh` 等）；`tests/`：测试；`docs/`：文档与模板。
-- `board_modules/`：看板后端共享层（`runtime.py` 兼容桥、`db.py`、`common.py`、`sse.py`），路由蓝图在 `board_modules/blueprints/`（`requirements` / `projects` / `chats` / `settings` / `assistant` / `sessions` / `meta` / `skills` / `context` 九个资源蓝图，`board.py` 只按 `ALL` 注册），服务层在 `board_modules/services/`（`model_pool` / `harness_config` / `projects` / `requirements` / `session_runtime` / `presentation` / `dispatcher_ops` / `chat_runtime` / `mcp_servers` / `reqchat_runtime` / `assistant_card` / `assistant_runtime` / `assistant_mcp` / `project_git` / `skill_library` / `context_preview`）；入口 `board.py` 经晚绑定兼容桥消费——测试在 `board` 模块上改写的名字必须仍有效。
+- `board_modules/`：看板后端共享层（`runtime.py` 兼容桥、`db.py`、`common.py`、`sse.py`），路由蓝图在 `board_modules/blueprints/`（`requirements` / `projects` / `chats` / `settings` / `assistant` / `sessions` / `meta` / `skills` / `context` 九个资源蓝图，`board.py` 只按 `ALL` 注册），服务层在 `board_modules/services/`（`model_pool` / `harness_config` / `projects` / `requirements` / `session_runtime` / `presentation` / `dispatcher_ops` / `chat_runtime` / `mcp_servers` / `reqchat_runtime` / `assistant_card` / `assistant_runtime` / `assistant_mcp` / `project_git` / `skill_library` / `context_preview` / `chat_prompts_en`）；入口 `board.py` 经晚绑定兼容桥消费——测试在 `board` 模块上改写的名字必须仍有效。
 - `data/`、`projects.json`、`feishu.json`、`.env` 是本地数据，已 gitignore，不提交。
 - agent 产物统一在 `~/.req-board/artifacts/<项目>/req-<id>/`，worktree 在 `~/.req-board/worktrees/`。
 

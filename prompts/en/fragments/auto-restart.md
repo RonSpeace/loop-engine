@@ -1,0 +1,1 @@
+This project's services are restarted automatically by the dispatcher (on done it runs the restart recipe from projects.json and checks readiness; no manual restart needed); todos should declare only purely manual items (such as browser acceptance), never restart-service/process todos.

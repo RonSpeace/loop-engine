@@ -5,6 +5,7 @@ from pathlib import Path
 
 import acp_shared
 import prompt_store
+from prompt_i18n import display as _disp, prompt_lang, tr
 from acp_shared import READONLY_TOOL_GUIDE, default_flow_id, enabled_flows, load_project_manifest, pre_role, role_meta, skill_text
 
 from dispatcher_modules.agent_run import _steps_text
@@ -95,16 +96,17 @@ def in_pre_stage(req):
     """卡是否处于前置环节（未入流程、无快照）——前置槽位契约按此判定（与角色名解耦）"""
     return nodes_of(req) is None
 
-def node_display(node):
-    """节点显示名：节点自身 name → 角色 display → 角色原文；terminal → 「收尾」"""
+def node_display(node, lang="zh"):
+    """节点显示名：节点自身 name → 角色 display → 角色原文；terminal → 「收尾」。
+    lang="en"：展示名经界面英文词典翻译（提示词用；查不到按原文）。"""
     if not node:
         return ""
     if node.get("name"):
-        return str(node["name"])
+        return _disp(lang, str(node["name"]))
     role = node.get("role")
     if not role:
-        return "收尾"
-    return role_meta(role, "display") or D.ROLE_NAMES.get(role) or role
+        return tr(lang, "收尾")
+    return _disp(lang, role_meta(role, "display") or D.ROLE_NAMES.get(role) or role)
 
 def stage_of_review(req, review_role):
     """评审节点角色 → 被评审的前驱节点角色（tech_review→tech / code_review→dev）；无则 None"""
@@ -201,15 +203,16 @@ ROLE_PROMPTS = {key: D.role_prompt(role) for key, role in (
 # 「卡处于前置阶段（无快照）」时追加本段，与角色模板内容/角色名解耦（换 pre.role 也生效）。
 # #419：可选流程目录由 _flow_catalog_text() 从配置生成（id｜适用场景｜节点序列），判据不再
 # 写死在前置角色提示词里——增删流程/改 description/改节点序列都在配置侧一处生效。
-def _flow_catalog_text():
+def _flow_catalog_text(lang="zh"):
     """可选流程目录（#419）：每条 = id（名称）｜description｜节点序列。
     description 是人工写的适用场景；节点序列是配置派生的硬判据（增删节点自动跟随，永不失真）。
     软禁用：只列启用流程——被软禁用（enabled: false）的流程不进目录，模型看不到也就不会推荐。"""
     lines = []
     for f in enabled_flows():
-        seq = " → ".join(node_display(n) for n in (f.get("nodes") or []))
-        desc = (f.get("description") or "").strip() or "（未说明适用场景）"
-        lines.append(f"- {f['id']}（{f['name']}）｜{desc}｜节点：{seq}")
+        seq = " → ".join(node_display(n, lang) for n in (f.get("nodes") or []))
+        desc = _disp(lang, (f.get("description") or "").strip()) or tr(lang, "（未说明适用场景）")
+        lines.append(tr(lang, "- {id}（{name}）｜{desc}｜节点：{seq}", id=f["id"], name=_disp(lang, f["name"]),
+                        desc=desc, seq=seq))
     return "\n".join(lines) or default_flow_id()
 
 
@@ -234,13 +237,13 @@ PRE_SLOT_CONTRACT = """
 """
 
 
-def pre_slot_contract_text(result_json="{result_json}"):
+def pre_slot_contract_text(result_json="{result_json}", lang="zh"):
     """前置槽位契约全文：build_prompt 注入与 /guide 展示共用同一份格式化（避免两处各自
     format 后漂移）；可选流程目录取自配置里的启用流程（软禁用流程不出现）。"""
     return prompt_store.render(
-        "system/pre-contract",
+        "system/pre-contract", lang=lang,
         result_json=result_json,
-        flow_catalog=D._flow_catalog_text(),
+        flow_catalog=D._flow_catalog_text() if lang == "zh" else D._flow_catalog_text(lang),
         default_flow=default_flow_id())
 
 
@@ -249,20 +252,22 @@ def stage_input_for(req):
     - 前置槽位 = 序列第 0 个节点，输入 = 需求本身（title + notes，模板已内联）；
     - 第 N 个节点输入 = 所有已完成上游节点（第 0..N-1，含前置槽位）产物的「显示名 + 路径」清单；
       只按快照/配置列路径，不做存在性探测、不做内容判断（agent 自行按需读取）。"""
+    lang = prompt_lang(req.get("project"))
     _fid, nodes, idx = D.flow_snapshot(req)
     art = D.artifact_dir(req)
     pre_art = role_meta(pre_role(), "artifact")
-    pre_label = f"{role_meta(pre_role(), 'display') or pre_role()}产物 {art / pre_art}" if pre_art else None
+    pre_label = (tr(lang, "{name}产物 {path}", name=_disp(lang, role_meta(pre_role(), "display") or pre_role()),
+                    path=art / pre_art) if pre_art else None)
     # 前置槽位（序列第 0 节点）的产物：其输入 = 需求本身（title + notes）
     if nodes is None:
-        return "需求本身（title + notes）"
-    parts = ["需求本身（title + notes）"]
+        return tr(lang, "需求本身（title + notes）")
+    parts = [tr(lang, "需求本身（title + notes）")]
     if pre_label:
         parts.append(pre_label)
     for n in nodes[:idx]:
         fn = n.get("artifact")
         if fn:
-            parts.append(f"{node_display(n)}产物 {art / fn}")
+            parts.append(tr(lang, "{name}产物 {path}", name=node_display(n, lang), path=art / fn))
     return " + ".join(parts)
 
 _COMMAND_LABELS = {"install": "安装依赖", "test": "全量测试", "test_affected": "受影响测试", "lint": "lint",
@@ -291,9 +296,10 @@ def runtime_for(project, role):
         return "kimi"
 
 
-def _agents_root_text(project, repo):
+def _agents_root_text(project, repo, lang="zh"):
     multi = len(D._project_repos(project)) > 1
-    return (f"工作目录 {Path(repo).name}/AGENTS.md" if multi else "工作目录仓库根的 AGENTS.md")
+    return (tr(lang, "工作目录 {name}/AGENTS.md", name=Path(repo).name) if multi
+            else tr(lang, "工作目录仓库根的 AGENTS.md"))
 
 
 def project_conventions_text(project, role, *, runtime=None):
@@ -302,37 +308,40 @@ def project_conventions_text(project, role, *, runtime=None):
     「未配置」，没有清单则明说未提供（A3：不让 agent 套用其它项目的命令/端口/脚本）。
     纯数据拼接，指引正文不过 str.format（花括号安全）。"""
     native = (runtime or runtime_for(project, role)) in AGENTS_MD_NATIVE_RUNTIMES
+    lang = prompt_lang(project)
     blocks = []
     for repo in D._project_repos(project):
         m = load_project_manifest(repo)
         if not m["path"]:
             continue
-        lines = [f"项目约定（{project}，来源 {m['path']}；与通用说明不一致时以此为准）："]
-        cmds = [f"{_COMMAND_LABELS[k]} `{m['commands'][k]}`" for k in _COMMAND_LABELS if k in m["commands"]]
+        lines = [tr(lang, "项目约定（{project}，来源 {path}；与通用说明不一致时以此为准）：", project=project, path=m["path"])]
+        cmds = [tr(lang, "{label} `{cmd}`", label=tr(lang, _COMMAND_LABELS[k]), cmd=m["commands"][k])
+                for k in _COMMAND_LABELS if k in m["commands"]]
         if cmds:
-            lines.append("- 常用命令：" + "；".join(cmds))
+            lines.append(tr(lang, "- 常用命令：") + tr(lang, "；").join(cmds))
         inst = m["instance"]
         if inst:
-            parts = [f"{label} `{inst[key]}`" for key, label in
+            parts = [tr(lang, "{label} `{cmd}`", label=tr(lang, label), cmd=inst[key]) for key, label in
                      (("start", "启动"), ("stop", "停止"), ("status", "状态"), ("healthcheck", "健康检查"))
                      if key in inst]
             if "port_range" in inst:
-                parts.append(f"端口段 {inst['port_range'][0]}-{inst['port_range'][1]}")
-            lines.append("- 测试实例：" + "｜".join(parts))
+                parts.append(tr(lang, "端口段 {lo}-{hi}", lo=inst["port_range"][0], hi=inst["port_range"][1]))
+            lines.append(tr(lang, "- 测试实例：") + tr(lang, "｜").join(parts))
         if (Path(repo) / "AGENTS.md").is_file() and not native:
-            lines.append(prompt_store.render("system/agents-md-pointer", root=_agents_root_text(project, repo)))
-        missing = [_COMMAND_LABELS[k] for k in _COMMAND_LABELS if k not in m["commands"]]
+            lines.append(prompt_store.render("system/agents-md-pointer", lang=lang,
+                                             root=_agents_root_text(project, repo, lang)))
+        missing = [tr(lang, _COMMAND_LABELS[k]) for k in _COMMAND_LABELS if k not in m["commands"]]
         if not inst:
-            missing.append("测试实例")
+            missing.append(tr(lang, "测试实例"))
         if missing:
-            lines.append("- 未配置：" + "、".join(missing)
-                         + "（需要时按仓库 AGENTS.md 约定；没有约定就如实说明，不要假设存在对应脚本或端口）")
+            lines.append(tr(lang, "- 未配置：") + tr(lang, "、").join(missing)
+                         + tr(lang, "（需要时按仓库 AGENTS.md 约定；没有约定就如实说明，不要假设存在对应脚本或端口）"))
         for name, g in m["guides"].items():
             if g["roles"] is None or role in g["roles"]:
-                lines.append(f"【项目指引：{name}】\n{g['text']}")
+                lines.append(tr(lang, "【项目指引：{name}】\n{text}", name=name, text=g["text"]))
         blocks.append("\n".join(lines))
     if not blocks:
-        return prompt_store.render("system/project-missing", project=project)
+        return prompt_store.render("system/project-missing", lang=lang, project=project)
     return "\n" + "\n\n".join(blocks) + "\n"
 
 
@@ -357,7 +366,7 @@ def scenario_skills_text(project, role):
         if text is None:
             log.warning(f"项目 {project} 角色 {role} 声明的技能 {n} 未找到（已跳过）")
             continue
-        parts.append(f"【场景技能：{n}】\n{text}")
+        parts.append(tr(prompt_lang(project), "【场景技能：{name}】\n{text}", name=n, text=text))
     return ("\n" + "\n\n".join(parts) + "\n") if parts else ""
 
 
@@ -412,6 +421,7 @@ def card_paths_hint(req, role):
         if path and path not in seen and len(out) < PATHS_HINT_MAX:
             seen.add(path)
             out.append((path, why))
+    lang = prompt_lang(req.get("project"))
     try:
         art = D.artifact_dir(req)
         node = D.current_node(req)
@@ -419,15 +429,15 @@ def card_paths_hint(req, role):
             diff = art / "diff.patch"
             if diff.is_file():
                 for _a, b in _DIFF_FILE_RE.findall(diff.read_text(encoding="utf-8", errors="replace")):
-                    add(b, f"diff 改动 {b}")
+                    add(b, tr(lang, "diff 改动 {path}", path=b))
         if not out:
             for path in acp_shared.paths_from_text(req.get("notes") or ""):
-                add(path, f"需求 notes 提到 {path}")
+                add(path, tr(lang, "需求 notes 提到 {path}", path=path))
             for fn, label in _HINT_ARTIFACTS:
                 f = art / fn
                 if f.is_file():
                     for path in acp_shared.paths_from_text(f.read_text(encoding="utf-8", errors="replace")[:40000]):
-                        add(path, f"{label}列出 {path}")
+                        add(path, tr(lang, "{label}列出 {path}", label=tr(lang, label), path=path))
     except Exception as e:      # 路径线索只影响技能 auto 命中与指路，读不了按无线索处理
         log.warning(f"需求 #{req.get('id')} 改动路径线索提取失败: {e}")
     return out
@@ -456,7 +466,7 @@ def agents_md_files(req, role, paths_hint, *, dry=False):
     return out
 
 
-def agents_md_nested_text(files, runtime):
+def agents_md_nested_text(files, runtime, lang="zh"):
     """卡片块的子目录 AGENTS.md 指路（仓库根的已在项目约定层；自带加载的运行体不发）。"""
     if runtime in AGENTS_MD_NATIVE_RUNTIMES:
         return ""
@@ -465,13 +475,14 @@ def agents_md_nested_text(files, runtime):
         if f["root"]:
             continue
         d = str(Path(f["show"]).parent)
-        items.append(f"- 改 {d}/ 下的文件前先读 {f['show']}（依据：{f['why']}）")
-    return prompt_store.render("system/agents-md-nested", items="\n".join(items)) if items else ""
+        items.append(tr(lang, "- 改 {dir}/ 下的文件前先读 {show}（依据：{why}）", dir=d, show=f["show"], why=f["why"]))
+    return prompt_store.render("system/agents-md-nested", lang=lang, items="\n".join(items)) if items else ""
 
 
 def fragments_text(project, role):
     """L3 条件片段块（稳定前缀，紧跟项目约定）：每段独立成段；无生效片段 → 空串。"""
-    texts = [prompt_store.read(fid).strip() for fid in selected_fragments(project, role)]
+    lang = prompt_lang(project)
+    texts = [prompt_store.read(fid, lang).strip() for fid in selected_fragments(project, role)]
     texts = [t for t in texts if t]
     return ("\n" + "\n\n".join(texts) + "\n") if texts else ""
 
@@ -497,8 +508,9 @@ def build_prompt_parts(req, role, extra="", *, dry=False, _out=None):
     else:
         _, repo_map = D.ensure_dev_worktrees(req)
     repo = D.dev_repo_listing(req, repo_map, focus=effective_repos(req))
-    # #419：提示词模板来自配置 prompts/<role>.md（单一源；dev_auto/dev_semi 合一为 dev.md）
-    tmpl = D.role_prompt(role)
+    lang = prompt_lang(req["project"])
+    # #419：提示词模板来自配置 prompts/<role>.md（单一源；dev_auto/dev_semi 合一为 dev.md）；英文 prompts/en/
+    tmpl = D.role_prompt(role) if lang == "zh" else D.role_prompt(role, lang)
     if not tmpl:
         raise ValueError(f"未知角色: {role}")
     # #419：节点输入 = 上游节点产物清单（含前置槽位），不做角色名映射/不做 prd.md 探测
@@ -521,32 +533,35 @@ def build_prompt_parts(req, role, extra="", *, dry=False, _out=None):
             except Exception:
                 base, base_sha = None, None
             ref = base or base_sha or "main"  # 探测全面失败回退 main（与原行为一致）
-            lines.append(f"- {Path(p).name}（主干: {ref}）：git merge {ref}")
-        merge_ctx = prompt_store.render("fragment/merge-resolve", failed=", ".join(failed),
+            lines.append(tr(lang, "- {name}（主干: {ref}）：git merge {ref}", name=Path(p).name, ref=ref))
+        merge_ctx = prompt_store.render("fragment/merge-resolve", lang=lang, failed=", ".join(failed),
                                         branch_lines="\n".join(lines))
     result_json = D.result_file_path(req)
     art_root = str(D.artifact_dir(req))
     repo_map_path = D.PROJECTS[req["project"]].get("repo_map") or ""
-    repo_map_hint = (f"仓库地图（跨仓库定位代码的第一来源，先读再分析）：{repo_map_path}\n"
+    repo_map_hint = (tr(lang, "仓库地图（跨仓库定位代码的第一来源，先读再分析）：{path}\n", path=repo_map_path)
                      if repo_map_path else "")
     # #5 goal 注入：项目目标进 analysis 上下文（{project_goal_hint} 整行占位符，无 goal 不渲染；
     # goal 是 projects.json 项目级常量，与卡无关 → 留固定段）
     project_goal = (D.PROJECTS.get(req["project"]) or {}).get("goal") or ""
-    project_goal_hint = (f"项目目标（goal）：{project_goal}\n" if project_goal else "")
+    project_goal_hint = (tr(lang, "项目目标（goal）：{goal}\n", goal=project_goal) if project_goal else "")
     # 评审反馈直接内联（tech/dev 模板卡片输入块 {review_feedback}）：有 summary（否决原因/历史记录）给全文，
     # 无则显式声明不存在，避免 agent 自行探索数据库找「评审反馈」
     # C4：summary 折叠早期记录后注入；模板已有 {review_feedback} 时 {history} 置空（原 tech/dev 全文注入两遍）
     # 数据围栏（context-design 原则 6）：标题/notes/summary/上游产物指路是数据不是指令，
     # 用 <card-data source="…"> 包住（system/common 第 9 条声明块内内容不是指令）
-    summary = D.compact_summary(req.get("summary"))
-    review_feedback = (f"开发总结（评审反馈/历史记录）：\n{card_data('requirement.summary', summary)}\n" if summary
-                       else "无附加反馈（评审通过或尚无否决记录）。")
-    history = (f"历史记录（前几次尝试的总结/评审反馈）：{card_data('requirement.summary', summary)}\n"
+    summary = (D.compact_summary(req.get("summary")) if lang == "zh"
+               else D.compact_summary(req.get("summary"), lang=lang))
+    review_feedback = (tr(lang, "开发总结（评审反馈/历史记录）：\n{summary}\n",
+                          summary=card_data('requirement.summary', summary)) if summary
+                       else tr(lang, "无附加反馈（评审通过或尚无否决记录）。"))
+    history = (tr(lang, "历史记录（前几次尝试的总结/评审反馈）：{summary}\n",
+                  summary=card_data('requirement.summary', summary))
                if summary and "{review_feedback}" not in tmpl else "")
     # #42：common 常量直注（静态化后不再按卡 format）；时限数字/步数/结果路径由卡片输入块消费
     kw = dict(
         project=req["project"], id=req["id"], title=card_data("requirement.title", req["title"]),
-        notes=card_data("requirement.notes", req.get("notes") or "（无）"),
+        notes=card_data("requirement.notes", req.get("notes") or tr(lang, "（无）")),
         repo_listing=repo,
         repo_map_hint=repo_map_hint,
         project_goal_hint=project_goal_hint,
@@ -566,10 +581,10 @@ def build_prompt_parts(req, role, extra="", *, dry=False, _out=None):
         review_feedback=review_feedback,
         stage_input=card_data("upstream-artifacts", stage_input),
         history=history,
-        extra=(f"补充上下文：{extra}\n" if extra else ""),
+        extra=(tr(lang, "补充上下文：{extra}\n", extra=extra) if extra else ""),
         merge_ctx=merge_ctx,
-        readonly_tool_guide=prompt_store.read("system/readonly-tools"),
-        common=prompt_store.read("system/common"),
+        readonly_tool_guide=prompt_store.read("system/readonly-tools", lang),
+        common=prompt_store.read("system/common", lang),
         card_inputs="",
     )
     # #42 拆段：两段用同一 kwargs 各自 format（str.format 忽略未用键），占位符语义不变
@@ -584,10 +599,11 @@ def build_prompt_parts(req, role, extra="", *, dry=False, _out=None):
     sel = acp_shared.select_skills(req["project"], role, req, D._project_repos(req["project"]),
                                    paths_hint=[p for p, _ in hint], role_skills=D.role_skill_names(role))
     claude_native = runtime == "claude-code"
-    skills_text = acp_shared.skills_block(sel.always) + ("" if claude_native else acp_shared.catalog_block(sel.catalog))
-    card_skills = "" if claude_native else acp_shared.skills_block(sel.card)
+    skills_text = (acp_shared.skills_block(sel.always, lang)
+                   + ("" if claude_native else acp_shared.catalog_block(sel.catalog, lang)))
+    card_skills = "" if claude_native else acp_shared.skills_block(sel.card, lang)
     agents = agents_md_files(req, role, hint, dry=dry)
-    card = card + agents_md_nested_text(agents, runtime) + card_skills
+    card = card + agents_md_nested_text(agents, runtime, lang) + card_skills
     if _out is not None:
         _out.update(selection=sel, paths_hint=hint, agents_md=agents, runtime=runtime,
                     claude_native=claude_native)

@@ -7,6 +7,7 @@ from acp_shared import KIMI
 from acp_shared import PLAYWRIGHT_TOOL_PREFIX
 from acp_shared import TAPD_TOOL_PREFIX
 from acp_shared import append_kill_redline
+from prompt_i18n import prompt_lang, tr
 from pathlib import Path
 import json
 import re
@@ -114,6 +115,10 @@ def _chat_system_prompt(project):
     """建卡会话系统提示词（首轮拼接在用户消息前）：角色/工具边界/草稿格式/建卡流程。
     #5：项目配置了 goal 时在绑定行后注入「项目目标（goal）：…」行，无 goal/未注册（含 guide
     展示态 "{project}"）整行不出现；数据源 _auto_projects_config()（动态读、fail-safe）。"""
+    if prompt_lang(project) == "en":
+        from board_modules.services.chat_prompts_en import create_card_prompt
+        goal = (resolve("_auto_projects_config")().get(project) or {}).get("goal") or ""
+        return create_card_prompt(project, _chat_workdir(project), goal, bool(_project_mysql_env(project)))
     mysql_hint = (
         "你可以用 mysql_query 工具只读查询该项目 MySQL 生产库"
         "（SELECT/EXPLAIN/WITH/VALUES 等只读语句，最多 200 行）。\n"
@@ -554,8 +559,9 @@ def _chat_prompt_thread(chat_id, text):
                                  (chat_id,)).fetchone() is None
         if first and row:
             # #108：首轮注入进程安全红线（含本会话驱动进程真实 PID；续跑会话已在上下文内，不重复注入）
-            text = append_kill_redline(_chat_system_prompt(row["project"]),
-                                       session.proc.pid) + "\n\n用户消息：\n" + text
+            lang = prompt_lang(row["project"])
+            text = (append_kill_redline(_chat_system_prompt(row["project"]), session.proc.pid, lang)
+                    + tr(lang, "\n\n用户消息：\n") + text)
         try:
             session.prompt(text, timeout=CHAT_TIMEOUT)
             session._flush_message()

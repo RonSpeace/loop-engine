@@ -3,6 +3,7 @@
 import json
 import time
 
+from prompt_i18n import prompt_lang, tr
 from dispatcher_modules.runtime import D, log
 
 
@@ -382,7 +383,8 @@ def _execute_confirm_action(rid, req, pend, action, kind, question, reason=""):
             D.append_summary(int(rid), D.confirm_answer_summary(question, answer))
             D.post_dispatcher_event(int(rid), f"用户网页确认继续：{answer}", kind="confirm")
             D.notify(f"需求 #{rid} 已收到继续确认，{D.ROLE_NAMES.get(D.role_for(req), D.role_for(req)) or '当前角色'}阶段继续执行。")
-            D.spawn_agent(req, extra=f"用户对之前的问题「{question}」的答复：同意。{answer}", resume=True)
+            D.spawn_agent(req, extra=tr(prompt_lang(req.get("project")), "用户对之前的问题「{question}」的答复：同意。{answer}",
+                                        question=question, answer=answer), resume=True)
         return
     if action == "stop_later":
         # 新增明示出口（网页专属超限按钮）：转暂缓 + summary 留痕；非飞书 n 的对等复刻

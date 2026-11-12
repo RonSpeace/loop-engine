@@ -27,6 +27,7 @@
 ## 提示词存储与执行档案
 
 - 引擎文案都是文件：`prompts/system/*.md`（通用约束、只读工具说明、进程红线、前置契约、续跑/收尾/重试文案、无清单兜底）与 `prompts/fragments/*.md`（仅推分支、自动重启、合并冲突等条件片段），条目元数据（层、可用占位符、必需占位符、锁定句、生效条件 `when`）登记在 `prompts/registry.json`；角色模板仍是 `prompts/<角色>.md`，由 `flows.json` 推导出 `role/<角色>` 条目。存取统一走仓库根 `prompt_store.py`。
+- 提示词语言：项目 `projects.json` 的 `prompt_language`（`zh` / `en`）→ 环境变量 `LOOP_PROMPT_LANG` → `zh`（`prompt_i18n.prompt_lang`，每次现读）。英文版与中文版同路径放在 `prompts/en/` 下（角色模板、`system/`、`fragments/`、全局技能 `prompts/en/skills/`），锁定句的英文对应写在注册表 `locked_en`；调度器代码里拼进提示词的短句走 `prompt_i18n.tr`（中文模板即键，英文查 `EN` 表），角色/流程展示名复用界面英文词典。看板「聊天建卡」与卡片对话的英文系统提示词在 `board_modules/services/chat_prompts_en.py`。缺英文版时退回中文并告警，`tests/test_prompt_i18n.py` 保证英文模式下除 `<card-data>` 内的卡片数据外不漏中文。英文项目的本机覆盖放 `prompts.local/en/`。
 - 本机覆盖：设置抽屉「提示词」tab（`PUT /api/prompts/<id>`）保存到不进 git 的 `prompts.local/`（目录结构与 `prompts/` 一一对应，`REQ_BOARD_PROMPTS_LOCAL` 可改路径），编译时覆盖优先，按 mtime 现读、无需重启；「恢复默认」= 删除覆盖。覆盖旁存 `.base`（保存时的默认文本），默认升级后条目标「默认已更新」，编译仍用覆盖。保存时校验：未声明占位符、缺必需占位符、删改锁定句（如 result.json 契约行、红线首行、前置契约的 suggested_flow/repos 行）、超 20000 字一律拒绝。
 - 执行档案：每次拉起会话（新会话、续跑、无结果续接轮）在 `<产物目录>/runs/<run_key>/` 写 `manifest.json`（注入清单：每项的层、来源、默认/覆盖、hash、字数、入选理由，及跳过项与警告）和 `prompt.txt`（实际发出的全文）；`agent_runs` 记 `manifest_path`/`prompt_hash`/`prefix_hash`。看板 `GET /api/requirements/<id>/context/runs*` 读取，`GET /api/context/preview` 用同一编译器 dry 编译出「某角色在某项目会收到什么」。
 

@@ -711,12 +711,13 @@
         // 「还有其他要讨论的吗？」等收尾提问/话题引导结束，替换或补充为「当前会话已结束。」，
         // 使历史已建卡会话展示与新建会话（confirm 提示词约束）一致。仅改展示，不改 chat_events 存库内容。
         const CHAT_CLOSING_LINE = '当前会话已结束。';
+        const CHAT_CLOSING_LINE_EN = 'This session has ended.';   // 英文提示词项目的 agent 结束语
         // 匹配克制：仅命中末尾提问句——引导词（还有/还要/要不要/是否/要继续等）+ 语气词结尾，
         // 或最后一句以问号/语气词+问号结尾；「把状态改为 open」类引导句不命中（走补充逻辑）。
         const CHAT_CLOSING_ASK_RE = /(?:还有|还要|要不要|是否|要继续|想继续|想再|还有其他|有别的|还有什么|还需)[^。！!？?\n]{0,40}?[吗么吧呢][。！!]?\s*$|[^。！!？?\n]*[？?]\s*$/;
         function applyChatClosing(text) {
             const t = String(text);
-            if (t.trim().endsWith(CHAT_CLOSING_LINE)) return t;
+            if (t.trim().endsWith(CHAT_CLOSING_LINE) || t.trim().endsWith(CHAT_CLOSING_LINE_EN)) return t;
             const m = t.match(CHAT_CLOSING_ASK_RE);
             if (m) return t.slice(0, m.index) + CHAT_CLOSING_LINE;
             return t + '\n\n' + CHAT_CLOSING_LINE;

@@ -10,6 +10,7 @@ from dispatcher_modules.agent_run import active_lock
 from dispatcher_modules.feishu_chat import _feishu_parse_material, _feishu_save
 from dispatcher_modules.flow_advance import _review_bounce_extra
 from dispatcher_modules.heartbeat import _update_feishu_status
+from prompt_i18n import prompt_lang, tr
 from dispatcher_modules.runtime import D, log, threading
 
 
@@ -418,10 +419,10 @@ def _on_message(data):
         extra = ""
         outside = pend.get("outside") or []
         if outside:
-            extra = (f"注意：analysis 识别本需求涉及清单外仓库 {', '.join(outside)}，"
-                     "本项目 worktree 内没有这些仓库的代码。如确认需改这些仓库："
-                     "禁止写任何真实仓库主工作区，结束回合报 need_confirm 说明"
-                     "「需求可能属于其它项目/项目仓库清单缺配置」等待人工处理。")
+            extra = tr(prompt_lang(fresh.get("project")),
+                       "注意：analysis 识别本需求涉及清单外仓库 {repos}，本项目 worktree 内没有这些仓库的代码。"
+                       "如确认需改这些仓库：禁止写任何真实仓库主工作区，结束回合报 need_confirm 说明"
+                       "「需求可能属于其它项目/项目仓库清单缺配置」等待人工处理。", repos=", ".join(outside))
         D._spawn_safe(fresh, D.role_for(fresh), extra=extra)
     elif kind == "review":
         phase = pend.get("phase")
@@ -528,7 +529,8 @@ def _on_message(data):
         # 普通提问的答复留档到 summary（prompt 通道）：会话重开/重试后的新 agent 也能看到这条
         # 澄清。上面两条（前置流程确认 / 评审超限裁决）各有自己的留档分支，不重复写。
         D.append_summary(req_id, D.confirm_answer_summary(pend.get("question"), reason))
-        D.spawn_agent(req, extra=f"用户对之前的问题「{pend['question']}」的答复：同意。{reason}", resume=True)
+        D.spawn_agent(req, extra=tr(prompt_lang(req.get("project")), "用户对之前的问题「{question}」的答复：同意。{answer}",
+                                    question=pend["question"], answer=reason), resume=True)
         role = D.role_for(req)
         D.notify(f"已收到，需求 #{req_id} 继续{D.ROLE_NAMES.get(role, role) or '收尾'}阶段。")
 

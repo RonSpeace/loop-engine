@@ -52,7 +52,16 @@ PRESETS = {
 
 # loop init 管理的 .env 键：重跑向导只替换这些行，用户的其它行原样保留
 MANAGED_KEYS = ("LOOP_AGENT_RUNTIME", "LOOP_OPENAI_BASE_URL", "LOOP_OPENAI_API_KEY",
-                "LOOP_OPENCODE_MODEL", "LOOP_OPENCODE_MODEL_DEV")
+                "LOOP_OPENCODE_MODEL", "LOOP_OPENCODE_MODEL_DEV", "LOOP_PROMPT_LANG")
+
+
+def default_prompt_lang():
+    """agent 提示词语言的默认值：系统 locale 是中文 → zh，否则 en。"""
+    for k in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        v = os.environ.get(k, "")
+        if v:
+            return "zh" if v.lower().startswith("zh") else "en"
+    return "en"
 
 TOY_CARD = {
     "title": "Add a mul(a, b) function to calc.py",
@@ -330,6 +339,8 @@ def main(argv=None):
     ap.add_argument("--model", help="model for most roles (analysis, review, acceptance)")
     ap.add_argument("--dev-model", help="model for the dev role (default: same as --model)")
     ap.add_argument("--skip-verify", action="store_true", help="do not call the endpoint to check the key")
+    ap.add_argument("--lang", choices=("en", "zh"),
+                    help="language of the agent prompts and artifacts (default: from your locale)")
     ap.add_argument("--project", help='"toy" for the demo project, or a path to an existing git repository')
     ap.add_argument("--project-name", help="name of the project on the board (default: directory name)")
     ap.add_argument("--toy-dir", default=str(Path.home() / "loop-projects" / "toy-project"))
@@ -392,8 +403,13 @@ def main(argv=None):
                 if err:
                     raise InitError(f"test call to model {m!r} failed: {err}")
                 say(f"  Model {m}: ok")
+        default_lang = old.get("LOOP_PROMPT_LANG") or default_prompt_lang()
+        lang = a.lang or choose("Language the agents write in (prompts, docs, summaries)",
+                                [("en", "English"), ("zh", "中文 (Chinese)")],
+                                0 if default_lang == "en" else 1, yes=yes)
         values = {"LOOP_AGENT_RUNTIME": "opencode", "LOOP_OPENAI_BASE_URL": base_url,
-                  "LOOP_OPENAI_API_KEY": key, "LOOP_OPENCODE_MODEL": model, "LOOP_OPENCODE_MODEL_DEV": dev_model}
+                  "LOOP_OPENAI_API_KEY": key, "LOOP_OPENCODE_MODEL": model, "LOOP_OPENCODE_MODEL_DEV": dev_model,
+                  "LOOP_PROMPT_LANG": lang}
         # 本次用环境变量指定了端口 → 记进 .env，之后的 loop start/stop/status 和调度器才会用同一个端口
         if os.environ.get("REQ_BOARD_PORT", "").strip():
             values["REQ_BOARD_PORT"] = os.environ["REQ_BOARD_PORT"].strip()

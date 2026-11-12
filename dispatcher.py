@@ -636,7 +636,7 @@ def _main_loop_tick():
                 sid = find_resume_sid(req, role)
                 # #109：续跑注入上次失败原因（重试计数/原因已持久化，调度器重启后仍可读到）
                 spawn_agent(req, role=role,
-                            extra=resume_failure_hint(req["id"]) if sid else "",
+                            extra=resume_failure_hint(req["id"], project=req.get("project")) if sid else "",
                             resume=bool(sid))
                 active_owners.add(owner)
                 slots -= 1

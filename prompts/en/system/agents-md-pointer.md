@@ -1,0 +1,1 @@
+- Project conventions: read {root} first; when the changed directory has its own AGENTS.md, the closer to the change, the higher the priority (subdirectory conventions for this card are listed in the card inputs)

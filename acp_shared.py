@@ -1336,12 +1336,16 @@ def project_escalation_model(project):
     return (val.strip() or None) if isinstance(val, str) else None
 
 
-def role_prompt(role):
+def role_prompt(role, lang="zh"):
     """角色模板正文：本机覆盖 prompts.local/<file>（提示词存储 role/<id>，现读、改完无需重启）优先，
-    否则为 flows.json 加载时读入的默认 prompts/<role>.md。未知角色 → 空串。"""
+    否则为 flows.json 加载时读入的默认 prompts/<role>.md。未知角色 → 空串。
+    lang="en"：prompts.local/en/<file> → prompts/en/<file> → 中文（prompt_store 告警）。"""
     default = role_meta(role, "prompt") or ""
     if not default:
         return ""
+    if lang != "zh":
+        import prompt_store
+        return prompt_store.read(prompt_store.ROLE_PREFIX + str(role), lang)
     try:
         import prompt_store
         ov = prompt_store.override_text(prompt_store.ROLE_PREFIX + str(role))

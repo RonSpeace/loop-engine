@@ -1,0 +1,1 @@
+Reason the last attempt failed: {last_failure}. Self-check against that reason first (for a run timeout/process error, first confirm the changes are intact and no leftover result.json remains), then continue.

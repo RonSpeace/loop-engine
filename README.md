@@ -208,7 +208,7 @@ One person, one machine, one repository, working without supervision.
 - [x] Runtime certification: a runtime may run reviewer roles only after it proves it cannot write, execute or escape
 - [x] English and Chinese UI, Docker Compose
 - [ ] `loop init`: one command from zero to your first merged card, with model presets
-- [ ] English prompt set
+- [x] English prompt set (pick the language in `loop init`, or per project with `prompt_language`)
 - [ ] Claude Code, Codex and Gemini CLI certified for reviewer roles
 
 ### Stage 2 · Prove it (next)

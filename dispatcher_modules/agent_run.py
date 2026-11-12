@@ -1,10 +1,12 @@
 """agent 运行（ACP 模式）：拉起会话、构造提示词、驱动回合、处理结果文件。"""
 
 import json
+import re
 import time
 from pathlib import Path
 
 import prompt_store
+from prompt_i18n import prompt_lang, tr
 from acp_shared import PLAYWRIGHT_TOOL_PREFIX, RESULT_FILENAME, TAPD_TOOL_PREFIX, TurnAborted, role_capability
 
 from dispatcher_modules.flow_advance import _apply_model_override, review_escalation_override
@@ -139,11 +141,12 @@ RESUME_STYLE_REMINDER = (
 def resume_text(req, role, extra, user_text=None):
     """续跑文案（恢复旧会话时发送）：人工续跑 system/resume-user，自动续跑 system/resume-auto；
     两者都内嵌输出风格提醒 system/resume-style（{resume_style}）。返回 (正文, 条目 id)。"""
-    style = prompt_store.read("system/resume-style")
+    lang = prompt_lang(req.get("project"))
+    style = prompt_store.read("system/resume-style", lang)
     if user_text is not None:
-        return prompt_store.render("system/resume-user", req_id=req["id"], role=role, user_text=user_text,
+        return prompt_store.render("system/resume-user", lang=lang, req_id=req["id"], role=role, user_text=user_text,
                                    extra=extra, resume_style=style), "system/resume-user"
-    return prompt_store.render("system/resume-auto", req_id=req["id"], role=role, extra=extra,
+    return prompt_store.render("system/resume-auto", lang=lang, req_id=req["id"], role=role, extra=extra,
                                resume_style=style, max_steps=_steps_text(role, req)), "system/resume-auto"
 
 
@@ -222,7 +225,7 @@ def _hold_session(asid, req_id, role, session, logf):
 def _steps_text(role, req):
     """提示词里的步数上限文案（C2）：有角色预算给具体数字，否则沿用「约 200 步」（kimi 自身每轮上限）。"""
     n = (D.role_budget(role, project=req.get("project")) or {}).get("max_steps")
-    return str(n) if n else "约 200"
+    return str(n) if n else tr(prompt_lang(req.get("project")), "约 200")
 
 
 def _budget_wrapup(session, req, role):
@@ -236,7 +239,12 @@ def _budget_wrapup(session, req, role):
     D.post_event(req["id"], "system", f"预算截停（{detail}），给一轮限步收尾写结果",
                session_id=getattr(session, "session_id", None))
     session.step_budget = D.BUDGET_WRAPUP_STEPS
-    wrapup = prompt_store.render("system/wrapup", detail=detail, wrapup_steps=D.BUDGET_WRAPUP_STEPS - 5)
+    lang = prompt_lang(req.get("project"))
+    if lang != "zh":
+        m = re.fullmatch(r"本轮工具调用达 (\d+) 步上限", detail)
+        detail = (tr(lang, "本轮工具调用达 {n} 步上限", n=m.group(1)) if m
+                  else tr(lang, "本轮工具调用达上限"))
+    wrapup = prompt_store.render("system/wrapup", lang=lang, detail=detail, wrapup_steps=D.BUDGET_WRAPUP_STEPS - 5)
     try:
         session.prompt(wrapup, timeout=D.BUDGET_WRAPUP_SEC)
     except Exception as e:
@@ -451,13 +459,15 @@ def run_agent(req, role, prompt, started_at, extra="", resume=False, spawn_event
             D.post_event(req["id"], "user", user_text, session_id=session.session_id)
         actual_prompt = prompt
         resume_id = None
+        lang = prompt_lang(req.get("project"))
         if user_text is not None and not resumed:
-            actual_prompt = prompt + f"\n\n用户消息：{user_text}"
+            actual_prompt = prompt + tr(lang, "\n\n用户消息：{text}", text=user_text)
         elif resumed:
             # 续跑文案（人工续跑 / 自动续跑）：正文在 prompts/system/resume-*.md，均内嵌输出风格提醒
             actual_prompt, resume_id = resume_text(req, role, extra, user_text)
         # #108：进程安全红线统一注入（新会话与续跑两条路径一次覆盖，注入点唯一）
-        actual_prompt = D.append_kill_redline(actual_prompt, session.proc.pid)
+        actual_prompt = (D.append_kill_redline(actual_prompt, session.proc.pid) if lang == "zh"
+                         else D.append_kill_redline(actual_prompt, session.proc.pid, lang=lang))
         # 执行档案：本轮实际发出的全文 + 注入清单（编译结果取自本次 build_prompt；被替换/缺失时只记全文）
         extra_items = []
         context_update = None

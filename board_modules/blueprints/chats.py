@@ -5,6 +5,7 @@
 
 
 from board_modules.runtime import resolve
+from prompt_i18n import prompt_lang
 from board_modules.common import _ts_ms
 
 
@@ -352,11 +353,22 @@ def api_chat_confirm(chat_id):
         return jsonify({'error': f'本会话已建卡 #{row["req_id"]}'}), 409
     if not (row['draft_title'] or '').strip():
         return jsonify({'error': '尚无草稿可确认（先让 kimi 聊出草稿）'}), 400
-    prompt = ("用户已在页面确认以下需求草稿，请调用 create_requirement 工具建卡：\n"
-              f"```draft\n{json.dumps({'title': row['draft_title'], 'project': row['project'], 'notes': row['draft_notes'] or ''}, ensure_ascii=False)}\n```\n"
-              "status 默认 later；仅当用户明确要求「开始开发」时才用 open。\n"
-              "建卡成功后：简洁汇报需求 ID、标题、项目与状态（later/open），不得继续提问或把话题抛回给用户；\n"
-              "最后一行固定输出「当前会话已结束。」")
+    draft = json.dumps({'title': row['draft_title'], 'project': row['project'], 'notes': row['draft_notes'] or ''},
+                       ensure_ascii=False)
+    if prompt_lang(row['project']) == "en":
+        prompt = ("The user has confirmed the following requirement draft on the page. Call the create_requirement "
+                  "tool to create the card:\n"
+                  f"```draft\n{draft}\n```\n"
+                  "status defaults to later; use open only when the user explicitly asked to \"start development\".\n"
+                  "After the card is created: briefly report the requirement ID, title, project and status "
+                  "(later/open); do not ask further questions or hand the topic back to the user;\n"
+                  "the last line must be exactly \"This session has ended.\"")
+    else:
+        prompt = ("用户已在页面确认以下需求草稿，请调用 create_requirement 工具建卡：\n"
+                  f"```draft\n{draft}\n```\n"
+                  "status 默认 later；仅当用户明确要求「开始开发」时才用 open。\n"
+                  "建卡成功后：简洁汇报需求 ID、标题、项目与状态（later/open），不得继续提问或把话题抛回给用户；\n"
+                  "最后一行固定输出「当前会话已结束。」")
     resp, code = _start_chat_round(chat_id, prompt, event=('system', '用户已确认草稿，等待建卡…'))
     return jsonify(resp), code
 

@@ -1,0 +1,2 @@
+
+Project conventions ({project}): this project has no .loop/project.json; test commands, test instances and restart methods are not configured. Follow each repo's AGENTS.md conventions; if there are none, say so plainly and do not assume an instance script or fixed port exists. If a test instance cannot be started: fall back to runnable unit/script-level verification, state "No instance/browser-level verification + reason" in the report, and list items needing manual acceptance (dev puts them in todos, accept puts them under uncovered items).

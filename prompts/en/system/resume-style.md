@@ -1,0 +1,1 @@
+Output style (new rules; this resume session's system prompt may not include them): replies lead with the conclusion and stay as short as possible (a single reply usually within 150-200 words); no openers/pleasantries/restating the requirement; artifact documents cut process narrative, one line per point; result.json summary in bullet points, usually no more than 10 lines.

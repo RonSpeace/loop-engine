@@ -5,6 +5,7 @@ import os
 import time
 
 import prompt_store
+from prompt_i18n import prompt_lang, tr
 from acp_shared import ACP_MODEL, RESULT_FILENAME, _pool_lookup, default_flow_id, enabled_flows, load_project_manifest, pre_role, role_meta
 
 from dispatcher_modules.workspace import outside_repos, validate_repos
@@ -288,9 +289,11 @@ def _review_bounce_extra(req, node, reason, round_no=None):
     """评审打回时注入上游节点续跑上下文的 extra（#419/#342）：评审结论只进 req_reviews 表，
     送达上游靠 extra——resume 路径 build_prompt 产物被丢弃、仅 `{extra}` 进入续跑消息，
     不注入则上游看不到审查发现；附评审产物全文（上游只读产物目录，注入不依赖其主动读取）。"""
-    tag = f"（第 {round_no} 轮）" if round_no else ""
-    extra = (f"⚠️「{D.node_display(node)}」评审未通过，已打回本节点复修{tag}。\n"
-             f"评审意见：{reason or '未说明原因'}")
+    lang = prompt_lang(req.get("project"))
+    tag = tr(lang, "（第 {n} 轮）", n=round_no) if round_no else ""
+    extra = tr(lang, "⚠️「{name}」评审未通过，已打回本节点复修{tag}。\n评审意见：{reason}",
+               name=D.node_display(node) if lang == "zh" else D.node_display(node, lang), tag=tag,
+               reason=reason or tr(lang, "未说明原因"))
     art = node.get("artifact") or role_meta(node.get("role"), "artifact")
     if art:
         try:
@@ -299,9 +302,9 @@ def _review_bounce_extra(req, node, reason, round_no=None):
                 text = p.read_text(encoding="utf-8", errors="replace").strip()
                 if len(text) > REVIEW_EXTRA_MAX_CHARS:
                     text = (text[:REVIEW_EXTRA_MAX_CHARS]
-                            + f"\n……（产物超长已截断，完整内容见 {p}）")
+                            + tr(lang, "\n……（产物超长已截断，完整内容见 {path}）", path=p))
                 if text:
-                    extra += f"\n\n评审产物（{art}）全文：\n{text}"
+                    extra += tr(lang, "\n\n评审产物（{art}）全文：\n{text}", art=art, text=text)
         except Exception as e:
             log.warning(f"需求 #{req['id']} 读取评审产物 {art} 失败（{e}），extra 仅含意见摘要")
     return extra
@@ -334,15 +337,17 @@ def review_issues(result):
 def _review_rework_extra(req, node, issues, round_no=None):
     """评审打回（带 issues）注入作者返工会话的 extra：未关闭问题清单 + 评审产物路径
     （prompts/system/rework-issues.md）。不读 req_reviews；summary 不再兼做反馈通道。"""
+    lang = prompt_lang(req.get("project"))
     lines = []
     for it in issues:
         sev = f"[{it['severity']}]" if it["severity"] else ""
-        where = f" {it['where']}：" if it["where"] else " "
+        where = (tr(lang, " {where}：", where=it["where"])) if it["where"] else " "
         lines.append(f"- {it['id']}{sev}{where}{it['what']}")
     art = node.get("artifact") or role_meta(node.get("role"), "artifact")
-    art_path = str(D.artifact_dir(req) / art) if art else "（无）"
-    return prompt_store.render("system/rework-issues", review_name=D.node_display(node),
-                               round_tag=(f"（第 {round_no} 轮）" if round_no else ""),
+    art_path = str(D.artifact_dir(req) / art) if art else tr(lang, "（无）")
+    return prompt_store.render("system/rework-issues", lang=lang,
+                               review_name=D.node_display(node) if lang == "zh" else D.node_display(node, lang),
+                               round_tag=(tr(lang, "（第 {n} 轮）", n=round_no) if round_no else ""),
                                issues="\n".join(lines), artifact=art_path)
 
 
@@ -760,33 +765,34 @@ def handle_result(req, role, returncode, timed_out, started_at, aborted=False):
         delay = D.RATE_LIMIT_RETRY_DELAY if rate_limited else min(retries * 30, 120)
         time.sleep(delay)
         retry_hint = ""
+        lang = prompt_lang(req.get("project"))
         if rate_limited:
-            retry_hint = ("上次失败为 API 并发限流（403）：并发位被占，本次已延迟重试等待并发位释放；"
-                          "若再遇 403 不要立即重发请求。")
+            retry_hint = tr(lang, "上次失败为 API 并发限流（403）：并发位被占，本次已延迟重试等待并发位释放；"
+                                  "若再遇 403 不要立即重发请求。")
         elif redline_hit:
-            retry_hint = ("上次会话因命中进程安全红线被拦截取消：先读被拦截命令自查（看板执行过程/agent_events），"
-                          "测试实例清理必须使用项目约定的实例脚本（PID 文件 + 精确 PID/后代清理），"
-                          "禁止自行编写 trap/kill/killpg/pkill 或清理 ACP 驱动进程/进程组命令。")
+            retry_hint = tr(lang, "上次会话因命中进程安全红线被拦截取消：先读被拦截命令自查（看板执行过程/agent_events），"
+                                  "测试实例清理必须使用项目约定的实例脚本（PID 文件 + 精确 PID/后代清理），"
+                                  "禁止自行编写 trap/kill/killpg/pkill 或清理 ACP 驱动进程/进程组命令。")
         elif parse_error and backup_file:
-            retry_hint = (f"上次结果文件非法 JSON，原文件已改名保留在 {backup_file}，先读取自查避免重蹈覆辙；"
-                          f"写 result.json 请用 python -c 'json.dumps(...)' 或脚本生成，"
-                          f"summary 内换行必须转义为 \\n。")
+            retry_hint = tr(lang, "上次结果文件非法 JSON，原文件已改名保留在 {backup}，先读取自查避免重蹈覆辙；"
+                                  "写 result.json 请用 python -c 'json.dumps(...)' 或脚本生成，"
+                                  "summary 内换行必须转义为 \\n。", backup=backup_file)
         elif isinstance(aborted, str) and aborted.startswith("budget_exceeded"):
-            retry_hint = ("上次会话工具步数超预算被截停：先读 summary 与产物确认已有进度，"
-                          "缩小探索范围、直奔改动点，接近上限前先写 result.json 保底。")
+            retry_hint = tr(lang, "上次会话工具步数超预算被截停：先读 summary 与产物确认已有进度，"
+                                  "缩小探索范围、直奔改动点，接近上限前先写 result.json 保底。")
         elif aborted:
-            retry_hint = ("上次会话因输出复读/单次请求超长被输出守卫中止：避免重复输出同一段文本，"
-                          "若再次复读，自动重试耗尽后将转人工处理。")
+            retry_hint = tr(lang, "上次会话因输出复读/单次请求超长被输出守卫中止：避免重复输出同一段文本，"
+                                  "若再次复读，自动重试耗尽后将转人工处理。")
         elif returncode == 0 and not result:
-            retry_hint = ("上次进程正常退出但未提交结果：先确认改动完好（git status / 产物目录）"
-                          "再前台跑验证确认无误，最后用 python json.dumps 补写 result.json（status/summary 必填）。")
+            retry_hint = tr(lang, "上次进程正常退出但未提交结果：先确认改动完好（git status / 产物目录）"
+                                  "再前台跑验证确认无误，最后用 python json.dumps 补写 result.json（status/summary 必填）。")
         if use_fallback:
-            retry_hint += ("本次已改用全局兜底模型重试（该角色配置的模型运行期不可用）；"
-                           "若仍失败将按现有路径转人工处理。")
+            retry_hint += tr(lang, "本次已改用全局兜底模型重试（该角色配置的模型运行期不可用）；"
+                                   "若仍失败将按现有路径转人工处理。")
         # 非兜底路径逐字保持原调用形态（不给存量调用点/stub 引入新 kwarg）
         extra_kw = {"model_override": ACP_MODEL} if use_fallback else {}
         D.spawn_agent(req, role=role,
-                    extra=f"上次尝试失败（第 {retries} 次）：{reason}。{retry_hint}",
+                    extra=tr(lang, "上次尝试失败（第 {n} 次）：{reason}。{hint}", n=retries, reason=reason, hint=retry_hint),
                     resume=True, **extra_kw)
     else:
         # #113：重试耗尽不再退回 open（主循环只捞 open，否则一分钟静置后自动重捞形成无限循环），

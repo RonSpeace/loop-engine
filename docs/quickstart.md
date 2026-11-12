@@ -300,6 +300,7 @@ agent 提问（need_confirm）时，在卡片上点按钮或在右栏聊天框�
 | 模型与 API Key | harness home 的 `config.toml` + `KIMI_MODEL` |
 | 按角色 / 按项目的模型 | `flows.json` 的 `roles.<角色>.model`；项目级在看板「模型调参」 |
 | 运行体 | `projects.json` 的 `runtimes` / `runtime`，或 `flows.json` 的 `roles.<角色>.runtime` |
+| 提示词语言（agent 读写用中文还是英文） | `LOOP_PROMPT_LANG=zh` 或 `en`（`loop init` 会设置；默认 `zh`）；单个项目用 `projects.json` 的 `"prompt_language": "en"`。英文文案在 `prompts/en/`，本机覆盖放 `prompts.local/en/` |
 | kimi 可执行文件 | `KIMI_BIN` |
 | harness home | `KIMI_CODE_HOME`（默认 `~/.kimi-code-deepseek`） |
 | 看板端口 / 地址 | `REQ_BOARD_PORT`（默认 8899）；调度器访问看板用 `REQ_BOARD_API` |

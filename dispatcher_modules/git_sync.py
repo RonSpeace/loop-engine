@@ -7,6 +7,7 @@ from pathlib import Path
 
 import git_ops
 import prompt_store
+from prompt_i18n import prompt_lang, tr
 from acp_shared import is_run_local_supervisor
 
 from dispatcher_modules.workspace import _REAL_DEV_WORKTREE_PATH, _REAL_WORKTREES_ROOT, in_test_env
@@ -494,19 +495,20 @@ def ensure_dev_worktrees(req):
 def dev_repo_listing(req, repo_map, focus=None):
     wd = D.dev_workdir_for(req)
     branch = D.dev_branch(req)
+    lang = prompt_lang(req.get("project"))
     if len(repo_map) == 1:
         name, wt = next(iter(repo_map.items()))
-        return f"工作目录：{wd}（独立 worktree，分支 {branch}）"
-    lines = [f"工作目录：{wd}（dev 聚合目录，非 git 仓库；各仓库 worktree 子目录），分支 {branch}",
-             "仓库清单（子目录 -> worktree）："]
+        return tr(lang, "工作目录：{wd}（独立 worktree，分支 {branch}）", wd=wd, branch=branch)
+    lines = [tr(lang, "工作目录：{wd}（dev 聚合目录，非 git 仓库；各仓库 worktree 子目录），分支 {branch}", wd=wd, branch=branch),
+             tr(lang, "仓库清单（子目录 -> worktree）：")]
     focus = set(focus or [])
     for name, wt in repo_map.items():
-        mark = "（本次相关）" if focus and name in focus else ""
-        lines.append(f"- {wd / name} -> {wt}{mark}")
+        mark = tr(lang, "（本次相关）") if focus and name in focus else ""
+        lines.append(tr(lang, "- {path} -> {wt}{mark}", path=wd / name, wt=wt, mark=mark))
     if focus:
-        lines.append(f"说明：工作目录包含全部 {len(repo_map)} 个仓库的 worktree；"
-                     f"本次需求相关仓库 {len(focus)} 个（analysis/notes 识别，指引用）。"
-                     f"清单外仓库确有需要也可直接修改，完成后系统按实际改动识别涉及仓库。")
+        lines.append(tr(lang, "说明：工作目录包含全部 {total} 个仓库的 worktree；本次需求相关仓库 {focus} 个（analysis/notes 识别，"
+                              "指引用）。清单外仓库确有需要也可直接修改，完成后系统按实际改动识别涉及仓库。",
+                        total=len(repo_map), focus=len(focus)))
     return "\n".join(lines)
 
 def cleanup_dev_worktrees(req_id, delete_branch=True, keep_repos=None):
@@ -944,13 +946,13 @@ def _retry_rec(req_id):
     return {"count": rec if isinstance(rec, int) else 0, "last_failure": None}
 
 
-def resume_failure_hint(req_id):
+def resume_failure_hint(req_id, project=None):
     """#109：续跑注入上次失败原因（state 无失败记录返回空串）。
     主循环重捞 resume 时拼进 extra，重试不再盲续；进程内重试走 handle_result 既有 extra。"""
     lf = _retry_rec(str(req_id)).get("last_failure")
     if not lf:
         return ""
-    return prompt_store.render("system/retry-hint", last_failure=lf)
+    return prompt_store.render("system/retry-hint", lang=prompt_lang(project), last_failure=lf)
 
 
 def clear_retries(req_id):
